@@ -9,7 +9,7 @@ import { trackPageview } from './analytics/posthog'
 
 const { Content } = Layout
 
-// HashRouter 下手动上报 pageview（init 时已关闭自动 pageview）
+// Relatar pageview manualmente sob HashRouter (pageview automático desativado na inicialização)
 function usePageviewTracking() {
   const location = useLocation()
   useEffect(() => {
@@ -18,7 +18,7 @@ function usePageviewTracking() {
 }
 
 function App() {
-  console.log('🎬 App组件已加载');
+  console.log('🎬 Componente do App carregado');
   usePageviewTracking()
 
   return (

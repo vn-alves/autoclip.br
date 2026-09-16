@@ -27,16 +27,16 @@ const HomePage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [activeTab, setActiveTab] = useState<'upload' | 'bilibili'>('bilibili')
 
-  // 使用项目轮询Hook
+  // Usar Hook de pesquisa de projeto
   useProjectPolling({
     onProjectsUpdate: (updatedProjects) => {
       setProjects(updatedProjects || [])
     },
     enabled: true,
-    interval: 30000 // 30秒轮询一次，减少频繁请求
+    interval: 30000 // Polling a cada 30 segundos, reduzindo requisições frequentes
   })
 
-  // 全局保险：当没有运行中的项目时，强制停止进度轮询并清空缓存
+  // Seguro global: quando não há projetos em execução, força a parada do polling de progresso e limpa o cache
   useEffect(() => {
     const hasActive = projects.some(p => p.status === 'processing' || p.status === 'pending')
     if (!hasActive) {
@@ -44,18 +44,18 @@ const HomePage: React.FC = () => {
         const { stopPolling, clearAllProgress } = useSimpleProgressStore.getState()
         stopPolling()
         clearAllProgress()
-        console.log('无运行项目，已全局停止进度轮询并清空进度缓存')
+        console.log('Nenhum projeto em execução, o polling de progresso foi interrompido globalmente e o cache de progresso foi limpo')
       } catch (e) {
-        console.warn('停止全局进度轮询时出现问题:', e)
+        console.warn('Problema ao parar a pesquisa de progresso global:', e)
       }
     }
   }, [projects])
 
   useEffect(() => {
-    // 延迟加载项目，避免启动时立即发起大量请求
+    // Carregamento atrasado de projetos para evitar um grande número de solicitações no início
     const timer = setTimeout(() => {
       loadProjects()
-    }, 1000) // 延迟1秒加载
+    }, 1000) // Atraso de 1 segundo para carregar
     
     return () => clearTimeout(timer)
   }, [])
@@ -63,15 +63,15 @@ const HomePage: React.FC = () => {
   const loadProjects = async () => {
     setLoading(true)
     try {
-      // 从后端API获取真实项目数据
+      // Obter dados reais do projeto da API de backend
       const projects = await projectApi.getProjects()
-      // 确保projects是数组类型
+      // Garantir que projects seja um tipo de array
       const safeProjects = Array.isArray(projects) ? projects : []
       setProjects(safeProjects)
     } catch (error) {
-      message.error('加载项目失败')
+      message.error('Falha ao carregar projeto')
       console.error('Load projects error:', error)
-      // 如果API调用失败，设置空数组
+      // Se a chamada da API falhar, definir array vazio
       setProjects([])
     } finally {
       setLoading(false)
@@ -82,19 +82,19 @@ const HomePage: React.FC = () => {
     try {
       await projectApi.deleteProject(id)
       deleteProject(id)
-      message.success('项目删除成功')
+      message.success('Projeto excluído com sucesso')
     } catch (error) {
-      message.error('删除项目失败')
+      message.error('Falha ao excluir projeto')
       console.error('Delete project error:', error)
     }
   }
 
-  // 由 ProjectCard 在「用户手动点重试」且重试请求已成功后调用。
-  // ProjectCard.handleRetry 已经发过 start/retryProcessing 请求，这里只负责
-  // 提示 + 刷新列表，绝不能再发一次重试请求（会和卡片自身的请求叠加，并制造
-  // loadProjects→重挂载→自动启动 的循环）。
+  // Chamado por ProjectCard quando o ’usuário clica manualmente em tentar novamente’ e a requisição de nova tentativa foi bem-sucedida.
+  // ProjectCard.handleRetry já enviou solicitações start/retryProcessing, aqui é apenas responsável por
+  // Dica + atualiza a lista, nunca deve enviar outra requisição de nova tentativa (isso se somaria à requisição do próprio cartão e criaria
+  // loadProjects→Remontar→loop de inicialização automática).
   const handleRetryProject = async () => {
-    message.success('已开始重试处理项目')
+    message.success('Reinício do processamento de itens')
     try {
       await loadProjects()
     } catch (error) {
@@ -103,13 +103,13 @@ const HomePage: React.FC = () => {
   }
 
   const handleProjectCardClick = (project: Project) => {
-    // 导入中状态的项目不能点击进入详情页
+    // Projetos em status de importação não podem ser clicados para ver detalhes
     if (project.status === 'pending') {
-      message.warning('项目正在导入中，请稍后再查看详情')
+      message.warning('O projeto está sendo importado, por favor, verifique os detalhes mais tarde')
       return
     }
     
-    // 其他状态可以正常进入详情页
+    // Outros status podem entrar na página de detalhes normalmente
     navigate(`/project/${project.id}`)
   }
 
@@ -119,7 +119,7 @@ const HomePage: React.FC = () => {
       return matchesStatus
     })
     .sort((a, b) => {
-      // 按创建时间倒序排列，最新的在前面
+      // Ordenar por data de criação decrescente, os mais recentes primeiro
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
 
@@ -130,7 +130,7 @@ const HomePage: React.FC = () => {
     }}>
       <Content style={{ padding: '40px 56px 56px', position: 'relative' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative' }}>
-          {/* 文件上传区域 */}
+          {/* Área de upload de arquivos */}
           <div style={{ 
             marginBottom: '48px',
             marginTop: '20px',
@@ -139,7 +139,7 @@ const HomePage: React.FC = () => {
           }}>
             <div style={{ width: '100%', maxWidth: '820px' }}>
               <div style={{ fontSize: '13px', color: 'var(--ac-muted)', margin: '0 4px 14px', letterSpacing: '0.2px' }}>
-                粘贴链接，AI 自动切片
+                Cole o link, a IA corta automaticamente
               </div>
               <div style={{
                 background: 'var(--ac-card)',
@@ -148,7 +148,7 @@ const HomePage: React.FC = () => {
                 padding: '18px',
                 boxShadow: 'var(--ac-shadow)'
               }}>
-              {/* 标签页切换 — 胶囊分段 */}
+              {/* Alternar guia — Segmentação de Cápsulas */}
               <div style={{
                 display: 'inline-flex',
                 marginBottom: '14px',
@@ -172,7 +172,7 @@ const HomePage: React.FC = () => {
                    }}
                    onClick={() => setActiveTab('bilibili')}
                  >
-                   链接导入
+                   Importar Link
                  </button>
                 <button
                    style={{
@@ -189,24 +189,24 @@ const HomePage: React.FC = () => {
                    }}
                    onClick={() => setActiveTab('upload')}
                  >
-                   文件导入
+                   Importar Arquivo
                  </button>
               </div>
               
-              {/* 内容区域 */}
+              {/* Área de Conteúdo */}
               <div>
                 {activeTab === 'bilibili' && (
                   <BilibiliDownload onDownloadSuccess={async () => {
-                    // 处理完成后刷新项目列表
+                    // Atualizar lista de projetos após o processamento
                     await loadProjects()
-                    // 不再显示重复的toast提示，BilibiliDownload组件已经显示了统一的提示
+                    // Não exibir mais toasts repetidos, o componente BilibiliDownload já exibe um aviso unificado
                   }} />
                 )}
                 {activeTab === 'upload' && (
                   <FileUpload onUploadSuccess={async () => {
-                    // 处理完成后刷新项目列表
+                    // Atualizar lista de projetos após o processamento
                     await loadProjects()
-                    message.success('项目创建成功，正在处理中...')
+                    message.success('Projeto criado com sucesso, em processamento...')
                   }} />
                 )}
               </div>
@@ -214,13 +214,13 @@ const HomePage: React.FC = () => {
             </div>
           </div>
 
-          {/* 项目管理区域 */}
+          {/* Área de gerenciamento de projetos */}
           <div style={{
             background: 'transparent',
             padding: '0',
             marginBottom: '32px'
           }}>
-            {/* 项目列表标题区域 */}
+            {/* Área do título da lista de projetos */}
             <div style={{
               display: 'flex',
               justifyContent: 'space-between',
@@ -233,20 +233,20 @@ const HomePage: React.FC = () => {
                   level={2}
                   style={{ margin: 0, color: 'var(--ac-ink)', fontSize: '16px', fontWeight: 600 }}
                 >
-                  我的项目
+                  Meus Projetos
                 </Title>
                 <Text style={{ color: 'var(--ac-muted)', fontSize: '13px' }}>
                   {filteredProjects.length}
                 </Text>
               </div>
               
-              {/* 状态筛选移到右侧 */}
+              {/* Filtro de status movido para a direita */}
               <div style={{ 
                 display: 'flex', 
                 alignItems: 'center'
               }}>
                 <Select
-                  placeholder="全部状态"
+                  placeholder="Todos os Status"
                   value={statusFilter}
                   onChange={setStatusFilter}
                   variant="borderless"
@@ -254,15 +254,15 @@ const HomePage: React.FC = () => {
                   suffixIcon={<span style={{ color: 'var(--ac-muted)', fontSize: '10px' }}>⌄</span>}
                   allowClear
                 >
-                  <Option value="all">全部状态</Option>
-                  <Option value="completed">已完成</Option>
-                  <Option value="processing">处理中</Option>
-                  <Option value="error">处理失败</Option>
+                  <Option value="all">Todos os Status</Option>
+                  <Option value="completed">Concluído</Option>
+                  <Option value="processing">Processando</Option>
+                  <Option value="error">Falha no Processamento</Option>
                 </Select>
               </div>
             </div>
 
-            {/* 项目列表内容 */}
+            {/* Conteúdo da lista de projetos */}
              <div>
                {loading ? (
                  <div style={{
@@ -274,7 +274,7 @@ const HomePage: React.FC = () => {
                  }}>
                    <Spin size="large" />
                    <div style={{ marginTop: '18px', color: 'var(--ac-muted)', fontSize: '14px' }}>
-                     正在加载项目列表…
+                     Carregando lista de projetos…
                    </div>
                  </div>
                ) : filteredProjects.length === 0 ? (
@@ -290,7 +290,7 @@ const HomePage: React.FC = () => {
                      description={
                        <div>
                          <Text type="secondary">
-                           {projects.length === 0 ? '还没有项目，请使用上方的导入区域创建第一个项目' : '没有找到匹配的项目'}
+                           {projects.length === 0 ? 'Ainda não há projetos, por favor, use a área de importação acima para criar o primeiro projeto' : 'Nenhum item correspondente encontrado'}
                          </Text>
                        </div>
                      }

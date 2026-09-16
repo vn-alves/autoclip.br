@@ -15,28 +15,28 @@ export const useCollectionVideoDownload = () => {
     setIsGenerating(true)
     
     try {
-      // 直接按用户当前调整的顺序生成合集视频
-      message.info('正在按您的顺序生成合集视频...')
+      // Gerar vídeos de coleção diretamente na ordem ajustada pelo usuário
+      message.info('Gerando vídeo da coleção na sua ordem...')
       
-      // 生成合集视频（按用户调整的顺序）
+      // Gerar vídeo da coleção (na ordem ajustada pelo usuário)
       await projectApi.generateCollectionVideo(projectId, collectionId)
       
-      // 等待1秒让后端完成文件生成，然后下载
-      message.success('合集视频生成成功，正在下载...')
+      // Aguardar 1 segundo para o backend concluir a geração do arquivo e depois baixar
+      message.success('Vídeo da coleção gerado com sucesso, baixando...')
       
       setTimeout(async () => {
         try {
           await projectApi.downloadVideo(projectId, undefined, collectionId)
-          message.success('合集视频下载完成')
+          message.success('Download do vídeo da coleção concluído')
         } catch (downloadError) {
-          console.error('下载失败:', downloadError)
-          message.error('下载失败，请稍后重试')
+          console.error('Falha no download:', downloadError)
+          message.error('Falha no download, por favor, tente novamente mais tarde')
         }
       }, 1000)
       
     } catch (error) {
-      console.error('生成合集视频失败:', error)
-      message.error('生成合集视频失败')
+      console.error('Falha ao gerar vídeo de compilação:', error)
+      message.error('Falha ao gerar vídeo de coleção')
     } finally {
       setIsGenerating(false)
     }

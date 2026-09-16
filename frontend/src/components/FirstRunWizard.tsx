@@ -20,12 +20,12 @@ interface FirstRunWizardProps {
 }
 
 interface ConfigForm {
-  // 语音识别配置
+  // Configuração de reconhecimento de voz
   speechMethod: string
   whisperModel: string
   openaiApiKey: string
   
-  // LLM配置
+  // Configuração LLM
   llmProvider: string
   llmApiKey: string
   azureApiKey?: string
@@ -49,22 +49,22 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
     llmApiKey: ''
   })
 
-  // 确保表单在组件挂载时正确初始化
+  // Garantir que o formulário seja inicializado corretamente na montagem do componente
   useEffect(() => {
     form.setFieldsValue(config)
-    console.log('表单初始化完成，初始值:', config)
+    console.log('Inicialização do formulário concluída, valores iniciais:', config)
   }, [form])
 
   const handleNext = () => {
     if (currentStep === 0) {
-      // 验证第一步的配置
+      // Validar configuração do primeiro passo
       const values = form.getFieldsValue()
-      console.log('下一步按钮点击 - 表单值:', values)
+      console.log('Clique no botão Próximo - Valores do formulário:', values)
       console.log('llmProvider:', values.llmProvider)
       console.log('llmApiKey:', values.llmApiKey)
       
       if (!values.llmProvider || !values.llmApiKey || values.llmApiKey.trim() === '') {
-        message.error('请选择LLM提供商并输入API Key')
+        message.error('Por favor, selecione um provedor LLM e insira a API Key')
         return
       }
       setConfig({ ...config, ...values })
@@ -80,99 +80,99 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
       const values = form.getFieldsValue()
       const finalConfig = { ...config, ...values }
       
-      // 验证语音识别配置
+      // Validar configuração de reconhecimento de voz
       if (!finalConfig.speechMethod) {
-        message.error('请选择语音识别方案')
+        message.error('Por favor, selecione a solução de reconhecimento de voz')
         setLoading(false)
         return
       }
       
-      // 只有当用户输入了API key时才保存LLM配置
+      // Salvar configuração LLM apenas se o usuário inseriu a chave API
       if (finalConfig.llmApiKey && finalConfig.llmApiKey.trim()) {
         try {
           await saveLLMConfig(finalConfig)
-          console.log('LLM配置保存成功')
+          console.log('Configuração LLM salva com sucesso')
         } catch (error) {
-          console.error('LLM配置保存失败:', error)
-          message.error('LLM配置保存失败，请重试')
+          console.error('Falha ao salvar configuração LLM:', error)
+          message.error('Falha ao salvar a configuração LLM, tente novamente')
           setLoading(false)
           return
         }
       }
       
-      // 保存语音识别配置 - 添加错误处理
+      // Salvar configuração de reconhecimento de fala - adicionar tratamento de erro
       try {
         await saveSpeechConfig(finalConfig)
       } catch (error) {
-        console.warn('语音识别配置保存失败，使用默认配置:', error)
-        // 不抛出错误，允许用户继续完成向导
+        console.warn('Falha ao salvar a configuração de reconhecimento de voz, usando a configuração padrão:', error)
+        // Não lançar erro, permitir que o usuário continue a concluir o assistente
       }
       
-      // 如果是本地Whisper，下载模型
+      // Se for Whisper local, baixar o modelo
       if (finalConfig.speechMethod === 'whisper_local') {
         await downloadWhisperModel(finalConfig.whisperModel)
       }
       
-      // 配置保存完成，直接进入工具首页
-      message.success('配置完成!欢迎使用AutoClip')
+      // Configuração salva, ir diretamente para a página inicial da ferramenta
+      message.success('Configuração concluída! Bem-vindo ao AutoClip')
       onComplete()
     } catch (error) {
-      console.error('配置保存失败:', error)
-      const errorMessage = error instanceof Error ? error.message : '配置保存失败,请重试'
-      message.error(`配置保存失败: ${errorMessage}`)
+      console.error('Falha ao salvar configuração:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Falha ao salvar configuração, tente novamente'
+      message.error(`Falha ao salvar configuração: ${errorMessage}`)
     } finally {
       setLoading(false)
     }
   }
 
-  // 跳过当前步骤，稍后设置
+  // Pular etapa atual, configurar mais tarde
   const handleSkip = async () => {
     if (currentStep === 0) {
-      // 跳过AI模型配置，进入语音识别配置
+      // Pular configuração do modelo de IA, ir para configuração de reconhecimento de fala
       setCurrentStep(1)
-      message.info('已跳过AI模型配置,请稍后在配置页中进行设置', 3)
+      message.info('A configuração do modelo de IA foi ignorada, por favor, configure-a na página de configurações mais tarde', 3)
     } else {
-      // 跳过语音识别配置，完成向导
-      // 确保不保存任何空的API配置
+      // Pular configuração de reconhecimento de voz, concluir assistente
+      // Garantir que nenhuma configuração de API vazia seja salva
       try {
-        // 只保存语音识别配置，不保存LLM配置
+        // Salvar apenas a configuração de reconhecimento de voz, não a configuração LLM
         const values = form.getFieldsValue()
         const finalConfig = { ...config, ...values }
         try {
           await saveSpeechConfig(finalConfig)
         } catch (error) {
-          console.warn('语音识别配置保存失败，使用默认配置:', error)
+          console.warn('Falha ao salvar a configuração de reconhecimento de voz, usando a configuração padrão:', error)
         }
         
-        message.info('已跳过语音识别配置,请稍后在配置页中进行设置', 3)
+        message.info('A configuração de reconhecimento de voz foi ignorada, por favor, configure-a na página de configurações mais tarde', 3)
         onComplete()
       } catch (error) {
-        message.error('配置保存失败,请重试')
-        console.error('配置保存失败:', error)
+        message.error('Falha ao salvar configuração, tente novamente')
+        console.error('Falha ao salvar configuração:', error)
       }
     }
   }
 
   const saveLLMConfig = async (config: ConfigForm) => {
     try {
-      // 在Web模式下也允许保存配置，用于测试和开发
+      // No modo Web, também é permitido salvar configurações para teste e desenvolvimento
       const isDesktop = await isDesktopMode()
-      console.log('桌面模式检测结果:', isDesktop)
+      console.log('Resultado da detecção do modo desktop:', isDesktop)
 
-      console.log('开始保存LLM配置:', {
+      console.log('Iniciando salvamento da configuração LLM:', {
         provider: config.llmProvider,
         apiKeyLength: config.llmApiKey?.length || 0
       })
 
-      // 先获取现有配置，避免清空已有的API key
+      // Primeiro, obtenha as configurações existentes para evitar limpar a chave API existente
       let existingSettings = null
       try {
         existingSettings = await settingsApi.getSettings()
       } catch (error) {
-        console.warn('获取现有配置失败，将使用默认配置:', error)
+        console.warn('Falha ao obter a configuração existente, será usada a configuração padrão:', error)
       }
 
-      // 获取现有的API keys，只更新当前提供商的key
+      // Obtém as chaves de API existentes, atualiza apenas a chave do provedor atual
       const existingApiKeys = existingSettings?.api?.api_keys || {}
       
       const settings = {
@@ -189,7 +189,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
         },
         api: {
           api_keys: {
-            // 只更新当前提供商的API key，保持其他提供商的值
+            // Atualiza apenas a chave de API do provedor atual, mantendo os valores dos outros provedores
             dashscope: config.llmProvider === 'dashscope' ? config.llmApiKey : (existingApiKeys.dashscope || ''),
             openai: config.llmProvider === 'openai' ? config.llmApiKey : (existingApiKeys.openai || ''),
             gemini: config.llmProvider === 'gemini' ? config.llmApiKey : (existingApiKeys.gemini || ''),
@@ -217,22 +217,22 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
         }
       }
       
-      console.log('发送设置到后端:', settings)
+      console.log('Enviar configurações para o backend:', settings)
       const result = await settingsApi.updateSettings(settings)
-      console.log('LLM配置保存成功，后端响应:', result)
+      console.log('Configuração LLM salva com sucesso, resposta do backend:', result)
     } catch (error) {
-      console.error('LLM配置保存失败:', error)
-      const detail = error instanceof Error ? error.message : '未知错误'
-      throw new Error(`LLM配置保存失败: ${detail}`)
+      console.error('Falha ao salvar configuração LLM:', error)
+      const detail = error instanceof Error ? error.message : 'Erro Desconhecido'
+      throw new Error(`Falha ao salvar configuração LLM: ${detail}`)
     }
   }
 
   const saveSpeechConfig = async (config: ConfigForm) => {
     try {
-      // 检查是否在桌面模式
+      // Verificar se está no modo desktop
       const isDesktop = await isDesktopMode()
       if (!isDesktop) {
-        console.warn('非桌面模式，跳过语音配置保存')
+        console.warn('Modo não desktop, pular salvamento da configuração de voz')
         return
       }
 
@@ -289,16 +289,16 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
       
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(`语音识别配置保存失败: ${response.status} ${errorText}`)
+        throw new Error(`Falha ao salvar configuração de reconhecimento de voz: ${response.status} ${errorText}`)
       }
       
-      console.log('语音识别配置保存成功')
+      console.log('Configuração de reconhecimento de voz salva com sucesso')
     } catch (error) {
-      console.error('语音识别配置保存失败:', error)
+      console.error('Falha ao salvar configuração de reconhecimento de voz:', error)
       if (error instanceof Error) {
-        throw new Error(`语音识别配置保存失败: ${error.message}`)
+        throw new Error(`Falha ao salvar configuração de reconhecimento de voz: ${error.message}`)
       } else {
-        throw new Error('语音识别配置保存失败')
+        throw new Error('Falha ao salvar configuração de reconhecimento de voz')
       }
     }
   }
@@ -312,26 +312,26 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
       })
       
       if (!response.ok) {
-        throw new Error('模型下载失败')
+        throw new Error('Falha ao baixar modelo')
       }
     } catch (error) {
-      console.error('Whisper模型下载失败:', error)
-      // 不阻止向导完成
+      console.error('Falha no download do modelo Whisper:', error)
+      // Não impedir a conclusão do assistente
     }
   }
 
 
   const testApiConnection = async (provider: string, apiKey: string) => {
-    // 从表单中获取最新的API Key值
+    // Obter o valor mais recente da chave da API do formulário
     const formValues = form.getFieldsValue()
     const currentApiKey = formValues.llmApiKey || apiKey
     
-    console.log('testApiConnection 调用参数:', { provider, apiKey })
-    console.log('testApiConnection 表单值:', formValues)
-    console.log('testApiConnection 当前API Key:', currentApiKey)
+    console.log('Parâmetros de chamada testApiConnection:', { provider, apiKey })
+    console.log('Valores do formulário testApiConnection:', formValues)
+    console.log('testApiConnection API Key atual:', currentApiKey)
     
     if (!currentApiKey || currentApiKey.trim() === '') {
-      message.warning('请先输入API Key')
+      message.warning('Insira a API Key')
       return
     }
     
@@ -348,39 +348,39 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
       
       const result = await response.json()
       if (result.success) {
-        message.success('API连接测试成功!')
+        message.success('Teste de conexão da API bem-sucedido!')
       } else {
-        message.error(`API连接测试失败: ${result.error || '未知错误'}`)
+        message.error(`Falha no teste de conexão da API: ${result.error || 'Erro Desconhecido'}`)
       }
     } catch (error) {
-      console.error('API测试错误:', error)
-      const detail = error instanceof Error ? error.message : '网络错误'
-      message.error(`API连接测试失败: ${detail}`)
+      console.error('Erro no teste da API:', error)
+      const detail = error instanceof Error ? error.message : 'Erro de Rede'
+      message.error(`Falha no teste de conexão da API: ${detail}`)
     }
   }
 
-  // 获取API Key获取方式的智能提示
+  // Dica inteligente sobre como obter a chave da API
   const getApiKeyHelp = (provider: string) => {
     const helpMap: Record<string, { name: string; url: string; description: string }> = {
       dashscope: {
-        name: '阿里云通义千问',
+        name: 'Alibaba Cloud Tongyi Qianwen',
         url: 'https://dashscope.aliyun.com',
-        description: '注册阿里云账号,开通DashScope服务,创建API Key'
+        description: 'Registre uma conta Alibaba Cloud, ative o serviço DashScope, crie uma API Key'
       },
       openai: {
         name: 'OpenAI',
         url: 'https://platform.openai.com',
-        description: '注册OpenAI账号,在API Keys页面创建新的密钥'
+        description: 'Registre uma conta OpenAI, crie uma nova chave na página API Keys'
       },
       gemini: {
         name: 'Google Gemini',
         url: 'https://makersuite.google.com',
-        description: '使用Google账号登录,在API Keys页面创建密钥'
+        description: 'Faça login com sua conta Google, crie uma chave na página API Keys'
       },
       siliconflow: {
         name: 'SiliconFlow',
         url: 'https://cloud.siliconflow.cn',
-        description: '注册SiliconFlow账号,在控制台创建API Key'
+        description: 'Registre uma conta SiliconFlow, crie uma API Key no console'
       }
     }
     return helpMap[provider] || helpMap.dashscope
@@ -396,20 +396,20 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
       flexDirection: 'column',
       justifyContent: 'center'
     }}>
-      {/* 头部标题区域 - 更紧凑 */}
+      {/* Área do título do cabeçalho - Mais compacta */}
       <div style={{ textAlign: 'center', marginBottom: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <img src="/favicon.png" alt="AutoClip" style={{ width: 40, height: 40, marginBottom: '8px', display: 'block' }} />
         <Title level={2} style={{ color: '#1890ff', marginBottom: '8px' }}>
-          欢迎使用 AutoClip
+          Bem-vindo ao AutoClip
         </Title>
         <Text type="secondary" style={{ fontSize: '14px' }}>
-          让我们快速配置您的AI视频切片工具
+          Vamos configurar rapidamente sua ferramenta de corte de vídeo com IA
         </Text>
       </div>
 
-      {/* 主配置卡片 - 更紧凑的间距 */}
+      {/* Cartão de configuração principal - Espaçamento mais compacto */}
       <Card style={{ marginBottom: '16px' }}>
-        {/* 步骤标题 - 更紧凑 */}
+        {/* Título da Etapa - Mais Compacto */}
         <div style={{ textAlign: 'center', marginBottom: '20px' }}>
           <div style={{ 
             display: 'flex', 
@@ -420,13 +420,13 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
           }}>
             {currentStep === 0 ? <ApiOutlined style={{ color: '#1890ff' }} /> : <SoundOutlined style={{ color: '#1890ff' }} />}
             <Title level={4} style={{ margin: 0 }}>
-              {currentStep === 0 ? '配置AI模型' : '配置语音识别'}
+              {currentStep === 0 ? 'Configurar modelo de IA' : 'Configurar reconhecimento de voz'}
             </Title>
           </div>
           <Text type="secondary" style={{ fontSize: '12px' }}>
             {currentStep === 0 
-              ? '选择大语言模型提供商并输入API Key' 
-              : '选择语音识别方案'
+              ? 'Selecione o provedor do modelo de linguagem grande e insira a chave da API' 
+              : 'Selecionar solução de reconhecimento de voz'
             }
           </Text>
         </div>
@@ -436,57 +436,57 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
           layout="vertical" 
           initialValues={config}
           onValuesChange={(changedValues, allValues) => {
-            console.log('表单值变化:', { changedValues, allValues })
+            console.log('Mudança de valor do formulário:', { changedValues, allValues })
           }}
         >
           {currentStep === 0 ? (
-            // LLM配置步骤 - 更紧凑的布局
+            // Etapa de configuração LLM - layout mais compacto
             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
               <Form.Item
                 name="llmProvider"
-                label="选择AI模型提供商"
-                rules={[{ required: true, message: '请选择AI模型提供商' }]}
+                label="Selecionar provedor de modelo de IA"
+                rules={[{ required: true, message: 'Selecione o provedor do modelo de IA' }]}
                 style={{ marginBottom: '12px' }}
               >
-                <Select size="middle" placeholder="选择提供商">
+                <Select size="middle" placeholder="Selecionar provedor">
                   <Option value="dashscope">
                     <Space>
-                      <Text strong>阿里云通义千问</Text>
-                      <Text type="secondary">(推荐国内用户)</Text>
+                      <Text strong>Alibaba Cloud Tongyi Qianwen</Text>
+                      <Text type="secondary">(Recomendado para usuários domésticos)</Text>
                     </Space>
                   </Option>
                   <Option value="openai">
                     <Space>
                       <Text strong>OpenAI GPT</Text>
-                      <Text type="secondary">(需要科学上网)</Text>
+                      <Text type="secondary">(Requer VPN)</Text>
                     </Space>
                   </Option>
                   <Option value="gemini">
                     <Space>
                       <Text strong>Google Gemini</Text>
-                      <Text type="secondary">(需要科学上网)</Text>
+                      <Text type="secondary">(Requer VPN)</Text>
                     </Space>
                   </Option>
                   <Option value="siliconflow">
                     <Space>
                       <Text strong>SiliconFlow</Text>
-                      <Text type="secondary">(国内替代方案)</Text>
+                      <Text type="secondary">(Alternativa doméstica)</Text>
                     </Space>
                   </Option>
                 </Select>
               </Form.Item>
 
-              {/* API Key输入框和测试按钮 - 水平布局 */}
+              {/* Campo de entrada da API Key e botão de teste - layout horizontal */}
               <Form.Item
                 name="llmApiKey"
                 label="API Key"
-                rules={[{ required: true, message: '请输入API Key' }]}
+                rules={[{ required: true, message: 'Digite a API Key' }]}
                 style={{ marginBottom: '12px' }}
               >
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <Input.Password 
                     size="middle" 
-                    placeholder="请输入您的API Key"
+                    placeholder="Digite sua API Key"
                     style={{ 
                       flex: 1,
                       backgroundColor: '#fafafa',
@@ -498,18 +498,18 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                     size="middle"
                     onClick={() => {
                       const values = form.getFieldsValue()
-                      console.log('测试按钮点击 - 表单值:', values)
+                      console.log('Clique no botão de teste - Valores do formulário:', values)
                       testApiConnection(values.llmProvider || 'dashscope', values.llmApiKey || '')
                     }}
                     style={{ width: '80px' }}
                     icon={<LinkOutlined />}
                   >
-                    测试
+                    Testar
                   </Button>
                 </div>
               </Form.Item>
 
-              {/* 智能API Key获取方式提示 */}
+              {/* Dica de como obter a Chave API inteligente */}
               <Form.Item shouldUpdate={(prevValues, currentValues) => prevValues.llmProvider !== currentValues.llmProvider}>
                 {({ getFieldValue }) => {
                   const provider = getFieldValue('llmProvider') || 'dashscope'
@@ -519,14 +519,14 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                       message={
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <InfoCircleOutlined />
-                          <span>{help.name} API Key获取方式</span>
+                          <span>{help.name} Como obter a API Key</span>
                         </div>
                       }
                       description={
                         <div>
                           <p style={{ margin: '4px 0', fontSize: '12px' }}>{help.description}</p>
                           <p style={{ margin: '4px 0', fontSize: '12px' }}>
-                            访问: <ExternalLink url={help.url} text={help.url} />
+                            Acessar: <ExternalLink url={help.url} text={help.url} />
                           </p>
                         </div>
                       }
@@ -539,55 +539,55 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
               </Form.Item>
             </Space>
           ) : (
-            // 语音识别配置步骤 - 更紧凑的布局
+            // Etapas de configuração de reconhecimento de fala - layout mais compacto
             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
               <Form.Item
                 name="speechMethod"
-                label="选择语音识别方案"
-                rules={[{ required: true, message: '请选择语音识别方案' }]}
+                label="Selecionar solução de reconhecimento de voz"
+                rules={[{ required: true, message: 'Por favor, selecione a solução de reconhecimento de voz' }]}
                 style={{ marginBottom: '12px' }}
               >
-                <Select size="middle" placeholder="选择方案">
+                <Select size="middle" placeholder="Selecionar Plano">
                   <Option value="whisper_local">
                     <Space>
                       <span>🆓</span>
-                      <Text strong>本地 Whisper 模型</Text>
-                      <Text type="secondary">(免费离线，推荐新手)</Text>
+                      <Text strong>Modelo Whisper Local</Text>
+                      <Text type="secondary">(Gratuito offline, recomendado para iniciantes)</Text>
                     </Space>
                   </Option>
                   <Option value="openai_api">
                     <Space>
                       <span>🤖</span>
                       <Text strong>OpenAI Whisper API</Text>
-                      <Text type="secondary">(云端处理，准确度更高)</Text>
+                      <Text type="secondary">(Processamento em nuvem, maior precisão)</Text>
                     </Space>
                   </Option>
                   <Option value="azure_speech">
                     <Space>
                       <span>☁️</span>
                       <Text strong>Azure Speech Services</Text>
-                      <Text type="secondary">(企业级服务)</Text>
+                      <Text type="secondary">(Serviço empresarial)</Text>
                     </Space>
                   </Option>
                   <Option value="google_speech">
                     <Space>
                       <span>🌐</span>
                       <Text strong>Google Speech-to-Text</Text>
-                      <Text type="secondary">(多语言支持)</Text>
+                      <Text type="secondary">(Suporte a múltiplos idiomas)</Text>
                     </Space>
                   </Option>
                   <Option value="aliyun_speech">
                     <Space>
                       <span>☁️</span>
-                      <Text strong>阿里云语音识别</Text>
-                      <Text type="secondary">(中文优化)</Text>
+                      <Text strong>Reconhecimento de voz Alibaba Cloud</Text>
+                      <Text type="secondary">(Otimização em chinês)</Text>
                     </Space>
                   </Option>
                   <Option value="custom_api">
                     <Space>
                       <span>⚙️</span>
-                      <Text strong>自定义API</Text>
-                      <Text type="secondary">(自定义服务端点)</Text>
+                      <Text strong>API personalizada</Text>
+                      <Text type="secondary">(Endpoint de serviço personalizado)</Text>
                     </Space>
                   </Option>
                 </Select>
@@ -601,15 +601,15 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                     return (
                       <Form.Item
                         name="whisperModel"
-                        label="选择模型大小"
+                        label="Selecionar tamanho do modelo"
                         style={{ marginBottom: '12px' }}
                       >
-                        <Select size="middle" placeholder="选择模型">
-                          <Option value="tiny">Tiny (39MB) - 最快速度</Option>
-                          <Option value="base">Base (74MB) - 平衡选择 (推荐)</Option>
-                          <Option value="small">Small (244MB) - 较好准确度</Option>
-                          <Option value="medium">Medium (769MB) - 高准确度</Option>
-                          <Option value="large">Large (1550MB) - 最高准确度</Option>
+                        <Select size="middle" placeholder="Selecionar Modelo">
+                          <Option value="tiny">Tiny (39MB) - Velocidade mais rápida</Option>
+                          <Option value="base">Base (74MB) - Escolha equilibrada (recomendado)</Option>
+                          <Option value="small">Pequeno (244MB) - Precisão razoável</Option>
+                          <Option value="medium">Médio (769MB) - Alta precisão</Option>
+                          <Option value="large">Grande (1550MB) - Maior precisão</Option>
                         </Select>
                       </Form.Item>
                     )
@@ -620,12 +620,12 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                       <Form.Item
                         name="openaiApiKey"
                         label="OpenAI API Key"
-                        rules={[{ required: true, message: '请输入OpenAI API Key' }]}
+                        rules={[{ required: true, message: 'Por favor, insira a OpenAI API Key' }]}
                         style={{ marginBottom: '12px' }}
                       >
                         <Input.Password 
                           size="middle" 
-                          placeholder="请输入OpenAI API Key"
+                          placeholder="Por favor, insira a OpenAI API Key"
                         />
                       </Form.Item>
                     )
@@ -637,22 +637,22 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                         <Form.Item
                           name="azureApiKey"
                           label="Azure API Key"
-                          rules={[{ required: true, message: '请输入Azure API Key' }]}
+                          rules={[{ required: true, message: 'Por favor, insira a Chave de API do Azure' }]}
                           style={{ marginBottom: '8px' }}
                         >
                           <Input.Password 
                             size="middle" 
-                            placeholder="请输入Azure Speech API Key"
+                            placeholder="Por favor, insira a chave da API Azure Speech"
                           />
                         </Form.Item>
                         <Form.Item
                           name="azureRegion"
-                          label="Azure 区域"
+                          label="Região do Azure"
                           style={{ marginBottom: '12px' }}
                         >
                           <Input 
                             size="middle" 
-                            placeholder="例如: eastus, westus2"
+                            placeholder="Exemplo: eastus, westus2"
                           />
                         </Form.Item>
                       </Space>
@@ -664,12 +664,12 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                       <Form.Item
                         name="googleApiKey"
                         label="Google API Key"
-                        rules={[{ required: true, message: '请输入Google API Key' }]}
+                        rules={[{ required: true, message: 'Por favor, insira a Google API Key' }]}
                         style={{ marginBottom: '12px' }}
                       >
                         <Input.Password 
                           size="middle" 
-                          placeholder="请输入Google Speech-to-Text API Key"
+                          placeholder="Por favor, insira a chave da API do Google Speech-to-Text"
                         />
                       </Form.Item>
                     )
@@ -679,13 +679,13 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                     return (
                       <Form.Item
                         name="aliyunApiKey"
-                        label="阿里云 API Key"
-                        rules={[{ required: true, message: '请输入阿里云 API Key' }]}
+                        label="API Key da Alibaba Cloud"
+                        rules={[{ required: true, message: 'Por favor, insira a Chave API da Alibaba Cloud' }]}
                         style={{ marginBottom: '12px' }}
                       >
                         <Input.Password 
                           size="middle" 
-                          placeholder="请输入阿里云语音识别 API Key"
+                          placeholder="Digite a API Key de reconhecimento de voz do Alibaba Cloud"
                         />
                       </Form.Item>
                     )
@@ -696,24 +696,24 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                       <Space direction="vertical" size="small" style={{ width: '100%' }}>
                         <Form.Item
                           name="customApiKey"
-                          label="自定义 API Key"
-                          rules={[{ required: true, message: '请输入自定义 API Key' }]}
+                          label="API Key personalizada"
+                          rules={[{ required: true, message: 'Por favor, insira a Chave API personalizada' }]}
                           style={{ marginBottom: '8px' }}
                         >
                           <Input.Password 
                             size="middle" 
-                            placeholder="请输入自定义 API Key"
+                            placeholder="Por favor, insira a Chave API personalizada"
                           />
                         </Form.Item>
                         <Form.Item
                           name="customEndpoint"
-                          label="API 端点"
-                          rules={[{ required: true, message: '请输入API端点' }]}
+                          label="Endpoint da API"
+                          rules={[{ required: true, message: 'Por favor, insira o endpoint da API' }]}
                           style={{ marginBottom: '12px' }}
                         >
                           <Input 
                             size="middle" 
-                            placeholder="例如: https://api.example.com/speech"
+                            placeholder="Exemplo: https://api.example.com/speech"
                           />
                         </Form.Item>
                       </Space>
@@ -724,7 +724,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                 }}
               </Form.Item>
 
-              {/* 智能配置说明 - 根据选择的方案显示对应说明 */}
+              {/* Descrição da configuração inteligente - Exibe a descrição correspondente de acordo com o plano selecionado */}
               <Form.Item shouldUpdate={(prevValues, currentValues) => prevValues.speechMethod !== currentValues.speechMethod} style={{ marginBottom: '8px' }}>
                 {({ getFieldValue }) => {
                   const speechMethod = getFieldValue('speechMethod')
@@ -733,33 +733,33 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                     const descriptions: Record<string, { icon: string; name: string; description: string }> = {
                       whisper_local: {
                         icon: '🆓',
-                        name: '本地 Whisper 模型',
-                        description: '免费离线使用，首次使用会自动下载模型，后续无需网络连接。推荐新手用户使用。'
+                        name: 'Modelo Whisper Local',
+                        description: 'Uso offline gratuito, o modelo será baixado automaticamente no primeiro uso, sem necessidade de conexão com a internet posteriormente. Recomendado para usuários iniciantes.'
                       },
                       openai_api: {
                         icon: '🤖',
                         name: 'OpenAI Whisper API',
-                        description: '云端处理，识别准确度更高，按使用量计费。需要稳定的网络连接。'
+                        description: 'Processamento em nuvem, maior precisão de reconhecimento, cobrado por uso. Requer conexão de rede estável.'
                       },
                       azure_speech: {
                         icon: '☁️',
                         name: 'Azure Speech Services',
-                        description: '企业级语音识别服务，支持多种语言和方言，适合商业使用。'
+                        description: 'Serviço de reconhecimento de voz de nível empresarial, suporta múltiplos idiomas e dialetos, adequado para uso comercial.'
                       },
                       google_speech: {
                         icon: '🌐',
                         name: 'Google Speech-to-Text',
-                        description: '多语言支持，识别准确度高，支持实时语音识别。'
+                        description: 'Suporte a múltiplos idiomas, alta precisão de reconhecimento, suporte a reconhecimento de voz em tempo real.'
                       },
                       aliyun_speech: {
                         icon: '☁️',
-                        name: '阿里云语音识别',
-                        description: '中文优化，国内访问速度快，支持多种中文方言识别。'
+                        name: 'Reconhecimento de voz Alibaba Cloud',
+                        description: 'Otimizado para chinês, acesso rápido na China, suporta reconhecimento de vários dialetos chineses.'
                       },
                       custom_api: {
                         icon: '⚙️',
-                        name: '自定义API',
-                        description: '支持自定义服务端点，可以接入自己的语音识别服务。'
+                        name: 'API personalizada',
+                        description: 'Suporta endpoint de serviço personalizado, pode integrar seu próprio serviço de reconhecimento de fala.'
                       }
                     }
                     return descriptions[method] || descriptions.whisper_local
@@ -772,7 +772,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                       message={
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span>{methodInfo.icon}</span>
-                          <span>{methodInfo.name} 配置说明</span>
+                          <span>{methodInfo.name} Descrição da Config.</span>
                         </div>
                       }
                       description={
@@ -792,7 +792,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
         </Form>
       </Card>
 
-      {/* 底部按钮区域 - 移除步骤指示器，统一按钮样式 */}
+      {/* Área do botão inferior - remover indicador de etapa, unificar estilo dos botões */}
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between',
@@ -806,7 +806,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
               onClick={() => setCurrentStep(0)}
               disabled={loading}
             >
-              上一步
+              Anterior
             </Button>
           )}
         </div>
@@ -818,7 +818,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
             onClick={handleSkip}
             disabled={loading}
           >
-            稍后设置
+            Configurar mais tarde
           </Button>
           <Button 
             type="primary" 
@@ -827,7 +827,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
             loading={loading}
             icon={loading ? <LoadingOutlined /> : <CheckCircleOutlined />}
           >
-            {currentStep === 0 ? '下一步' : '开始使用'}
+            {currentStep === 0 ? 'Próximo' : 'Começar a Usar'}
           </Button>
         </div>
       </div>
@@ -841,7 +841,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
           borderRadius: '8px'
         }}>
           <LoadingOutlined style={{ fontSize: '24px', marginRight: '8px' }} />
-          <Text>正在保存配置并创建示例项目...</Text>
+          <Text>Salvando configuração e criando projeto de exemplo...</Text>
         </div>
       )}
     </div>

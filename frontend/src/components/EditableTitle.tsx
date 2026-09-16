@@ -27,23 +27,23 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
   const [generating, setGenerating] = useState(false)
   const inputRef = useRef<any>(null)
 
-  // 当外部title变化时，同步内部状态
+  // Quando o título externo muda, sincronizar o estado interno
   useEffect(() => {
     setEditValue(title)
   }, [title])
 
-  // 当title变化时，如果不在编辑模式，确保显示最新值
+  // Quando o title muda, se não estiver no modo de edição, garanta que o valor mais recente seja exibido
   useEffect(() => {
     if (!isEditing) {
       setEditValue(title)
     }
   }, [title, isEditing])
 
-  // 进入编辑模式时聚焦输入框
+  // Focar no campo de entrada ao entrar no modo de edição
   useEffect(() => {
     if (isEditing && inputRef.current) {
       inputRef.current.focus()
-      // TextArea组件没有select方法，使用setSelectionRange代替
+      // O componente TextArea não tem método select, usar setSelectionRange em vez disso
       if (inputRef.current.setSelectionRange) {
         inputRef.current.setSelectionRange(0, inputRef.current.value.length)
       }
@@ -64,12 +64,12 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
     const trimmedValue = editValue.trim()
     
     if (!trimmedValue) {
-      message.error('标题不能为空')
+      message.error('O título não pode estar vazio')
       return
     }
     
     if (trimmedValue.length > maxLength) {
-      message.error(`标题长度不能超过${maxLength}个字符`)
+      message.error(`O título não pode exceder${maxLength}caracteres`)
       return
     }
     
@@ -81,33 +81,33 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
     setLoading(true)
     try {
       await projectApi.updateClipTitle(clipId, trimmedValue)
-      message.success('标题更新成功')
+      message.success('Título atualizado com sucesso')
       setIsEditing(false)
-      // 先更新本地状态，再调用回调
+      // Primeiro atualizar o estado local, depois chamar o callback
       onTitleUpdate?.(trimmedValue)
     } catch (error: any) {
-      console.error('更新标题失败:', error)
-      message.error(error.userMessage || error.message || '更新标题失败')
+      console.error('Falha ao atualizar o título:', error)
+      message.error(error.userMessage || error.message || 'Falha ao atualizar título')
     } finally {
       setLoading(false)
     }
   }
 
   const handleGenerateTitle = async () => {
-    console.log('开始生成标题，clipId:', clipId)
+    console.log('Iniciando a geração do título, clipId:', clipId)
     setGenerating(true)
     try {
       const result = await projectApi.generateClipTitle(clipId)
-      console.log('生成标题结果:', result)
+      console.log('Resultado da geração do título:', result)
       if (result.success && result.generated_title) {
         setEditValue(result.generated_title)
-        message.success('标题生成成功，您可以继续编辑或点击保存')
+        message.success('Título gerado com sucesso, você pode continuar editando ou clicar em salvar')
       } else {
-        message.error('标题生成失败')
+        message.error('Falha ao gerar título')
       }
     } catch (error: any) {
-      console.error('生成标题失败:', error)
-      message.error(error.userMessage || error.message || '生成标题失败')
+      console.error('Falha ao gerar o título:', error)
+      message.error(error.userMessage || error.message || 'Falha ao gerar título')
     } finally {
       setGenerating(false)
     }
@@ -124,7 +124,7 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
   if (isEditing) {
     return (
       <Modal
-        title="编辑标题"
+        title="Editar Título"
         open={isEditing}
         onCancel={handleCancel}
         footer={null}
@@ -139,7 +139,7 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={handleKeyPress}
             maxLength={maxLength}
-            placeholder="请输入标题"
+            placeholder="Por favor, insira o título"
             autoSize={{ minRows: 3, maxRows: 8 }}
             style={{ 
               resize: 'none',
@@ -150,24 +150,24 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '12px', color: '#666' }}>
-            字符数: {editValue.length}/{maxLength}
+            Nº de caracteres: {editValue.length}/{maxLength}
           </div>
           <Space>
-            <Tooltip title="AI生成标题">
+            <Tooltip title="Gerar título com IA">
               <Button
                 icon={<MagicWandIcon />}
                 loading={generating}
                 onClick={() => {
-                  console.log('AI生成标题按钮被点击');
+                  console.log('Botão ’Gerar Título por IA’ clicado');
                   handleGenerateTitle();
                 }}
                 disabled={loading}
               >
-                AI生成
+                Gerado por IA
               </Button>
             </Tooltip>
             <Button onClick={handleCancel} disabled={loading || generating}>
-              取消
+              Cancelar
             </Button>
             <Button
               type="primary"
@@ -176,7 +176,7 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
               onClick={handleSave}
               disabled={generating}
             >
-              保存
+              Salvar
             </Button>
           </Space>
         </div>
@@ -192,7 +192,7 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
       }}
       className={`ac-editable ${className || ''}`}
       onClick={handleStartEdit}
-      title="点击编辑标题"
+      title="Clique para editar título"
     >
       <span style={{ wordBreak: 'break-word', display: 'inline' }}>
         {title}

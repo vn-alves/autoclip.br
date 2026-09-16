@@ -1,6 +1,6 @@
 /**
- * API 配置管理器
- * 处理动态后端地址和端口配置
+ * Gerenciador de Configuração da API
+ * Lidar com configuração dinâmica de endereço e porta do backend
  */
 
 interface ApiConfig {
@@ -30,10 +30,10 @@ class ApiConfigManager {
   }
 
   private async initializeConfig() {
-    // 检查是否在 Tauri 环境中
+    // Verificar se está no ambiente Tauri
     if (typeof window !== 'undefined' && ((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__)) {
       try {
-        // 监听后端启动事件
+        // Escutar evento de inicialização do backend
         const { listen } = await import('@tauri-apps/api/event');
         const { invoke } = await import('@tauri-apps/api/core');
         
@@ -49,7 +49,7 @@ class ApiConfigManager {
           this.updateFromPort(backendStatus.port);
         }
 
-        // 尝试从全局变量获取配置
+        // Tentar obter a configuração de variáveis globais
         if ((window as any).__BACKEND_BASE__) {
           this.updateConfig({
             baseUrl: (window as any).__BACKEND_BASE__,
@@ -58,7 +58,7 @@ class ApiConfigManager {
           });
         }
       } catch (error) {
-        console.warn('无法初始化 Tauri 事件监听:', error);
+        console.warn('Não foi possível inicializar o listener de eventos Tauri:', error);
       }
     }
   }
@@ -82,34 +82,34 @@ class ApiConfigManager {
   }
 
   private notifyListeners() {
-    // waitForReady 的监听器会在回调里把自己移除；直接 forEach 原数组会跳过后一个监听器，
-    // 导致冷启动时排队的第 2、4… 个请求要等 30s 超时才发出（设置页打开慢就是这个原因）
+    // O listener de waitForReady se removerá no callback; iterar diretamente sobre o array original pulará o próximo listener,
+    // Causando o 2º, 4º na fila durante a inicialização a frio… solicitações esperam 30s para expirar antes de serem enviadas (é por isso que a página de configurações abre lentamente)
     [...this.listeners].forEach(listener => listener(this.config));
   }
 
   /**
-   * 获取当前 API 配置
+   * Obter configuração atual da API
    */
   getConfig(): ApiConfig {
     return { ...this.config };
   }
 
   /**
-   * 获取 API 基础 URL
+   * Obter URL base da API
    */
   getBaseUrl(): string {
     return this.config.baseUrl;
   }
 
   /**
-   * 检查 API 是否就绪
+   * Verificar se a API está pronta
    */
   isReady(): boolean {
     return this.config.isReady;
   }
 
   /**
-   * 添加配置变化监听器
+   * Adicionar ouvinte de mudança de configuração
    */
   addListener(listener: (config: ApiConfig) => void): () => void {
     this.listeners.push(listener);
@@ -122,7 +122,7 @@ class ApiConfigManager {
   }
 
   /**
-   * 等待 API 就绪
+   * Aguardando API pronta
    */
   async waitForReady(timeout: number = 30000): Promise<boolean> {
     if (this.isReady()) {
@@ -145,7 +145,7 @@ class ApiConfigManager {
   }
 
   /**
-   * 构建完整的 API URL
+   * Construir URL completo da API
    */
   buildUrl(path: string): string {
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -153,7 +153,7 @@ class ApiConfigManager {
   }
 
   /**
-   * 健康检查
+   * Verificação de saúde
    */
   async healthCheck(): Promise<boolean> {
     try {
@@ -163,16 +163,16 @@ class ApiConfigManager {
       } as any);
       return response.ok;
     } catch (error) {
-      console.warn('API 健康检查失败:', error);
+      console.warn('Verificação de saúde da API falhou:', error);
       return false;
     }
   }
 }
 
-// 导出单例实例
+// Exportar instância singleton
 export const apiConfigManager = ApiConfigManager.getInstance();
 
-// 导出便捷函数
+// Exportar funções de conveniência
 export const getApiBaseUrl = () => apiConfigManager.getBaseUrl();
 export const isApiReady = () => apiConfigManager.isReady();
 export const waitForApiReady = (timeout?: number) => apiConfigManager.waitForReady(timeout);

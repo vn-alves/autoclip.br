@@ -19,7 +19,7 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
   const [selectedTask, setSelectedTask] = useState<TaskStatusType | null>(null)
   const [taskDetailVisible, setTaskDetailVisible] = useState(false)
 
-  // 获取当前项目的任务
+  // Obter tarefas do projeto atual
   const allTasks = tasks || []
   const projectTasks = allTasks.filter((task: TaskStatusType) => task.project_id === projectId)
   const activeTasks = projectTasks.filter((task: TaskStatusType) => 
@@ -28,34 +28,34 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
   const completedTasks = projectTasks.filter((task: TaskStatusType) => task.status === 'completed')
   const failedTasks = projectTasks.filter((task: TaskStatusType) => task.status === 'failed')
 
-  // 刷新任务列表
+  // Atualizar lista de tarefas
   const handleRefresh = () => {
     loadProjectTasks(projectId)
-    message.success('任务列表已刷新')
+    message.success('Lista de tarefas atualizada')
   }
 
-  // 查看任务详情
+  // Ver detalhes da tarefa
   const handleViewTask = (task: TaskStatusType) => {
     setSelectedTask(task)
     setTaskDetailVisible(true)
   }
 
-  // 删除任务
+  // Excluir tarefa
   const handleDeleteTask = (taskId: string) => {
     confirm({
-      title: '确认删除',
+      title: 'Confirmar Exclusão',
       icon: <ExclamationCircleOutlined />,
-      content: '确定要删除这个任务吗？删除后无法恢复。',
-      okText: '删除',
+      content: 'Tem certeza de que deseja excluir esta tarefa? Não será possível recuperá-la após a exclusão.',
+      okText: 'Excluir',
       okType: 'danger',
-      cancelText: '取消',
+      cancelText: 'Cancelar',
       onOk() {
-        message.success(`任务已删除: ${taskId}`)
+        message.success(`Tarefa excluída: ${taskId}`)
       }
     })
   }
 
-  // 获取状态图标
+  // Obter ícone de status
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed':
@@ -71,10 +71,10 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
     }
   }
 
-  // 表格列定义
+  // Definição de coluna da tabela
   const columns = [
     {
-      title: '任务名称',
+      title: 'Nome da Tarefa',
       dataIndex: 'name',
       key: 'name',
       render: (text: string, record: TaskStatusType) => (
@@ -85,20 +85,20 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
       )
     },
     {
-      title: '状态',
+      title: 'Status',
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => (
         <Tag color={status === 'completed' ? 'success' : status === 'running' ? 'processing' : status === 'failed' ? 'error' : status === 'pending' ? 'warning' : 'default'}>
-          {status === 'completed' ? '已完成' :
-           status === 'running' ? '执行中' :
-           status === 'failed' ? '失败' :
-           status === 'pending' ? '等待中' : status}
+          {status === 'completed' ? 'Concluído' :
+           status === 'running' ? 'Executando' :
+           status === 'failed' ? 'Falha' :
+           status === 'pending' ? 'Aguardando' : status}
         </Tag>
       )
     },
     {
-      title: '进度',
+      title: 'Progresso',
       dataIndex: 'progress',
       key: 'progress',
       render: (progress: number, record: TaskStatusType) => (
@@ -110,13 +110,13 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
       )
     },
     {
-      title: '当前步骤',
+      title: 'Etapa Atual',
       dataIndex: 'current_step',
       key: 'current_step',
       render: (step: string) => step || '-'
     },
     {
-      title: '创建时间',
+      title: 'Hora de Criação',
       dataIndex: 'created_at',
       key: 'created_at',
       render: (timestamp: string) => (
@@ -126,7 +126,7 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
       )
     },
     {
-      title: '操作',
+      title: 'Operação',
       key: 'actions',
       width: 120,
       render: (_: any, record: TaskStatusType) => (
@@ -136,14 +136,14 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
             size="small"
             icon={<EyeOutlined />}
             onClick={() => handleViewTask(record)}
-            title="查看详情"
+            title="Ver Detalhes"
           />
           <Button
             type="text"
             size="small"
             icon={<ExclamationCircleOutlined />}
             onClick={() => handleDeleteTask(record.id)}
-            title="删除任务"
+            title="Excluir Tarefa"
             danger
           />
         </Space>
@@ -153,9 +153,9 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
 
   if (projectTasks.length === 0) {
     return (
-      <Card title="任务管理" size="small">
+      <Card title="Gerenciamento de Tarefas" size="small">
         <div style={{ textAlign: 'center', padding: '20px' }}>
-          <Text type="secondary">该项目暂无任务记录</Text>
+          <Text type="secondary">Este projeto não tem registros de tarefas</Text>
         </div>
       </Card>
     )
@@ -165,7 +165,7 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
     <Card 
       title={
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>任务管理</span>
+          <span>Gerenciamento de Tarefas</span>
           <Button 
             type="primary" 
             size="small"
@@ -173,24 +173,24 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
             onClick={handleRefresh}
             loading={loading}
           >
-            刷新
+            Atualizar
           </Button>
         </div>
       }
       size="small"
     >
-      {/* 任务统计 */}
+      {/* Estatísticas da Tarefa */}
       <Row gutter={16} style={{ marginBottom: '16px' }}>
         <Col span={6}>
           <Statistic
-            title="总任务数"
+            title="Total de tarefas"
             value={projectTasks.length}
             prefix={<ClockCircleOutlined />}
           />
         </Col>
         <Col span={6}>
           <Statistic
-            title="活跃任务"
+            title="Tarefas Ativas"
             value={activeTasks.length}
             valueStyle={{ color: '#1890ff' }}
             prefix={<ClockCircleOutlined />}
@@ -198,7 +198,7 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
         </Col>
         <Col span={6}>
           <Statistic
-            title="已完成"
+            title="Concluído"
             value={completedTasks.length}
             valueStyle={{ color: '#52c41a' }}
             prefix={<CheckCircleOutlined />}
@@ -206,7 +206,7 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
         </Col>
         <Col span={6}>
           <Statistic
-            title="失败任务"
+            title="Tarefas Falhas"
             value={failedTasks.length}
             valueStyle={{ color: '#ff4d4f' }}
             prefix={<CloseCircleOutlined />}
@@ -214,12 +214,12 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
         </Col>
       </Row>
 
-      {/* 活跃任务 */}
+      {/* Tarefas Ativas */}
       {activeTasks.length > 0 && (
         <Card 
           size="small" 
           style={{ marginBottom: '16px' }}
-          title={`活跃任务 (${activeTasks.length})`}
+          title={`Tarefas ativas (${activeTasks.length})`}
         >
           <Space wrap>
             {activeTasks.map((task: TaskStatusType) => (
@@ -232,7 +232,7 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
         </Card>
       )}
 
-      {/* 任务列表 */}
+      {/* Lista de tarefas */}
       <Table
         columns={columns}
         dataSource={projectTasks}
@@ -241,33 +241,33 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
           pageSize: 5,
           showSizeChanger: false,
           showTotal: (total, range) => 
-            `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
+            `Nº ${range[0]}-${range[1]} itens, total ${total} item`
         }}
         size="small"
         loading={loading}
       />
 
-      {/* 任务详情弹窗 */}
+      {/* Pop-up de detalhes da tarefa */}
       <Modal
-        title="任务详情"
+        title="Detalhes da Tarefa"
         open={taskDetailVisible}
         onCancel={() => setTaskDetailVisible(false)}
         footer={[
           <Button key="close" onClick={() => setTaskDetailVisible(false)}>
-            关闭
+            Fechar
           </Button>
         ]}
         width={800}
       >
         {selectedTask && (
           <div>
-            <Text>任务ID: {selectedTask.id}</Text>
+            <Text>ID da tarefa: {selectedTask.id}</Text>
             <br />
-            <Text>状态: {selectedTask.status}</Text>
+            <Text>Status: {selectedTask.status}</Text>
             <br />
-            <Text>进度: {selectedTask.progress}%</Text>
+            <Text>Progresso: {selectedTask.progress}%</Text>
             <br />
-            <Text>消息: {selectedTask.message}</Text>
+            <Text>Mensagem: {selectedTask.message}</Text>
           </div>
         )}
       </Modal>

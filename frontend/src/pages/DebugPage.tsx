@@ -55,7 +55,7 @@ const DebugPage: React.FC = () => {
   })
   const [form] = Form.useForm()
 
-  // 测试桌面模式检测
+  // Testar detecção de modo desktop
   const testDesktopMode = async () => {
     try {
       setLoading(true)
@@ -73,9 +73,9 @@ const DebugPage: React.FC = () => {
         ...prev,
         desktopMode: info
       }))
-      message.success('桌面模式检测完成')
+      message.success('Detecção de modo desktop concluída')
     } catch (error: any) {
-      const errorMsg = `桌面模式检测失败: ${error.message}`
+      const errorMsg = `Falha na detecção do modo desktop: ${error.message}`
       setDebugInfo(prev => ({
         ...prev,
         errors: [...prev.errors, errorMsg]
@@ -86,7 +86,7 @@ const DebugPage: React.FC = () => {
     }
   }
 
-  // 测试API连接
+  // Testar conexão da API
   const testApiConnections = async () => {
     const errors: string[] = []
     const apiStatus = { settings: false, desktopMode: false, testApi: false }
@@ -94,7 +94,7 @@ const DebugPage: React.FC = () => {
     try {
       setLoading(true)
       
-      // 测试设置API
+      // Testar configuração da API
       try {
         const settings = await settingsApi.getSettings()
         apiStatus.settings = true
@@ -103,25 +103,25 @@ const DebugPage: React.FC = () => {
           currentSettings: settings
         }))
       } catch (error: any) {
-        errors.push(`设置API失败: ${error.message}`)
+        errors.push(`Falha ao definir API: ${error.message}`)
       }
 
-      // 测试桌面模式API
+      // Testar API do modo desktop
       try {
         const desktopMode = await settingsApi.checkDesktopMode()
         apiStatus.desktopMode = true
-        console.log('桌面模式API响应:', desktopMode)
+        console.log('Resposta da API no modo desktop:', desktopMode)
       } catch (error: any) {
-        errors.push(`桌面模式API失败: ${error.message}`)
+        errors.push(`API do modo desktop falhou: ${error.message}`)
       }
 
-      // 测试API Key测试接口
+      // Testar interface de teste da API Key
       try {
         const testResult = await settingsApi.testApiKey('dashscope', 'test-key')
         apiStatus.testApi = true
-        console.log('API测试响应:', testResult)
+        console.log('Resposta do teste da API:', testResult)
       } catch (error: any) {
-        errors.push(`API测试接口失败: ${error.message}`)
+        errors.push(`Teste da API falhou: ${error.message}`)
       }
 
       setDebugInfo(prev => ({
@@ -131,12 +131,12 @@ const DebugPage: React.FC = () => {
       }))
 
       if (errors.length === 0) {
-        message.success('所有API连接测试通过')
+        message.success('Todos os testes de conexão da API passaram')
       } else {
-        message.warning(`部分API测试失败: ${errors.length}个错误`)
+        message.warning(`Alguns testes de API falharam: ${errors.length}erros`)
       }
     } catch (error: any) {
-      const errorMsg = `API连接测试失败: ${error.message}`
+      const errorMsg = `Falha no teste de conexão da API: ${error.message}`
       setDebugInfo(prev => ({
         ...prev,
         errors: [...prev.errors, errorMsg]
@@ -147,14 +147,14 @@ const DebugPage: React.FC = () => {
     }
   }
 
-  // 测试API Key保存
+  // Testar salvamento da Chave API
   const testApiKeySave = async () => {
     try {
       setLoading(true)
       const values = form.getFieldsValue()
       
       if (!values.apiKey || !values.provider) {
-        message.error('请填写API Key和提供商')
+        message.error('Por favor, preencha a API Key e o provedor')
         return
       }
 
@@ -198,9 +198,9 @@ const DebugPage: React.FC = () => {
       }
 
       await settingsApi.updateSettings(testSettings)
-      message.success('API Key保存测试成功！')
+      message.success('API Key salva e testada com sucesso!')
     } catch (error: any) {
-      const errorMsg = `API Key保存失败: ${error.message}`
+      const errorMsg = `Falha ao salvar a chave API: ${error.message}`
       setDebugInfo(prev => ({
         ...prev,
         errors: [...prev.errors, errorMsg]
@@ -211,13 +211,13 @@ const DebugPage: React.FC = () => {
     }
   }
 
-  // 清除缓存并重新检测
+  // Limpar cache e detectar novamente
   const refreshAll = async () => {
     await testDesktopMode()
     await testApiConnections()
   }
 
-  // 页面加载时自动检测
+  // Detectar automaticamente ao carregar a página
   useEffect(() => {
     testDesktopMode()
     testApiConnections()
@@ -228,44 +228,44 @@ const DebugPage: React.FC = () => {
       <Content style={{ padding: '24px' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
           <Title level={2}>
-            <BugOutlined /> AutoClip 调试页面
+            <BugOutlined /> Página de depuração do AutoClip
           </Title>
           
           <Paragraph>
-            这个页面用于调试桌面模式检测和API Key保存功能。请按顺序测试各个功能。
+            Esta página é para depurar a detecção do modo desktop e a função de salvar a chave de API. Por favor, teste cada função em ordem.
           </Paragraph>
 
           <Row gutter={[16, 16]}>
-            {/* 桌面模式检测 */}
+            {/* Detecção de modo desktop */}
             <Col span={24}>
-              <Card title="桌面模式检测" extra={
+              <Card title="Detecção de modo desktop" extra={
                 <Space>
                   <Button 
                     icon={<ReloadOutlined />} 
                     onClick={testDesktopMode}
                     loading={loading}
                   >
-                    重新检测
+                    Detectar Novamente
                   </Button>
                   <Button 
                     icon={<ReloadOutlined />} 
                     onClick={refreshAll}
                     loading={loading}
                   >
-                    刷新全部
+                    Atualizar Tudo
                   </Button>
                 </Space>
               }>
                 <Descriptions bordered column={2}>
-                  <Descriptions.Item label="桌面模式状态">
+                  <Descriptions.Item label="Status do modo desktop">
                     <Tag color={debugInfo.desktopMode.isDesktop ? 'green' : 'red'}>
-                      {debugInfo.desktopMode.isDesktop ? '是' : '否'}
+                      {debugInfo.desktopMode.isDesktop ? 'Sim' : 'Não'}
                     </Tag>
                   </Descriptions.Item>
-                  <Descriptions.Item label="检测来源">
+                  <Descriptions.Item label="Detectar Fonte">
                     <Tag color="blue">{debugInfo.desktopMode.source}</Tag>
                   </Descriptions.Item>
-                  <Descriptions.Item label="环境信息" span={2}>
+                  <Descriptions.Item label="Informações do Ambiente" span={2}>
                     <pre style={{ margin: 0, fontSize: '12px' }}>
                       {JSON.stringify(debugInfo.desktopMode.environment, null, 2)}
                     </pre>
@@ -274,15 +274,15 @@ const DebugPage: React.FC = () => {
               </Card>
             </Col>
 
-            {/* API连接测试 */}
+            {/* Teste de conexão da API */}
             <Col span={24}>
-              <Card title="API连接测试" extra={
+              <Card title="Teste de conexão da API" extra={
                 <Button 
                   icon={<ApiOutlined />} 
                   onClick={testApiConnections}
                   loading={loading}
                 >
-                  测试连接
+                  Testar Conexão
                 </Button>
               }>
                 <Row gutter={16}>
@@ -293,7 +293,7 @@ const DebugPage: React.FC = () => {
                           <CheckCircleOutlined style={{ color: 'green' }} /> : 
                           <CloseCircleOutlined style={{ color: 'red' }} />
                         }
-                        <Text>设置API</Text>
+                        <Text>Configurar API</Text>
                       </Space>
                     </Card>
                   </Col>
@@ -304,7 +304,7 @@ const DebugPage: React.FC = () => {
                           <CheckCircleOutlined style={{ color: 'green' }} /> : 
                           <CloseCircleOutlined style={{ color: 'red' }} />
                         }
-                        <Text>桌面模式API</Text>
+                        <Text>API do modo desktop</Text>
                       </Space>
                     </Card>
                   </Col>
@@ -315,7 +315,7 @@ const DebugPage: React.FC = () => {
                           <CheckCircleOutlined style={{ color: 'green' }} /> : 
                           <CloseCircleOutlined style={{ color: 'red' }} />
                         }
-                        <Text>API测试接口</Text>
+                        <Text>Interface de teste da API</Text>
                       </Space>
                     </Card>
                   </Col>
@@ -323,16 +323,16 @@ const DebugPage: React.FC = () => {
               </Card>
             </Col>
 
-            {/* API Key保存测试 */}
+            {/* Teste de salvamento da API Key */}
             <Col span={24}>
-              <Card title="API Key保存测试" extra={
+              <Card title="Teste de salvamento da API Key" extra={
                 <Button 
                   type="primary"
                   icon={<SettingOutlined />} 
                   onClick={testApiKeySave}
                   loading={loading}
                 >
-                  测试保存
+                  Testar Salvamento
                 </Button>
               }>
                 <Form form={form} layout="vertical">
@@ -340,8 +340,8 @@ const DebugPage: React.FC = () => {
                     <Col span={12}>
                       <Form.Item
                         name="provider"
-                        label="API提供商"
-                        rules={[{ required: true, message: '请选择提供商' }]}
+                        label="Provedor de API"
+                        rules={[{ required: true, message: 'Selecione o provedor' }]}
                       >
                         <Input placeholder="dashscope, openai, gemini, siliconflow" />
                       </Form.Item>
@@ -350,9 +350,9 @@ const DebugPage: React.FC = () => {
                       <Form.Item
                         name="apiKey"
                         label="API Key"
-                        rules={[{ required: true, message: '请输入API Key' }]}
+                        rules={[{ required: true, message: 'Digite a API Key' }]}
                       >
-                        <Input.Password placeholder="请输入API Key" />
+                        <Input.Password placeholder="Digite a API Key" />
                       </Form.Item>
                     </Col>
                   </Row>
@@ -360,12 +360,12 @@ const DebugPage: React.FC = () => {
               </Card>
             </Col>
 
-            {/* 当前设置信息 */}
+            {/* Informações de configuração atuais */}
             {debugInfo.currentSettings && (
               <Col span={24}>
-                <Card title="当前设置信息">
+                <Card title="Informações de configuração atuais">
                   <Collapse>
-                    <Panel header="查看完整设置" key="1">
+                    <Panel header="Ver configurações completas" key="1">
                       <pre style={{ 
                         background: '#f5f5f5', 
                         padding: '16px', 
@@ -382,10 +382,10 @@ const DebugPage: React.FC = () => {
               </Col>
             )}
 
-            {/* 错误信息 */}
+            {/* Mensagem de erro */}
             {debugInfo.errors.length > 0 && (
               <Col span={24}>
-                <Card title="错误信息" style={{ borderColor: '#ff4d4f' }}>
+                <Card title="Mensagem de erro" style={{ borderColor: '#ff4d4f' }}>
                   {debugInfo.errors.map((error, index) => (
                     <Alert
                       key={index}
@@ -399,17 +399,17 @@ const DebugPage: React.FC = () => {
               </Col>
             )}
 
-            {/* 使用说明 */}
+            {/* Instruções de Uso */}
             <Col span={24}>
-              <Card title="使用说明">
+              <Card title="Instruções de Uso">
                 <Alert
-                  message="调试步骤"
+                  message="Etapas de Depuração"
                   description={
                     <div>
-                      <p>1. 首先检查"桌面模式检测"是否显示为"是"</p>
-                      <p>2. 然后测试"API连接测试"，确保所有连接都显示绿色</p>
-                      <p>3. 最后在"API Key保存测试"中输入真实的API Key进行测试</p>
-                      <p>4. 如果出现错误，请查看"错误信息"部分</p>
+                      <p>1. Primeiro verifique"Detecção de modo desktop"Exibir como"Sim"</p>
+                      <p>2. Em seguida, teste"Teste de conexão da API", certifique-se de que todas as conexões estejam verdes</p>
+                      <p>3. Por fim, em"Teste de salvamento da API Key"insira a API Key real para testar</p>
+                      <p>4. Se ocorrer um erro, verifique"Mensagem de erro"Parte</p>
                     </div>
                   }
                   type="info"
