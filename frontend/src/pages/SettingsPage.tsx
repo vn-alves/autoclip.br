@@ -29,7 +29,7 @@ const toNumber = (v: unknown, fallback: number): number => {
 type ProviderKey = 'dashscope' | 'openai' | 'gemini' | 'siliconflow' | 'ollama' | 'lmstudio'
 type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string }
 const PROVIDERS: Record<ProviderKey, { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; local?: LocalPreset }> = {
-  dashscope: { name: 'Alibaba Tongyi Qianwen', short: 'Tongyi Qianwen', hint: '阿里云 DashScope. Conexão direta na China, qwen-plus tem bom custo-benefício.', apiKeyField: 'dashscope_api_key', placeholder: 'sk-…', keyUrl: 'https://dashscope.console.aliyun.com/apiKey' },
+  dashscope: { name: 'Alibaba Tongyi Qianwen', short: 'Tongyi Qianwen', hint: 'Alibaba Cloud DashScope. Conexão direta na China, qwen-plus tem bom custo-benefício.', apiKeyField: 'dashscope_api_key', placeholder: 'sk-…', keyUrl: 'https://dashscope.console.aliyun.com/apiKey' },
   openai: { name: 'OpenAI / Interface compatível', short: 'OpenAI compatível', hint: 'OpenAI, ou qualquer interface compatível: Zhipu, DeepSeek, OpenRouter, vLLM.', apiKeyField: 'openai_api_key', placeholder: 'sk-…(Deixe em branco para serviço próprio)', keyUrl: 'https://platform.openai.com/api-keys' },
   gemini: { name: 'Google Gemini', short: 'Gemini', hint: 'Série Gemini do Google AI Studio.', apiKeyField: 'gemini_api_key', placeholder: 'AIza…', keyUrl: 'https://aistudio.google.com/apikey' },
   siliconflow: { name: 'Silicone Flow', short: 'Silicone Flow', hint: 'Plataforma agregadora SiliconFlow, modelos de código aberto como DeepSeek / Qwen.', apiKeyField: 'siliconflow_api_key', placeholder: 'sk-…', keyUrl: 'https://cloud.siliconflow.cn/account/ak' },
