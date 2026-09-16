@@ -26,7 +26,7 @@ python3 init_database.py >> data/logs/init_db.log 2>&1 || \
   echo "[dev] aviso: init_database falhou, veja data/logs/init_db.log"
 
 # backend
-python3 -m uvicorn backend.app_factory:app --host 127.0.0.1 --port "$BACKEND_PORT" \
+python3 -m uvicorn backend.app_factory:create_app --factory --host 127.0.0.1 --port "$BACKEND_PORT" \
   >> data/logs/backend.stdout.log 2>&1 &
 BACKEND_PID=$!
 
