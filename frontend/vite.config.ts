@@ -35,15 +35,16 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      port: 3000,
-      strictPort: true, // 如果端口被占用则报错，而不是自动切换
+      port: Number(process.env.FRONTEND_PORT || 8080),
+      host: true,
+      strictPort: false,
       hmr: {
         overlay: false // 禁用错误覆盖层
       },
       proxy: {
         '/api': {
           // Override when the desktop backend (random port) is running: BACKEND_URL=http://127.0.0.1:PORT npm run dev
-          target: process.env.BACKEND_URL || 'http://localhost:8000',
+          target: process.env.BACKEND_URL || 'http://127.0.0.1:8000',
           changeOrigin: true
         }
       }
