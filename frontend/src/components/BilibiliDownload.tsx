@@ -292,7 +292,7 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
         <Space direction="vertical" style={{ width: '100%' }} size={16}>
           <div>
             <Input.TextArea
-              placeholder="Por favor, cole o link do vídeo do Bilibili ou YouTube, suporta:&#10;• Bilibili: https://www.bilibili.com/video/BV1xx411c7mu&#10;• YouTube：https://www.youtube.com/watch?v=xxxxx"
+              placeholder="Por favor, cole o link do vídeo do Bilibili ou YouTube, suporta:&#10;• Bilibili: https://www.bilibili.com/video/BV1xx411c7mu&#10;• YouTube: https://www.youtube.com/watch?v=xxxxx"
               value={url}
               onChange={(e) => {
                 setUrl(e.target.value)

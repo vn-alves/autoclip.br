@@ -7,11 +7,11 @@
  * Pontos-chave de implementação:
  * - Feedback com `feedback_submitted` O evento entra no PostHog (será enviado independentemente de haver Survey configurado ou não).
  * - Se houver um projeto PostHog chamado FEEDBACK_SURVEY_Survey (tipo API / sem UI) com NAME (ou ID especificado por env),
- *   E enviar de acordo com a convenção do PostHog `survey shown` / `survey sent` / `survey dismissed`，
+ *   E enviar de acordo com a convenção do PostHog `survey shown` / `survey sent` / `survey dismissed`, 
  *   Assim, os resultados aparecerão no PostHog → No painel de respostas do Surveys, o relatório semanal também pode ser lido diretamente.
  * - Versão / sistema / arquitetura são automaticamente incluídos pelas super properties registradas por lifecycle.ts; aqui são explicitamente adicionados,
  *   Evitar que o painel de Surveys seja apenas visualização `$survey_response*` perde o contexto.
- * - Quando o rastreamento é desativado pelo usuário, o PostHog não envia; neste caso, retorna ao formulário Feishu oficial (FEEDBACK_FORM_URL）。
+ * - Quando o rastreamento é desativado pelo usuário, o PostHog não envia; neste caso, retorna ao formulário Feishu oficial (FEEDBACK_FORM_URL) . 
  */
 import { posthog, isAnalyticsEnabled } from './posthog'
 import { settingsApi } from '../services/api'

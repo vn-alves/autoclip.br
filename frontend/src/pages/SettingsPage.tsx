@@ -331,7 +331,7 @@ const SettingsPage: React.FC = () => {
                     <Row
                       wide
                       label="Endereço da API"
-                      hint={<>Deixe em branco para o endereço oficial da OpenAI. Para serviços compatíveis, preencha o seu, por exemplo <span className="ac-mono">https://api.deepseek.com/v1</span>、<span className="ac-mono">http://localhost:11434/v1</span>（Ollama）。</>}
+                      hint={<>Deixe em branco para o endereço oficial da OpenAI. Para serviços compatíveis, preencha o seu, por exemplo <span className="ac-mono">https://api.deepseek.com/v1</span>, <span className="ac-mono">http://localhost:11434/v1</span> (Ollama) . </>}
                     >
                       <Form.Item
                         name="openai_base_url"

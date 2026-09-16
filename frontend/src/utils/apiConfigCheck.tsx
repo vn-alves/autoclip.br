@@ -155,7 +155,7 @@ export const showApiConfigModal = (missingProviders: string[], onNavigateToSetti
     'Speech API': 'API de Reconhecimento de Voz'
   }
 
-  const missingNames = missingProviders.map(p => providerNames[p as keyof typeof providerNames] || p).join('、')
+  const missingNames = missingProviders.map(p => providerNames[p as keyof typeof providerNames] || p).join(', ')
 
   Modal.confirm({
     title: <span style={{ color: '#fff' }}>API precisa ser configurada</span>,

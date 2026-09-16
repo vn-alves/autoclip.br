@@ -252,7 +252,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   // Chave: cada projeto tenta automaticamente apenas uma vez, e não exibe toast em caso de falha.
   // Antes, isRetrying era colocado nas dependências aqui, e isRetrying era invertido em handleRetry,
   // Faz com que o efeito seja acionado repetidamente → POST /process freneticamente para um projeto Bilibili que ainda não terminou de baixar (retorna
-  // 400 "Video file not found"）→ Tela cheia ”Falha na repetição”. O backend iniciará automaticamente após o download.
+  // 400 "Video file not found") → Tela cheia ”Falha na repetição”. O backend iniciará automaticamente após o download.
   // pipeline, então aqui basta fazer uma inicialização ’melhor esforço’.
   useEffect(() => {
     if (

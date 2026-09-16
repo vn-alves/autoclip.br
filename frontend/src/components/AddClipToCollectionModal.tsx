@@ -196,7 +196,7 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
                         {clip.content && clip.content.length > 0 && (
                           <div className="clip-content">
                             <Text type="secondary" style={{ fontSize: '11px' }}>
-                              {clip.content.slice(0, 2).join('、')}
+                              {clip.content.slice(0, 2).join(', ')}
                               {clip.content.length > 2 && '...'}
                             </Text>
                           </div>

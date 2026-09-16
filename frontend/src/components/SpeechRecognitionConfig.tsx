@@ -98,7 +98,7 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
           label="Tempo de execução do Whisper"
           hint={
             !supported ? 'A plataforma atual não suporta transcrição local.'
-              : installed ? `faster-whisper instalado${runtime?.packages?.length ? `（${runtime.packages.join(', ')}）` : ''}。`
+              : installed ? `faster-whisper instalado${runtime?.packages?.length ? ` (${runtime.packages.join(', ')}) ` : ''}. `
               : installing ? (runtime?.message || 'Instalando…')
               : runtime?.status === 'error' ? `Erro de instalação:${runtime?.message || ''}`
               : 'Instalação sob demanda, aprox. 200–400 MB (sem PyTorch). Após a instalação, selecione e baixe um modelo.'

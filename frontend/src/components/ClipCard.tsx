@@ -100,7 +100,7 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
       const points = clip.content.filter((item) => {
         const text = item.trim()
         if (text.length > 100) return false
-        if (text.split(/[，。！？；：""''（）【】]/).length > 3) return false
+        if (text.split(/[, . ！？；: ""'' () 【】]/).length > 3) return false
         return true
       })
       if (points.length > 0) return points.join(' ')
