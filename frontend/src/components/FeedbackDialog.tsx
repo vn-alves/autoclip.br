@@ -23,7 +23,7 @@ interface FeedbackDialogProps {
 }
 
 /**
- * Feedback no aplicativo — Página de configurações 'Feedback' e estado de falha do projeto são compartilhados.
+ * Feedback no aplicativo — Página de configurações ’Feedback’ e estado de falha do projeto são compartilhados.
  * Anexa automaticamente versão / sistema / arquitetura / LLM provider & Modelo / Fase de falha e erro, o usuário só precisa escrever uma frase.
  */
 const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context }) => {

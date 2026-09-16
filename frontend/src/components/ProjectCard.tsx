@@ -252,8 +252,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   // Chave: cada projeto tenta automaticamente apenas uma vez, e não exibe toast em caso de falha.
   // Antes, isRetrying era colocado nas dependências aqui, e isRetrying era invertido em handleRetry,
   // Faz com que o efeito seja acionado repetidamente → POST /process freneticamente para um projeto Bilibili que ainda não terminou de baixar (retorna
-  // 400 "Video file not found"）→ Tela cheia "Falha na repetição". O backend iniciará automaticamente após o download.
-  // pipeline, então aqui basta fazer uma inicialização 'melhor esforço'.
+  // 400 "Video file not found"）→ Tela cheia ”Falha na repetição”. O backend iniciará automaticamente após o download.
+  // pipeline, então aqui basta fazer uma inicialização ’melhor esforço’.
   useEffect(() => {
     if (
       project.status === 'pending' &&
@@ -299,7 +299,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       } else {
         await projectApi.retryProcessing(project.id)
       }
-      // Deixa o componente pai lidar com toast / atualização. Mas a 'inicialização automática silenciosa' nunca deve acionar o componente pai,
+      // Deixa o componente pai lidar com toast / atualização. Mas a ’inicialização automática silenciosa’ nunca deve acionar o componente pai,
       // Caso contrário, handleRetryProject será chamado → loadProjects → Remontar lista → Reiniciar automaticamente
       // loop infinito. Notifica o componente pai apenas quando o usuário clica em tentar novamente.
       if (onRetry && !opts?.silent) {
@@ -496,7 +496,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 /* Outros estados: exibir botões de download, tentar novamente e excluir */
                 <>
                   <Space size={4}>
-                    {/* Botão de tentar novamente - Exibido nos estados 'em processamento' e 'aguardando', permite ao usuário reenviar a tarefa */}
+                    {/* Botão de tentar novamente - Exibido nos estados ’em processamento’ e ’aguardando’, permite ao usuário reenviar a tarefa */}
                     {(normalizedStatus === 'processing' || normalizedStatus === 'importing' || project.status === 'pending') && (
                       <Tooltip title={project.status === 'pending' ? "Iniciar Processamento" : "Reenviar tarefa"}>
                         <Button

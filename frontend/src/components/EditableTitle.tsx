@@ -158,7 +158,7 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
                 icon={<MagicWandIcon />}
                 loading={generating}
                 onClick={() => {
-                  console.log('Botão 'Gerar Título por IA' clicado');
+                  console.log('Botão ’Gerar Título por IA’ clicado');
                   handleGenerateTitle();
                 }}
                 disabled={loading}

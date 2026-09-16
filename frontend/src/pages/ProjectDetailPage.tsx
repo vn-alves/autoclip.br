@@ -305,7 +305,7 @@ const ProjectDetailPage: React.FC = () => {
             ) : (
               <div className="ac-empty">
                 <b>Nenhuma coleção ainda</b>
-                Escolha alguns trechos abaixo e "Crie uma coleção" agora.
+                Escolha alguns trechos abaixo e ”Crie uma coleção” agora.
               </div>
             )}
           </Section>
@@ -346,7 +346,7 @@ const ProjectDetailPage: React.FC = () => {
             ) : (
               <div className="ac-empty">
                 <b>Nenhum segmento cortado</b>
-                Você pode tentar novamente após diminuir o 'limite mínimo de pontuação' nas configurações.
+                Você pode tentar novamente após diminuir o ’limite mínimo de pontuação’ nas configurações.
                 <div style={{ marginTop: 12 }}>
                   <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>Acha que não deveria ser assim? Diga-nos</Btn>
                 </div>
@@ -362,7 +362,7 @@ const ProjectDetailPage: React.FC = () => {
               {currentProject.error_message}
             </span>
           ) : (
-            'Você pode tentar novamente; se falhar repetidamente, clique em "Relatar problema", o ambiente de execução e o erro serão anexados automaticamente.'
+            'Você pode tentar novamente; se falhar repetidamente, clique em ”Relatar problema”, o ambiente de execução e o erro serão anexados automaticamente.'
           )}
         </div>
       ) : (

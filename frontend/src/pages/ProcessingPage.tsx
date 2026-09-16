@@ -56,7 +56,7 @@ const ProcessingPage: React.FC = () => {
         return
       }
       
-      // Se o status do projeto for 'aguardando processamento', iniciar o processamento
+      // Se o status do projeto for ’aguardando processamento’, iniciar o processamento
       if (project.status === 'pending') {
         await startProcessing()
       }

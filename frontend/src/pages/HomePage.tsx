@@ -89,7 +89,7 @@ const HomePage: React.FC = () => {
     }
   }
 
-  // Chamado por ProjectCard quando o 'usuário clica manualmente em tentar novamente' e a requisição de nova tentativa foi bem-sucedida.
+  // Chamado por ProjectCard quando o ’usuário clica manualmente em tentar novamente’ e a requisição de nova tentativa foi bem-sucedida.
   // ProjectCard.handleRetry já enviou solicitações start/retryProcessing, aqui é apenas responsável por
   // Dica + atualiza a lista, nunca deve enviar outra requisição de nova tentativa (isso se somaria à requisição do próprio cartão e criaria
   // loadProjects→Remontar→loop de inicialização automática).
