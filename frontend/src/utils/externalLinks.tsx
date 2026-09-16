@@ -1,53 +1,53 @@
 import React from 'react'
 
 /**
- * 外部链接处理工具
- * 在Tauri环境中安全地打开外部链接
+ * Ferramenta de tratamento de links externos
+ * Abrir links externos com segurança no ambiente Tauri
  */
 
-// 检测是否在Tauri环境中
+// Detectar se está em ambiente Tauri
 const isTauri = () => {
   return typeof window !== 'undefined' && Boolean((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__)
 }
 
 /**
- * 打开外部链接
- * @param url 要打开的URL
+ * Abrir link externo
+ * @param url URL a ser aberta
  */
 export const openExternalLink = async (url: string) => {
   try {
     if (isTauri()) {
-      // 在Tauri环境中使用shell API
+      // Usar a API shell no ambiente Tauri
       const { open } = await import('@tauri-apps/plugin-shell')
       await open(url)
     } else {
-      // 在Web环境中使用普通方式
+      // Usar método normal em ambiente Web
       window.open(url, '_blank', 'noopener,noreferrer')
     }
   } catch (error) {
-    console.error('打开外部链接失败:', error)
-    // 降级处理:尝试使用window.open
+    console.error('Falha ao abrir link externo:', error)
+    // Tratamento de fallback: tentar usar window.open
     try {
       window.open(url, '_blank', 'noopener,noreferrer')
     } catch (fallbackError) {
-      console.error('降级打开链接也失败:', fallbackError)
-      // 最后的降级:复制链接到剪贴板
+      console.error('Falha ao abrir link de fallback:', fallbackError)
+      // Último recurso: copiar link para a área de transferência
       try {
         await navigator.clipboard.writeText(url)
-        alert(`链接已复制到剪贴板:${url}`)
+        alert(`Link copiado para a área de transferência:${url}`)
       } catch (clipboardError) {
-        console.error('复制到剪贴板失败:', clipboardError)
-        alert(`请手动访问:${url}`)
+        console.error('Falha ao copiar para a área de transferência:', clipboardError)
+        alert(`Por favor, acesse manualmente:${url}`)
       }
     }
   }
 }
 
 /**
- * 创建一个可点击的外部链接组件
- * @param url 链接地址
- * @param text 显示文本
- * @param className CSS类名
+ * Criar um componente de link externo clicável
+ * @param url Endereço do link
+ * @param text Texto a exibir
+ * @param className Nome da classe CSS
  */
 export const ExternalLink: React.FC<{
   url: string

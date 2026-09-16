@@ -1,9 +1,9 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  /** PostHog project API key（公开 key，可打包进前端）。未配置则禁用埋点。 */
+  /** Chave de API do projeto PostHog (chave pública, pode ser empacotada no frontend). Se não configurada, o rastreamento é desativado. */
   readonly VITE_PUBLIC_POSTHOG_KEY?: string
-  /** PostHog 实例地址，US: https://us.i.posthog.com，EU: https://eu.i.posthog.com */
+  /** Endereço da instância PostHog, EUA: https://us.i.posthog.com, UE: https://eu.i.posthog.com */
   readonly VITE_PUBLIC_POSTHOG_HOST?: string
 }
 

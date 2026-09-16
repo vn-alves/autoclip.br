@@ -8,7 +8,7 @@ interface SpeechRecognitionConfigProps {
   onConfigChange?: (config: Record<string, unknown>) => void
 }
 
-// Whisper 运行时 + 模型管理 — Calm Premium 行式布局（见 DESIGN.md）
+// Tempo de execução do Whisper + gerenciamento de modelo — Layout em linha Calm Premium (ver DESIGN.md)
 const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
   const [runtime, setRuntime] = useState<WhisperRuntimeStatus | null>(null)
   const [models, setModels] = useState<WhisperModel[]>([])
@@ -21,13 +21,13 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
       setRuntime(rt)
       setModels(Array.isArray(ms) ? ms : [])
     } catch {
-      // 后端可能尚未就绪，静默重试
+      // O backend pode não estar pronto, tentar novamente silenciosamente
     } finally {
       setLoading(false)
     }
   }, [])
 
-  // 安装中或有模型下载中时，加快轮询
+  // Acelerar o polling durante a instalação ou download de modelos
   const needsFastPoll = (rt: WhisperRuntimeStatus | null, ms: WhisperModel[]) =>
     rt?.status === 'installing' || ms.some((m) => m.status === 'downloading')
 
@@ -45,46 +45,46 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
   const handleInstall = async () => {
     try {
       const r = await speechApi.installRuntime()
-      message.info(r.message || '已开始安装')
+      message.info(r.message || 'Instalação iniciada')
       setRuntime((p) => (p ? { ...p, status: 'installing', progress: 5 } : p))
       refresh()
     } catch (e: any) {
-      message.error(e?.response?.data?.detail || '安装失败')
+      message.error(e?.response?.data?.detail || 'Falha na Instalação')
     }
   }
 
   const handleUninstall = async () => {
     try {
       const r = await speechApi.uninstallRuntime()
-      message.success(r.message || '已卸载')
+      message.success(r.message || 'Desinstalado')
       refresh()
     } catch {
-      message.error('卸载失败')
+      message.error('Falha na Desinstalação')
     }
   }
 
   const handleDownload = async (model: string) => {
     try {
       await speechApi.downloadModel(model)
-      message.info(`开始下载 ${model}`)
+      message.info(`Iniciar Download ${model}`)
       setModels((prev) => prev.map((m) => (m.name === model ? { ...m, status: 'downloading' } : m)))
       refresh()
     } catch (e: any) {
-      message.error(e?.response?.data?.detail || '下载失败')
+      message.error(e?.response?.data?.detail || 'Falha ao baixar')
     }
   }
 
   const handleDelete = async (model: string) => {
     try {
       await speechApi.deleteModel(model)
-      message.success(`已删除 ${model}`)
+      message.success(`Excluído ${model}`)
       refresh()
     } catch {
-      message.error('删除失败')
+      message.error('Falha na Exclusão')
     }
   }
 
-  if (loading) return <div className="ac-hint">读取 Whisper 状态…</div>
+  if (loading) return <div className="ac-hint">Lendo status do Whisper…</div>
 
   const installed = runtime?.status === 'installed'
   const installing = runtime?.status === 'installing'
@@ -95,20 +95,20 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
       <div className="ac-rows">
         <Row
           top
-          label="Whisper 运行时"
+          label="Tempo de execução do Whisper"
           hint={
-            !supported ? '当前平台不支持本地转写。'
-              : installed ? `faster-whisper 已安装${runtime?.packages?.length ? `（${runtime.packages.join(', ')}）` : ''}。`
-              : installing ? (runtime?.message || '正在安装…')
-              : runtime?.status === 'error' ? `安装出错：${runtime?.message || ''}`
-              : '按需安装，约 200–400 MB（不含 PyTorch）。装好后再选一个模型下载即可。'
+            !supported ? 'A plataforma atual não suporta transcrição local.'
+              : installed ? `faster-whisper instalado${runtime?.packages?.length ? `（${runtime.packages.join(', ')}）` : ''}。`
+              : installing ? (runtime?.message || 'Instalando…')
+              : runtime?.status === 'error' ? `Erro de instalação:${runtime?.message || ''}`
+              : 'Instalação sob demanda, aprox. 200–400 MB (sem PyTorch). Após a instalação, selecione e baixe um modelo.'
           }
         >
           {installed && (
             <>
-              <StatusDot tone="ok" label="已安装" />
-              <Popconfirm title="卸载 Whisper 运行时？已下载的模型不会被删除。" onConfirm={handleUninstall} okText="卸载" cancelText="取消">
-                <Btn variant="danger" size="sm">卸载</Btn>
+              <StatusDot tone="ok" label="Instalado" />
+              <Popconfirm title="Desinstalar o tempo de execução do Whisper? Os modelos baixados não serão excluídos." onConfirm={handleUninstall} okText="Desinstalar" cancelText="Cancelar">
+                <Btn variant="danger" size="sm">Desinstalar</Btn>
               </Popconfirm>
             </>
           )}
@@ -119,10 +119,10 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
             </div>
           )}
           {runtime?.status === 'not_installed' && (
-            <Btn variant="cta" size="sm" style={{ height: 32, fontSize: 13, padding: '0 16px' }} onClick={handleInstall} disabled={!supported}>安装</Btn>
+            <Btn variant="cta" size="sm" style={{ height: 32, fontSize: 13, padding: '0 16px' }} onClick={handleInstall} disabled={!supported}>Instalar</Btn>
           )}
           {runtime?.status === 'error' && (
-            <Btn size="sm" onClick={handleInstall} disabled={!supported}>重试安装</Btn>
+            <Btn size="sm" onClick={handleInstall} disabled={!supported}>Tentar Instalar Novamente</Btn>
           )}
         </Row>
       </div>
@@ -133,9 +133,9 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
         </pre>
       )}
 
-      <div className="ac-eyebrow" style={{ marginTop: 40, marginBottom: 12 }}>模型</div>
+      <div className="ac-eyebrow" style={{ marginTop: 40, marginBottom: 12 }}>Modelo</div>
       {!installed ? (
-        <div className="ac-hint">先安装运行时，再在这里下载模型。</div>
+        <div className="ac-hint">Instale o runtime primeiro e depois baixe o modelo aqui.</div>
       ) : (
         <div className="ac-rows">
           {models.map((m) => {
@@ -148,29 +148,29 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
                   <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10 }}>
                     <span className="ac-mono">{m.name}</span>
                     <span className="ac-mono" style={{ fontSize: 12, color: 'var(--ac-muted)', fontWeight: 400 }}>{m.size}</span>
-                    {downloaded && <StatusDot tone="ok" label="已下载" />}
+                    {downloaded && <StatusDot tone="ok" label="Baixado" />}
                   </span>
                 }
                 hint={
                   <>
-                    {m.description} · 准确度{m.accuracy} · 速度{m.speed}
+                    {m.description} · Precisão{m.accuracy} · Velocidade{m.speed}
                     {m.status === 'error' && m.errorMessage && <span style={{ color: 'var(--ac-error)' }}> · {m.errorMessage}</span>}
                   </>
                 }
               >
                 {downloaded ? (
-                  <Popconfirm title={`删除模型 ${m.name}？`} onConfirm={() => handleDelete(m.name)} okText="删除" cancelText="取消">
-                    <Btn variant="danger" size="sm">删除</Btn>
+                  <Popconfirm title={`Excluir Modelo ${m.name}？`} onConfirm={() => handleDelete(m.name)} okText="Excluir" cancelText="Cancelar">
+                    <Btn variant="danger" size="sm">Excluir</Btn>
                   </Popconfirm>
                 ) : downloading ? (
                   <div style={{ width: 160 }}>
                     <ProgressLine percent={m.downloadProgress ?? 0} />
                     <div className="ac-hint" style={{ textAlign: 'right', fontFamily: 'var(--ac-font-mono)' }}>
-                      {m.downloadProgress != null ? `${Math.round(m.downloadProgress)}%` : '下载中'}
+                      {m.downloadProgress != null ? `${Math.round(m.downloadProgress)}%` : 'Baixando'}
                     </div>
                   </div>
                 ) : (
-                  <Btn size="sm" onClick={() => handleDownload(m.name)}>下载</Btn>
+                  <Btn size="sm" onClick={() => handleDownload(m.name)}>Baixar</Btn>
                 )}
               </Row>
             )

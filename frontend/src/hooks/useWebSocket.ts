@@ -46,7 +46,7 @@ export interface TaskProgressUpdateMessage extends WebSocketMessage {
   progress: number;
   step_name: string;
   message?: string;
-  snapshot?: boolean; // 标记是否为快照消息
+  snapshot?: boolean; // Marcar se é uma mensagem de snapshot
 }
 
 export type WebSocketEventMessage = 
@@ -71,7 +71,7 @@ export interface TaskSubscriptionStatus {
   active_channels: number;
 }
 
-// 全局WebSocket连接管理
+// Gerenciamento global de conexão WebSocket
 let globalWs: WebSocket | null = null;
 let globalDesiredSubscriptions = new Set<string>();
 let globalUserId: string | null = null;
@@ -83,22 +83,22 @@ let reconnectTimeoutRef: number | null = null;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
 
-// 心跳机制
+// Mecanismo de heartbeat
 let heartbeatInterval: number | null = null;
 let heartbeatTimeout: number | null = null;
-const HEARTBEAT_INTERVAL = 25000; // 25秒发送一次心跳
-const HEARTBEAT_TIMEOUT = 5000; // 5秒内没收到pong就重连
+const HEARTBEAT_INTERVAL = 25000; // Enviar um heartbeat a cada 25 segundos
+const HEARTBEAT_TIMEOUT = 5000; // Reconectar se não receber pong em 5 segundos
 
-// 防抖机制
+// Mecanismo de debounce
 let syncDebounceTimeout: number | null = null;
-const SYNC_DEBOUNCE_DELAY = 300; // 300ms防抖
+const SYNC_DEBOUNCE_DELAY = 300; // Debounce de 300ms
 
 export const useWebSocket = (options: UseWebSocketOptions) => {
   const { userId, onMessage, onConnect, onDisconnect, onError } = options;
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
 
-  // 心跳相关函数
+  // Funções relacionadas ao heartbeat
   const startHeartbeat = useCallback(() => {
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
@@ -106,15 +106,15 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
     
     heartbeatInterval = window.setInterval(() => {
       if (globalWs?.readyState === WebSocket.OPEN) {
-        console.log('发送心跳ping');
+        console.log('Enviar ping de heartbeat');
         globalWs.send(JSON.stringify({ type: 'ping' }));
         
-        // 设置pong超时
+        // Definir tempo limite de pong
         if (heartbeatTimeout) {
           clearTimeout(heartbeatTimeout);
         }
         heartbeatTimeout = window.setTimeout(() => {
-          console.log('心跳超时，准备重连');
+          console.log('Heartbeat expirou, preparando reconexão');
           if (globalWs) {
             globalWs.close();
           }
@@ -134,15 +134,15 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
     }
   }, []);
 
-  // 全局连接函数
+  // Função de conexão global
   const ensureConnected = useCallback(() => {
     if (globalWs?.readyState === WebSocket.OPEN || globalWs?.readyState === WebSocket.CONNECTING) {
       return;
     }
     
-    // 如果已经有连接但用户ID不同，先关闭旧连接
+    // Se já houver uma conexão, mas o ID do usuário for diferente, feche a conexão antiga primeiro
     if (globalWs && globalUserId !== userId) {
-      console.log(`用户ID变更: ${globalUserId} -> ${userId}，关闭旧连接`);
+      console.log(`ID de usuário alterado: ${globalUserId} -> ${userId}, fechar conexão antiga`);
       globalWs.close();
       globalWs = null;
     }
@@ -160,17 +160,17 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
       globalOnError = onError || null;
 
       ws.onopen = () => {
-        console.log('WebSocket连接已建立');
+        console.log('Conexão WebSocket estabelecida');
         setIsConnected(true);
         setConnectionStatus('connected');
         reconnectAttempts = 0;
         
-        // 启动心跳
+        // Iniciar heartbeat
         startHeartbeat();
         
-        // 重连后自动重新订阅之前的项目
+        // Reassinar automaticamente projetos anteriores após reconexão
         if (globalDesiredSubscriptions.size > 0) {
-          console.log('重连后重新订阅项目:', Array.from(globalDesiredSubscriptions));
+          console.log('Reinscrever-se no projeto após reconexão:', Array.from(globalDesiredSubscriptions));
           sendMessage({
             type: 'sync_subscriptions',
             project_ids: Array.from(globalDesiredSubscriptions)
@@ -183,11 +183,11 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
       ws.onmessage = (event) => {
         try {
           const data: WebSocketEventMessage = JSON.parse(event.data);
-          console.log('收到WebSocket消息:', data);
+          console.log('Mensagem WebSocket recebida:', data);
           
-          // 处理pong响应
+          // Processar resposta de pong
           if ((data as any).type === 'pong') {
-            console.log('收到心跳pong响应');
+            console.log('Resposta pong de heartbeat recebida');
             if (heartbeatTimeout) {
               clearTimeout(heartbeatTimeout);
               heartbeatTimeout = null;
@@ -197,42 +197,42 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
           
           globalOnMessage?.(data);
         } catch (error) {
-          console.error('解析WebSocket消息失败:', error);
+          console.error('Falha ao analisar mensagem WebSocket:', error);
         }
       };
 
       ws.onclose = (event) => {
-        console.log('WebSocket连接已关闭:', event.code, event.reason);
+        console.log('Conexão WebSocket fechada:', event.code, event.reason);
         setIsConnected(false);
         setConnectionStatus('disconnected');
         
-        // 停止心跳
+        // Parar heartbeat
         stopHeartbeat();
         
         globalOnDisconnect?.();
 
-        // 启用自动重连，但限制重连次数
+        // Habilitar reconexão automática, mas limitar o número de tentativas
         if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
           const delay = Math.min(2000 * Math.pow(2, reconnectAttempts), 15000);
-          console.log(`将在 ${delay}ms 后尝试重连 (${reconnectAttempts}/${maxReconnectAttempts})`);
+          console.log(`Será em ${delay}ms para tentar reconectar (${reconnectAttempts}/${maxReconnectAttempts})`);
           
           reconnectTimeoutRef = window.setTimeout(() => {
             ensureConnected();
           }, delay);
         } else if (reconnectAttempts >= maxReconnectAttempts) {
-          console.log('达到最大重连次数，停止重连');
+          console.log('Número máximo de reconexões atingido, parando de reconectar');
         }
       };
 
       ws.onerror = (error) => {
-        console.error('WebSocket错误:', error);
+        console.error('Erro de WebSocket:', error);
         setConnectionStatus('error');
         globalOnError?.(error);
       };
 
     } catch (error) {
-      console.error('创建WebSocket连接失败:', error);
+      console.error('Falha ao criar conexão WebSocket:', error);
       setConnectionStatus('error');
     }
   }, [userId, onMessage, onConnect, onDisconnect, onError]);
@@ -244,7 +244,7 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
     }
     
     if (globalWs) {
-      globalWs.close(1000, '用户主动断开连接');
+      globalWs.close(1000, 'Usuário desconectou ativamente');
       globalWs = null;
     }
     
@@ -257,7 +257,7 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
       globalWs.send(JSON.stringify(message));
       return true;
     }
-    console.warn('WebSocket未连接，无法发送消息');
+    console.warn('WebSocket não conectado, impossível enviar mensagem');
     return false;
   }, []);
 
@@ -301,23 +301,23 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
     });
   }, [sendMessage]);
 
-  // 集合差异对齐订阅 - 核心函数（带防抖）
+  // Assinatura de alinhamento de diferença de conjunto - função principal (com debounce)
   const syncSubscriptions = useCallback((projectIds: string[]) => {
     const desired = new Set(projectIds);
     globalDesiredSubscriptions = desired;
     
-    // 确保连接
+    // Garantir conexão
     ensureConnected();
     
-    // 防抖处理
+    // Processamento de debounce
     if (syncDebounceTimeout) {
       clearTimeout(syncDebounceTimeout);
     }
     
     syncDebounceTimeout = window.setTimeout(() => {
-      // 发送同步订阅请求
+      // Enviar solicitação de assinatura síncrona
       if (globalWs?.readyState === WebSocket.OPEN) {
-        console.log('同步订阅项目:', Array.from(desired));
+        console.log('Sincronizar itens de assinatura:', Array.from(desired));
         sendMessage({
           type: 'sync_subscriptions',
           project_ids: Array.from(desired)
@@ -328,7 +328,7 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
     return { desired: Array.from(desired) };
   }, [sendMessage, ensureConnected]);
 
-  // 批量订阅/退订支持
+  // Suporte para assinatura/cancelamento em massa
   const subscribeToMany = useCallback((channels: string[]) => {
     return sendMessage({
       type: 'subscribe_many',
@@ -343,7 +343,7 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
     });
   }, [sendMessage]);
 
-  // 同步订阅集对齐接口
+  // Sincronizar interface de alinhamento do conjunto de assinaturas
   const syncSubscriptionSet = useCallback((channels: string[]) => {
     return sendMessage({
       type: 'sync_subscriptions',
@@ -351,20 +351,20 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
     });
   }, [sendMessage]);
 
-  // 自动连接
+  // Conexão automática
   useEffect(() => {
-    // 延迟连接，避免组件初始化时的重渲染
+    // Conexão atrasada para evitar re-renderização na inicialização do componente
     const timer = setTimeout(() => {
       ensureConnected();
     }, 500);
 
     return () => {
       clearTimeout(timer);
-      // 不在这里断开连接，保持全局连接
+      // Não desconectar aqui, manter conexão global
     };
   }, [userId, ensureConnected]);
 
-  // 清理重连定时器
+  // Limpar temporizador de reconexão
   useEffect(() => {
     return () => {
       if (reconnectTimeoutRef) {

@@ -14,19 +14,19 @@ export interface Notification {
 export const useNotifications = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const notifiedKeys = useRef<Set<string>>(new Set()); // 防重复通知
-  const lastNotificationTime = useRef<number>(0); // 节流控制
+  const notifiedKeys = useRef<Set<string>>(new Set()); // Notificação anti-duplicação
+  const lastNotificationTime = useRef<number>(0); // Controle de limitação
 
   const addNotification = useCallback((notification: Omit<Notification, 'id' | 'read'>, forceAdd = false) => {
     const now = Date.now();
     const key = `${notification.type}-${notification.title}-${notification.message}`;
     
-    // 防重复通知：如果相同内容的通知已经存在，则不添加
+    // Notificação anti-duplicação: não adicionar se uma notificação com o mesmo conteúdo já existir
     if (!forceAdd && notifiedKeys.current.has(key)) {
       return;
     }
     
-    // 节流控制：相同类型的通知至少间隔3秒
+    // Controle de aceleração: o mesmo tipo de notificação deve ter um intervalo mínimo de 3 segundos
     if (!forceAdd && now - lastNotificationTime.current < 3000) {
       return;
     }
@@ -37,10 +37,10 @@ export const useNotifications = () => {
       read: false
     };
 
-    setNotifications(prev => [newNotification, ...prev.slice(0, 49)]); // 最多保留50条
+    setNotifications(prev => [newNotification, ...prev.slice(0, 49)]); // Manter no máximo 50 itens
     setUnreadCount(prev => prev + 1);
     
-    // 记录已通知的key和时间
+    // Registrar a chave e o tempo notificados
     notifiedKeys.current.add(key);
     lastNotificationTime.current = now;
   }, []);
@@ -92,7 +92,7 @@ export const useNotifications = () => {
   const handleErrorNotification = useCallback((message: ErrorNotificationMessage) => {
     addNotification({
       type: 'error',
-      title: `错误: ${message.error_type}`,
+      title: `Erro: ${message.error_type}`,
       message: message.error_message,
       level: 'error',
       timestamp: message.timestamp

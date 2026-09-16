@@ -8,7 +8,7 @@ export interface TaskStatus {
   message?: string;
   error?: string;
   updatedAt: string;
-  project_id?: string; // 添加项目ID字段
+  project_id?: string; // Adicionar campo de ID do projeto
 }
 
 export interface ProjectStatus {
@@ -20,7 +20,7 @@ export interface ProjectStatus {
 }
 
 export const useTaskStatus = () => {
-  console.log('🔧 useTaskStatus Hook已初始化');
+  console.log('🔧 Hook useTaskStatus inicializado');
   
   const [tasks, setTasks] = useState<Map<string, TaskStatus>>(new Map());
   const [projects, setProjects] = useState<Map<string, ProjectStatus>>(new Map());
@@ -111,21 +111,21 @@ export const useTaskStatus = () => {
   }, []);
 
   const loadProjectTasks = useCallback(async (projectId: string) => {
-    console.log('📤 开始加载项目任务:', projectId);
+    console.log('📤 Iniciando carregamento de tarefas do projeto:', projectId);
     setLoading(true);
     try {
       const response = await fetch(`/api/v1/tasks/project/${projectId}`);
-      console.log('📡 API响应状态:', response.status);
+      console.log('📡 Status da resposta da API:', response.status);
       
       if (response.ok) {
         const data = await response.json();
         const projectTasks = data.data.tasks || [];
-        console.log('📋 获取到任务数量:', projectTasks.length);
+        console.log('📋 Número de tarefas obtidas:', projectTasks.length);
         
         setTasks(prev => {
           const newTasks = new Map(prev);
           projectTasks.forEach((task: any) => {
-            console.log('📝 添加任务:', task.task_id, task.status, task.progress);
+            console.log('📝 Adicionar tarefa:', task.task_id, task.status, task.progress);
             newTasks.set(task.task_id, {
               id: task.task_id,
               status: task.status as TaskStatus['status'],
@@ -138,15 +138,15 @@ export const useTaskStatus = () => {
           return newTasks;
         });
       } else {
-        console.error('❌ API调用失败:', response.status, response.statusText);
+        console.error('❌ Falha na chamada da API:', response.status, response.statusText);
       }
     } catch (error) {
-      console.error('❌ 加载项目任务失败:', error);
+      console.error('❌ Falha ao carregar tarefas do projeto:', error);
     } finally {
       setLoading(false);
-      console.log('✅ 任务加载完成');
+      console.log('✅ Tarefa carregada');
     }
-  }, []); // 空依赖数组，避免无限循环
+  }, []); // Array de dependência vazio, para evitar loop infinito
 
   return {
     tasks: getAllTasks(),

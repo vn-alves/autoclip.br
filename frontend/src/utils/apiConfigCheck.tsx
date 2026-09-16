@@ -1,6 +1,6 @@
 /**
- * API配置检查工具
- * 用于在创建项目前检查API配置是否完整
+ * Ferramenta de verificação de configuração da API
+ * Usado para verificar se a configuração da API está completa antes de criar um projeto
  */
 
 import { settingsApi } from '../services/api'
@@ -16,26 +16,26 @@ export interface ApiConfigStatus {
 }
 
 /**
- * 检查API配置是否完整
+ * Verificar se a configuração da API está completa
  */
 export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
   try {
-    console.log('=== 开始API配置检查 ===')
+    console.log('=== Iniciar verificação de configuração da API ===')
     
-    // 检查是否在Desktop模式下运行
+    // Verificar se está rodando no modo Desktop
     const isDesktop = await isDesktopMode()
-    console.log('Desktop模式检查结果:', isDesktop)
+    console.log('Resultado da verificação do modo Desktop:', isDesktop)
     
-    // 无论是否在Desktop模式，都尝试获取设置
+    // Tentar obter configurações independentemente do modo Desktop
     let settings
     try {
       settings = await settingsApi.getSettings()
-      console.log('获取设置成功:', settings)
+      console.log('Configurações obtidas com sucesso:', settings)
     } catch (error) {
-      console.warn('获取设置失败，可能不在Desktop模式:', error)
-      // 如果获取设置失败，检查是否在Desktop模式
+      console.warn('Falha ao obter configurações, talvez não esteja no modo Desktop:', error)
+      // Se a obtenção das configurações falhar, verifique se está no modo Desktop
       if (!isDesktop) {
-        console.log('非Desktop模式，返回无配置状态')
+        console.log('Modo não-Desktop, retornar status sem configuração')
         return {
           hasValidConfig: false,
           missingProviders: ['LLM API'],
@@ -43,8 +43,8 @@ export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
           currentApiKey: undefined
         }
       }
-      // Desktop模式下获取设置失败，也返回无配置
-      console.log('Desktop模式下获取设置失败，返回无配置状态')
+      // Falha ao obter configurações no modo Desktop, também retorna sem configuração
+      console.log('Falha ao obter configurações no modo Desktop, retornando status sem configuração')
       return {
         hasValidConfig: false,
         missingProviders: ['LLM API'],
@@ -54,7 +54,7 @@ export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
     }
     
     if (!settings || !settings.api || !settings.api.api_keys) {
-      console.log('设置数据不完整:', { settings, hasApi: !!settings?.api, hasApiKeys: !!settings?.api?.api_keys })
+      console.log('Dados de configuração incompletos:', { settings, hasApi: !!settings?.api, hasApiKeys: !!settings?.api?.api_keys })
       return {
         hasValidConfig: false,
         missingProviders: ['LLM API'],
@@ -64,23 +64,23 @@ export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
     }
 
     const apiKeys = settings.api.api_keys
-    // 修复：api_model 是模型名称，不是提供商名称
-    // 需要从 api_provider 或 llm_provider 获取提供商名称
+    // Correção: api_model é o nome do modelo, não o nome do provedor
+    // Precisa da API_provider ou llm_provider Obter nome do provedor
     const currentProvider = settings.api.api_provider || settings.api.llm_provider || 'dashscope'
     
-    console.log('API配置详情:', {
+    console.log('Detalhes da configuração da API:', {
       currentProvider,
       apiKeys: {
-        dashscope: apiKeys.dashscope ? '***' + apiKeys.dashscope.slice(-4) : '未配置',
-        openai: apiKeys.openai ? '***' + apiKeys.openai.slice(-4) : '未配置',
-        gemini: apiKeys.gemini ? '***' + apiKeys.gemini.slice(-4) : '未配置',
-        siliconflow: apiKeys.siliconflow ? '***' + apiKeys.siliconflow.slice(-4) : '未配置',
-        jimeng_access: apiKeys.jimeng_access ? '***' + apiKeys.jimeng_access.slice(-4) : '未配置',
-        jimeng_secret: apiKeys.jimeng_secret ? '***' + apiKeys.jimeng_secret.slice(-4) : '未配置'
+        dashscope: apiKeys.dashscope ? '***' + apiKeys.dashscope.slice(-4) : 'Não configurado',
+        openai: apiKeys.openai ? '***' + apiKeys.openai.slice(-4) : 'Não configurado',
+        gemini: apiKeys.gemini ? '***' + apiKeys.gemini.slice(-4) : 'Não configurado',
+        siliconflow: apiKeys.siliconflow ? '***' + apiKeys.siliconflow.slice(-4) : 'Não configurado',
+        jimeng_access: apiKeys.jimeng_access ? '***' + apiKeys.jimeng_access.slice(-4) : 'Não configurado',
+        jimeng_secret: apiKeys.jimeng_secret ? '***' + apiKeys.jimeng_secret.slice(-4) : 'Não configurado'
       }
     })
     
-    // 检查当前提供商的API Key
+    // Verificar a API Key do provedor atual
     let currentApiKey = ''
     let hasValidKey = false
     
@@ -88,30 +88,30 @@ export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
       case 'dashscope':
         currentApiKey = apiKeys.dashscope || ''
         hasValidKey = !!currentApiKey.trim()
-        console.log('DashScope API Key检查:', { hasKey: !!currentApiKey, keyLength: currentApiKey.length, isValid: hasValidKey })
+        console.log('Verificação da DashScope API Key:', { hasKey: !!currentApiKey, keyLength: currentApiKey.length, isValid: hasValidKey })
         break
       case 'openai': {
         currentApiKey = apiKeys.openai || ''
-        // 自建 OpenAI 兼容服务（Ollama / vLLM 等）可以没有 key，只要配了接口地址就算可用
+        // Serviços compatíveis com OpenAI auto-hospedados (Ollama / vLLM, etc.) podem não ter chave, são considerados utilizáveis se o endereço da API estiver configurado
         const hasCustomBaseUrl = !!(settings.api.api_base_url || '').trim()
         hasValidKey = !!currentApiKey.trim() || hasCustomBaseUrl
-        console.log('OpenAI API Key检查:', { hasKey: !!currentApiKey, keyLength: currentApiKey.length, hasCustomBaseUrl, isValid: hasValidKey })
+        console.log('Verificação da OpenAI API Key:', { hasKey: !!currentApiKey, keyLength: currentApiKey.length, hasCustomBaseUrl, isValid: hasValidKey })
         break
       }
       case 'gemini':
         currentApiKey = apiKeys.gemini || ''
         hasValidKey = !!currentApiKey.trim()
-        console.log('Gemini API Key检查:', { hasKey: !!currentApiKey, keyLength: currentApiKey.length, isValid: hasValidKey })
+        console.log('Verificação da Gemini API Key:', { hasKey: !!currentApiKey, keyLength: currentApiKey.length, isValid: hasValidKey })
         break
       case 'siliconflow':
         currentApiKey = apiKeys.siliconflow || ''
         hasValidKey = !!currentApiKey.trim()
-        console.log('SiliconFlow API Key检查:', { hasKey: !!currentApiKey, keyLength: currentApiKey.length, isValid: hasValidKey })
+        console.log('Verificação da API Key SiliconFlow:', { hasKey: !!currentApiKey, keyLength: currentApiKey.length, isValid: hasValidKey })
         break
       case 'jimeng':
         currentApiKey = apiKeys.jimeng_access || ''
         hasValidKey = !!(apiKeys.jimeng_access?.trim() && apiKeys.jimeng_secret?.trim())
-        console.log('Jimeng API Key检查:', { 
+        console.log('Verificação da Jimeng API Key:', { 
           hasAccess: !!apiKeys.jimeng_access, 
           hasSecret: !!apiKeys.jimeng_secret, 
           isValid: hasValidKey 
@@ -119,10 +119,10 @@ export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
         break
       default:
         hasValidKey = false
-        console.log('未知提供商:', currentProvider)
+        console.log('Provedor desconhecido:', currentProvider)
     }
 
-    console.log('=== API配置检查最终结果 ===', {
+    console.log('=== Resultado final da verificação da configuração da API ===', {
       hasValidConfig: hasValidKey,
       currentProvider,
       currentApiKey: currentApiKey ? '***' + currentApiKey.slice(-4) : undefined,
@@ -136,7 +136,7 @@ export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
       currentApiKey: currentApiKey ? '***' + currentApiKey.slice(-4) : undefined
     }
   } catch (error) {
-    console.error('检查API配置失败:', error)
+    console.error('Falha ao verificar configuração da API:', error)
     return {
       hasValidConfig: false,
       missingProviders: ['LLM API'],
@@ -147,34 +147,34 @@ export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
 }
 
 /**
- * 显示API配置缺失的提示对话框
+ * Exibir caixa de diálogo de aviso de configuração de API ausente
  */
 export const showApiConfigModal = (missingProviders: string[], onNavigateToSettings?: () => void) => {
   const providerNames = {
-    'LLM API': 'AI模型API',
-    'Speech API': '语音识别API'
+    'LLM API': 'API do Modelo de IA',
+    'Speech API': 'API de Reconhecimento de Voz'
   }
 
   const missingNames = missingProviders.map(p => providerNames[p as keyof typeof providerNames] || p).join('、')
 
   Modal.confirm({
-    title: <span style={{ color: '#fff' }}>需要配置API</span>,
+    title: <span style={{ color: '#fff' }}>API precisa ser configurada</span>,
     content: (
       <div style={{ color: '#fff' }}>
-        <p style={{ color: '#fff', marginBottom: '12px', fontSize: '14px' }}>创建项目需要配置以下API:</p>
+        <p style={{ color: '#fff', marginBottom: '12px', fontSize: '14px' }}>A criação do projeto requer a configuração das seguintes APIs:</p>
         <p style={{ fontWeight: 'bold', color: '#40a9ff', marginBottom: '12px', fontSize: '16px' }}>{missingNames}</p>
-        <p style={{ color: '#f0f0f0', fontSize: '14px' }}>请前往设置页面进行配置.</p>
+        <p style={{ color: '#f0f0f0', fontSize: '14px' }}>Por favor, vá para a página de configurações para configurar.</p>
       </div>
     ),
-    okText: '去配置',
-    cancelText: '取消',
+    okText: 'Ir para configurar',
+    cancelText: 'Cancelar',
     onOk: () => {
       if (onNavigateToSettings) {
         onNavigateToSettings()
       } else {
-        // 直接跳转到设置页面
+        // Ir diretamente para a página de configurações
         window.location.href = '#/settings'
-        // 强制刷新页面以确保跳转生效
+        // Forçar atualização da página para garantir que o redirecionamento funcione
         window.location.reload()
       }
     },
@@ -185,32 +185,32 @@ export const showApiConfigModal = (missingProviders: string[], onNavigateToSetti
 }
 
 /**
- * 在项目创建前检查API配置
- * 如果配置不完整，显示提示并阻止创建
+ * Verificar configuração da API antes de criar o projeto
+ * Se a configuração estiver incompleta, exibir aviso e impedir a criação
  */
 export const validateApiConfigBeforeProjectCreation = async (): Promise<boolean> => {
-  console.log('开始验证API配置...')
+  console.log('Iniciando a verificação da configuração da API...')
   const configStatus = await checkApiConfig()
   
-  console.log('API配置验证结果:', configStatus)
+  console.log('Resultado da validação da configuração da API:', configStatus)
   
   if (!configStatus.hasValidConfig) {
-    console.log('API配置无效，显示配置弹窗')
+    console.log('Configuração de API inválida, exibir pop-up de configuração')
     showApiConfigModal(configStatus.missingProviders)
     return false
   }
   
-  console.log('API配置有效，允许创建项目')
+  console.log('Configuração de API válida, permitir criação de projeto')
   return true
 }
 
 /**
- * 获取API配置状态的友好描述
+ * Obter uma descrição amigável do status da configuração da API
  */
 export const getApiConfigDescription = (status: ApiConfigStatus): string => {
   if (status.hasValidConfig) {
-    return `已配置 ${status.currentProvider} API`
+    return `Configurado ${status.currentProvider} API`
   } else {
-    return '未配置API,无法创建项目'
+    return 'API não configurada, não é possível criar projeto'
   }
 }

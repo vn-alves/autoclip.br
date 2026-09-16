@@ -35,7 +35,7 @@ const TaskProgress: React.FC<TaskProgressProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 获取任务进度
+  // Obter progresso da tarefa
   const fetchTaskProgress = async () => {
     if (!projectId) return;
     
@@ -45,19 +45,19 @@ const TaskProgress: React.FC<TaskProgressProps> = ({
       
       const response = await fetch(`/api/v1/progress/project/${projectId}`);
       if (!response.ok) {
-        throw new Error('获取进度失败');
+        throw new Error('Falha ao obter progresso');
       }
       
       const data = await response.json();
       if (data.tasks && data.tasks.length > 0) {
-        // 找到当前任务或第一个运行中的任务
+        // Encontrar a tarefa atual ou a primeira tarefa em execução
         const currentTask = taskId 
           ? data.tasks.find((t: TaskProgressData) => t.id === taskId)
           : data.tasks.find((t: TaskProgressData) => t.status === 'running') || data.tasks[0];
         
         setProgressData(currentTask);
         
-        // 通知父组件进度更新
+        // Notificar o componente pai sobre a atualização de progresso
         if (onProgressUpdate) {
           const progress = currentTask.realtime_progress || currentTask.progress;
           const step = currentTask.realtime_step || currentTask.current_step;
@@ -65,41 +65,41 @@ const TaskProgress: React.FC<TaskProgressProps> = ({
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '未知错误');
+      setError(err instanceof Error ? err.message : 'Erro Desconhecido');
     } finally {
       setLoading(false);
     }
   };
 
-  // 定期更新进度
+  // Atualizar progresso periodicamente
   useEffect(() => {
     if (status === 'processing') {
-      // 立即获取一次
+      // Obter uma vez imediatamente
       fetchTaskProgress();
       
-      // 每5秒更新一次
+      // Atualizar a cada 5 segundos
       const interval = setInterval(fetchTaskProgress, 5000);
       return () => clearInterval(interval);
     }
   }, [projectId, taskId, status]);
 
-  // 获取状态图标和颜色
+  // Obter ícone e cor do status
   const getStatusConfig = (status: string) => {
     switch (status) {
       case 'running':
-        return { icon: <PlayCircleOutlined />, color: 'processing', text: '处理中' };
+        return { icon: <PlayCircleOutlined />, color: 'processing', text: 'Processando' };
       case 'completed':
-        return { icon: <CheckCircleOutlined />, color: 'success', text: '已完成' };
+        return { icon: <CheckCircleOutlined />, color: 'success', text: 'Concluído' };
       case 'failed':
-        return { icon: <CloseCircleOutlined />, color: 'error', text: '失败' };
+        return { icon: <CloseCircleOutlined />, color: 'error', text: 'Falha' };
       case 'pending':
-        return { icon: <ClockCircleOutlined />, color: 'default', text: '等待中' };
+        return { icon: <ClockCircleOutlined />, color: 'default', text: 'Aguardando' };
       default:
         return { icon: <ClockCircleOutlined />, color: 'default', text: status };
     }
   };
 
-  // 获取进度条状态
+  // Obter status da barra de progresso
   const getProgressStatus = (status: string) => {
     switch (status) {
       case 'running':
@@ -119,7 +119,7 @@ const TaskProgress: React.FC<TaskProgressProps> = ({
         <div style={{ textAlign: 'center', padding: '20px' }}>
           <Spin size="large" />
           <div style={{ marginTop: 16 }}>
-            <Text>正在获取任务进度...</Text>
+            <Text>Obtendo progresso da tarefa...</Text>
           </div>
         </div>
       </Card>
@@ -154,7 +154,7 @@ const TaskProgress: React.FC<TaskProgressProps> = ({
         <Space>
           {statusConfig.icon}
           <Title level={5} style={{ margin: 0 }}>
-            {progressData.name || '视频处理任务'}
+            {progressData.name || 'Tarefa de processamento de vídeo'}
           </Title>
           <Tag color={statusConfig.color}>
             {statusConfig.text}
@@ -174,13 +174,13 @@ const TaskProgress: React.FC<TaskProgressProps> = ({
       </div>
 
       <div style={{ marginBottom: 8 }}>
-        <Text strong>当前步骤: </Text>
-        <Text>{currentStep || '未知'}</Text>
+        <Text strong>Etapa atual: </Text>
+        <Text>{currentStep || 'Desconhecido'}</Text>
       </div>
 
       {progressData.step_details && (
         <div style={{ marginBottom: 8 }}>
-          <Text strong>详细信息: </Text>
+          <Text strong>Detalhes: </Text>
           <Text type="secondary">{progressData.step_details}</Text>
         </div>
       )}
@@ -189,17 +189,17 @@ const TaskProgress: React.FC<TaskProgressProps> = ({
         <Space split={<Text type="secondary">|</Text>}>
           {progressData.created_at && (
             <Text type="secondary">
-              创建: {new Date(progressData.created_at).toLocaleString()}
+              Criado: {new Date(progressData.created_at).toLocaleString()}
             </Text>
           )}
           {progressData.started_at && (
             <Text type="secondary">
-              开始: {new Date(progressData.started_at).toLocaleString()}
+              Início: {new Date(progressData.started_at).toLocaleString()}
             </Text>
           )}
           {progressData.completed_at && (
             <Text type="secondary">
-              完成: {new Date(progressData.completed_at).toLocaleString()}
+              Concluído: {new Date(progressData.completed_at).toLocaleString()}
             </Text>
           )}
         </Space>
@@ -207,7 +207,7 @@ const TaskProgress: React.FC<TaskProgressProps> = ({
 
       {status === 'processing' && (
         <div style={{ marginTop: 16, textAlign: 'center' }}>
-          <Text type="secondary">进度每5秒自动更新</Text>
+          <Text type="secondary">Progresso atualizado automaticamente a cada 5 segundos</Text>
         </div>
       )}
     </Card>

@@ -1,31 +1,31 @@
 /**
- * 关键业务事件（见 ROADMAP.md Phase 0：导入 / 出片 / 失败 / 设置 key）。
+ * Eventos de negócios críticos (ver ROADMAP.md Fase 0: importação / exportação / falha / configuração de chave).
  *
- * 统一在这里定义事件名与载荷类型，避免裸字符串散落各处。
- * 所有 capture 都通过 trackEvent，未初始化 / 已关闭时自动 no-op。
+ * Defina nomes de eventos e tipos de payload aqui para evitar strings soltas em vários lugares.
+ * Todas as capturas passam por trackEvent, automaticamente no-op quando não inicializado / desativado.
  */
 import { posthog } from './posthog'
 
 export const AnalyticsEvent = {
-  /** 导入素材（上传/选择视频开始一个项目） */
+  /** Importar material (enviar/selecionar vídeo para iniciar um projeto) */
   VideoImported: 'video_imported',
-  /** 出片：成功生成切片 */
+  /** Exportar: Fatiamento gerado com sucesso */
   ClipsExported: 'clips_exported',
-  /** 关键流程失败（导入/转写/切片/导出任一环节） */
+  /** Falha no fluxo crítico (qualquer etapa de importação/transcrição/corte/exportação) */
   ProcessingFailed: 'processing_failed',
-  /** 设置/更新 LLM API key */
+  /** Definir/Atualizar chave da API LLM */
   ApiKeyConfigured: 'api_key_configured',
 } as const
 
 export type AnalyticsEventName =
   (typeof AnalyticsEvent)[keyof typeof AnalyticsEvent]
 
-/** 通用埋点入口。posthog 未初始化或已 opt-out 时为 no-op（内部已处理）。 */
+/** Ponto de entrada de rastreamento genérico. É no-op quando o posthog não está inicializado ou opt-out (já tratado internamente). */
 function trackEvent(
   name: AnalyticsEventName,
   properties?: Record<string, unknown>,
 ): void {
-  // posthog.capture 在未 init 时不会抛错；保险起见仍做判断
+  // posthog.capture não lança erro se não for inicializado; ainda assim, verifica por segurança
   if (typeof posthog?.capture !== 'function') return
   posthog.capture(name, properties)
 }
@@ -58,7 +58,7 @@ export function trackProcessingFailed(props: {
 
 export function trackApiKeyConfigured(props: {
   provider: string
-  /** 不要传 key 明文，仅标记是否填写 */
+  /** Não passe a chave em texto claro, apenas marque se foi preenchida */
   hasKey: boolean
 }): void {
   trackEvent(AnalyticsEvent.ApiKeyConfigured, props)

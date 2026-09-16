@@ -16,22 +16,22 @@ import { initAnalytics } from './analytics/posthog'
 import { trackLaunch } from './analytics/lifecycle'
 import './index.css'
 
-// 初始化产品分析 / 埋点（无 key 时自动 no-op，不发任何网络请求）
+// Inicializa análise de produto / rastreamento (se não houver chave, automaticamente no-op, não envia nenhuma requisição de rede)
 initAnalytics()
-// 注册全局属性 + 上报启动/安装/更新事件
+// Registrar propriedades globais + relatar eventos de inicialização/instalação/atualização
 void trackLaunch()
 
-// 配置dayjs插件
+// Configurar plugin dayjs
 dayjs.extend(relativeTime)
 dayjs.extend(timezone)
 dayjs.extend(utc)
 
-// 设置dayjs中文和时区
+// Definir dayjs em chinês e fuso horário
 dayjs.locale('zh-cn')
 dayjs.tz.setDefault('Asia/Shanghai')
 
 function Root() {
-  // 统一在根节点接入错误边界，避免运行时异常导致白屏
+  // Conecta limites de erro no nó raiz para evitar tela branca devido a exceções em tempo de execução
   return (
     <ErrorBoundary showDetails={import.meta.env.DEV}>
       <App />

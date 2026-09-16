@@ -4,8 +4,8 @@ export async function validateApiConfigBeforeProjectCreation(): Promise<boolean>
   try {
     return true
   } catch (error) {
-    console.error('API配置检查失败:', error)
-    message.error('API配置检查失败')
+    console.error('Verificação da configuração da API falhou:', error)
+    message.error('Verificação de configuração da API falhou')
     return false
   }
 }

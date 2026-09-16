@@ -37,15 +37,15 @@ const CollectionCard: React.FC<CollectionCardProps> = ({ collection, clips, onVi
 
   return (
     <article className="ac-card">
-      <div className="ac-card-thumb" onClick={() => onView(collection)} role="button" aria-label="预览合集">
+      <div className="ac-card-thumb" onClick={() => onView(collection)} role="button" aria-label="Pré-visualizar coleção">
         {hasThumb && (
           <img src={thumbnailUrl} alt="" onError={() => setImgError(true)} draggable={false} />
         )}
         <div className="play"><span><Icon.Play size={18} /></span></div>
         <span className="ac-tag ac-tag--tl ac-tag--sans">
-          {collection.collection_type === 'ai_recommended' ? 'AI 推荐' : '手动'}
+          {collection.collection_type === 'ai_recommended' ? 'Recomendação de IA' : 'Manual'}
         </span>
-        <span className="ac-tag ac-tag--bl">{collectionClips.length} 段</span>
+        <span className="ac-tag ac-tag--bl">{collectionClips.length} segmento</span>
         <span className="ac-tag ac-tag--br">{fmtDuration(totalDuration)}</span>
       </div>
 
@@ -62,11 +62,11 @@ const CollectionCard: React.FC<CollectionCardProps> = ({ collection, clips, onVi
           {collection.collection_summary || ''}
         </div>
         <div className="ac-card-foot">
-          <span className="meta">{collectionClips.length} 段 · {fmtDuration(totalDuration)}</span>
+          <span className="meta">{collectionClips.length} segmento · {fmtDuration(totalDuration)}</span>
           <div className="ac-card-actions">
-            <Btn variant="text" onClick={() => onView(collection)}>预览</Btn>
-            {onGenerateVideo && <Btn variant="text" onClick={() => onGenerateVideo(collection.id)}>下载</Btn>}
-            <Btn variant="text" onClick={() => message.info('投稿功能开发中', 3)}>投稿</Btn>
+            <Btn variant="text" onClick={() => onView(collection)}>Pré-visualizar</Btn>
+            {onGenerateVideo && <Btn variant="text" onClick={() => onGenerateVideo(collection.id)}>Baixar</Btn>}
+            <Btn variant="text" onClick={() => message.info('Recurso de envio em desenvolvimento', 3)}>Enviar</Btn>
           </div>
         </div>
       </div>

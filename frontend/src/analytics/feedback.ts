@@ -1,22 +1,22 @@
 /**
- * 应用内反馈（PostHog Surveys）。
+ * Feedback no aplicativo (PostHog Surveys).
  *
- * 目标：用户不用离开应用、不用注册 GitHub，就能把"哪里不对 / 想要什么"发出来，
- * 且自动带上排查所需的上下文（版本 / 系统 / 架构 / LLM provider & 模型 / 失败阶段与错误）。
+ * Objetivo: O usuário não precisa sair do aplicativo, nem se registrar no GitHub, para poder"O que está errado / O que você quer"Publicar,
+ * e inclui automaticamente o contexto necessário para depuração (versão / sistema / arquitetura / provedor LLM & Modelo / Fase de falha e erro).
  *
- * 实现要点：
- * - 反馈以 `feedback_submitted` 事件进入 PostHog（无论有没有配置 Survey 都会发）。
- * - 若 PostHog 项目里存在名为 FEEDBACK_SURVEY_NAME（或 env 指定 id）的 Survey（API 型 / 无 UI），
- *   同时按 PostHog 的约定发 `survey shown` / `survey sent` / `survey dismissed`，
- *   这样结果会出现在 PostHog → Surveys 的响应面板里，周报也能直接读。
- * - 版本 / 系统 / 架构 由 lifecycle.ts 注册的 super properties 自动携带；这里额外显式写入，
- *   避免 Surveys 面板只看 `$survey_response*` 时丢上下文。
- * - 埋点被用户关闭时，PostHog 侧不会发出；此时回退到官网飞书表单（FEEDBACK_FORM_URL）。
+ * Pontos-chave de implementação:
+ * - Feedback com `feedback_submitted` O evento entra no PostHog (será enviado independentemente de haver Survey configurado ou não).
+ * - Se houver um projeto PostHog chamado FEEDBACK_SURVEY_Survey (tipo API / sem UI) com NAME (ou ID especificado por env),
+ *   E enviar de acordo com a convenção do PostHog `survey shown` / `survey sent` / `survey dismissed`，
+ *   Assim, os resultados aparecerão no PostHog → No painel de respostas do Surveys, o relatório semanal também pode ser lido diretamente.
+ * - Versão / sistema / arquitetura são automaticamente incluídos pelas super properties registradas por lifecycle.ts; aqui são explicitamente adicionados,
+ *   Evitar que o painel de Surveys seja apenas visualização `$survey_response*` perde o contexto.
+ * - Quando o rastreamento é desativado pelo usuário, o PostHog não envia; neste caso, retorna ao formulário Feishu oficial (FEEDBACK_FORM_URL）。
  */
 import { posthog, isAnalyticsEnabled } from './posthog'
 import { settingsApi } from '../services/api'
 
-export const FEEDBACK_SURVEY_NAME = 'AutoClip 应用内反馈'
+export const FEEDBACK_SURVEY_NAME = 'Feedback no aplicativo AutoClip'
 export const FEEDBACK_FORM_URL = 'https://my.feishu.cn/share/base/shrcn8hKUG2icIJLpNry6uWVNJe'
 export const FEEDBACK_ISSUES_URL = 'https://github.com/zhouxiaoka/autoclip/issues/new/choose'
 
@@ -27,11 +27,11 @@ export type FeedbackSource = 'settings' | 'failure' | 'detail'
 
 export interface FeedbackContext {
   source: FeedbackSource
-  /** 失败态携带 */
+  /** Estado de falha com */
   stage?: string
   error_message?: string
   project_id?: string
-  /** 设置页 / 失败态都会尽量补齐 */
+  /** Página de configurações / estado de falha serão preenchidos o máximo possível */
   llm_provider?: string
   llm_model?: string
   llm_base_url?: string
@@ -46,7 +46,7 @@ interface SurveyLike {
 
 let cachedSurvey: SurveyLike | null | undefined
 
-/** 找到用于收反馈的 Survey；找不到返回 null（不影响 feedback_submitted 的上报）。 */
+/** Encontra o Survey para coletar feedback; retorna null se não encontrado (não afeta o feedback_relato de submitted). */
 export function resolveFeedbackSurvey(): Promise<SurveyLike | null> {
   if (cachedSurvey !== undefined) return Promise.resolve(cachedSurvey)
   return new Promise((resolve) => {
@@ -71,7 +71,7 @@ export function resolveFeedbackSurvey(): Promise<SurveyLike | null> {
   })
 }
 
-/** 读取当前 LLM provider / 模型，补进反馈上下文；后端不可达时静默忽略。 */
+/** Lê o provedor / modelo LLM atual, adiciona ao contexto de feedback; ignora silenciosamente se o backend estiver inacessível. */
 export async function collectLlmContext(): Promise<Pick<FeedbackContext, 'llm_provider' | 'llm_model' | 'llm_base_url'>> {
   try {
     const p = await settingsApi.getCurrentProvider()
@@ -105,8 +105,8 @@ export interface FeedbackPayload {
 }
 
 /**
- * 提交反馈。返回 true 表示已通过 PostHog 发出；false 表示埋点关闭 / 未初始化，
- * 调用方应引导用户改用飞书表单。
+ * Enviar feedback. Retorna true se enviado via PostHog; false se o rastreamento estiver desativado / não inicializado,
+ * O chamador deve guiar o usuário para usar o formulário Feishu.
  */
 export async function submitFeedback(payload: FeedbackPayload): Promise<boolean> {
   if (typeof posthog?.capture !== 'function' || !isAnalyticsEnabled()) return false
@@ -126,16 +126,16 @@ export async function submitFeedback(payload: FeedbackPayload): Promise<boolean>
       $survey_id: survey.id,
       $survey_name: survey.name,
       $survey_questions: qs.map((q) => ({ id: q.id, question: q.question })),
-      // 第一题：自由文本
+      // Pergunta 1: Texto livre
       $survey_response: payload.text,
       ...props,
     }
-    // 兼容 question-id 键：第一题 = 文本，后续 single_choice 题 = 分类
+    // Compatível com a chave question-id: primeira pergunta = Texto, subsequentemente single_Questão de múltipla escolha = Categoria
     qs.forEach((q, i) => {
       const key = q.id ? `$survey_response_${q.id}` : `$survey_response_${i}`
       if (i === 0) responses[key] = payload.text
       else if (q.type === 'single_choice' || q.type === 'multiple_choice') responses[key] = payload.category
-      else if (/联系|contact|email/i.test(q.question || '')) responses[key] = payload.contact || ''
+      else if (/Contato|contact|email/i.test(q.question || '')) responses[key] = payload.contact || ''
     })
     posthog.capture('survey sent', responses)
   }

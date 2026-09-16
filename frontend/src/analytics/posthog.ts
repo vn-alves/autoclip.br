@@ -1,13 +1,13 @@
 /**
- * PostHog 产品分析 / 埋点
+ * Análise de produto / Rastreamento PostHog
  *
- * 设计目标（见 ROADMAP.md Phase 0）：匿名、可关、本地缓冲。
- * - 匿名：默认不采集任何 PII，未登录前用匿名设备 ID；person profiles 仅在 identify 后创建。
- * - 可关：用户可在设置里关闭（opt-out），状态持久化在 localStorage，应用重启后仍生效。
- * - 本地缓冲：posthog-js 默认在内存中批量缓冲事件，断网/退出代理时不丢主流程。
+ * Objetivos de design (ver ROADMAP.md Fase 0): anônimo, desativável, buffer local.
+ * - Anônimo: Por padrão, não coleta nenhuma PII, usa ID de dispositivo anônimo antes do login; perfis de pessoa são criados apenas após identify.
+ * - Desativável: O usuário pode desativar nas configurações (opt-out), o estado é persistido no localStorage e permanece efetivo após reiniciar o aplicativo.
+ * - Buffer local: posthog-js armazena eventos em lote na memória por padrão, não perdendo o fluxo principal em caso de perda de conexão/saída do proxy.
  *
- * 没有配置 VITE_PUBLIC_POSTHOG_KEY 时，本模块全部为 no-op，
- * 因此 dev 环境（无 key）不会污染线上数据。
+ * VITE não configurado_PUBLIC_POSTHOG_KEY, este módulo é totalmente no-op,
+ * Portanto, o ambiente dev (sem chave) não contaminará os dados de produção.
  */
 import posthog from 'posthog-js'
 
@@ -16,12 +16,12 @@ const POSTHOG_HOST =
   (import.meta.env.VITE_PUBLIC_POSTHOG_HOST as string | undefined) ??
   'https://us.i.posthog.com'
 
-/** 用户埋点开关偏好的存储键（true = 已关闭采集）。 */
+/** Chave de armazenamento da preferência do usuário para rastreamento (true = Coleta desativada). */
 const OPT_OUT_STORAGE_KEY = 'autoclip.analytics.optOut'
 
 let initialized = false
 
-/** 是否启用了埋点（已配置 key 且用户未关闭）。 */
+/** Se o rastreamento de eventos está ativado (chave configurada e usuário não desativou). */
 export function isAnalyticsEnabled(): boolean {
   if (!POSTHOG_KEY) return false
   try {
@@ -32,32 +32,32 @@ export function isAnalyticsEnabled(): boolean {
 }
 
 /**
- * 初始化 PostHog。应在应用启动时调用一次。
- * 无 key 时直接返回，不做任何网络请求。
+ * Inicializar PostHog. Deve ser chamado uma vez na inicialização do aplicativo.
+ * Retornar diretamente quando não houver chave, sem fazer nenhuma solicitação de rede.
  */
 export function initAnalytics(): void {
   if (initialized) return
   if (!POSTHOG_KEY) {
     if (import.meta.env.DEV) {
-      console.info('[analytics] 未配置 VITE_PUBLIC_POSTHOG_KEY，埋点已禁用')
+      console.info('[analytics] VITE não configurado_PUBLIC_POSTHOG_KEY, rastreamento desativado')
     }
     return
   }
 
   posthog.init(POSTHOG_KEY, {
     api_host: POSTHOG_HOST,
-    // 桌面端从 file:// / 自定义协议加载，cookie 不可靠，统一用 localStorage 持久化匿名 ID
+    // No desktop, carrega de file:// / protocolo personalizado, cookies não são confiáveis, usa localStorage para persistir ID anônimo
     persistence: 'localStorage',
-    // 未登录前不创建 person profile，保持匿名；登录后通过 identify 关联（见 ROADMAP Phase 1）
+    // Não criar perfil de pessoa antes de fazer login, manter anônimo; associar via identify após login (ver ROADMAP Fase 1)
     person_profiles: 'identified_only',
-    // 自动捕获页面点击/输入，配合手动关键事件构建漏斗
+    // Captura automaticamente cliques/entradas na página, combinando com eventos-chave manuais para construir funis
     autocapture: true,
-    // 隐私优先：默认不录屏（PostHog 端也需另行开启）
+    // Privacidade em primeiro lugar: gravação de tela desativada por padrão (também precisa ser ativada no PostHog)
     disable_session_recording: true,
-    // HashRouter 下手动上报 pageview（见 trackPageview）
+    // Relatar pageview manualmente sob HashRouter (ver trackPageview)
     capture_pageview: false,
     capture_pageleave: true,
-    // 尊重用户在本机的关闭偏好
+    // Respeitar a preferência de fechamento do usuário neste dispositivo
     opt_out_capturing_by_default: !isAnalyticsEnabled(),
     loaded: (ph) => {
       if (import.meta.env.DEV) ph.debug()
@@ -68,26 +68,26 @@ export function initAnalytics(): void {
 }
 
 /**
- * 打开/关闭埋点采集（用于设置页开关）。会持久化到 localStorage。
+ * Ativa/desativa a coleta de rastreamento (para o interruptor da página de configurações). Será persistido no localStorage.
  */
 export function setAnalyticsEnabled(enabled: boolean): void {
   try {
     localStorage.setItem(OPT_OUT_STORAGE_KEY, enabled ? 'false' : 'true')
   } catch {
-    /* localStorage 不可用时忽略 */
+    /* Ignorar quando localStorage não estiver disponível */
   }
   if (!initialized) return
   if (enabled) posthog.opt_in_capturing()
   else posthog.opt_out_capturing()
 }
 
-/** 上报一次 pageview（在路由变化时调用）。 */
+/** Relatar uma pageview (chamado na mudança de rota). */
 export function trackPageview(path: string): void {
   if (!initialized) return
   posthog.capture('$pageview', { $current_url: path })
 }
 
-/** 登录后关联身份（Phase 1 接入账号时使用）。 */
+/** Vincular identidade após o login (usado ao integrar contas na Fase 1). */
 export function identifyUser(
   distinctId: string,
   properties?: Record<string, unknown>,
@@ -96,7 +96,7 @@ export function identifyUser(
   posthog.identify(distinctId, properties)
 }
 
-/** 登出时重置匿名身份。 */
+/** Redefinir identidade anônima ao sair. */
 export function resetUser(): void {
   if (!initialized) return
   posthog.reset()

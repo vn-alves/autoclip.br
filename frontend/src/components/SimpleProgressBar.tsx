@@ -1,5 +1,5 @@
 /**
- * 简化的进度条组件 - 基于固定阶段
+ * Componente de barra de progresso simplificado - baseado em fases fixas
  */
 
 import React, { useEffect } from 'react'
@@ -38,7 +38,7 @@ export const SimpleProgressBar: React.FC<SimpleProgressBarProps> = ({
 
   const progress = getProgress(projectId)
 
-  // 自动开始轮询
+  // Iniciar pesquisa automaticamente
   useEffect(() => {
     if (autoStart && projectId) {
       startPolling([projectId], pollingInterval)
@@ -49,19 +49,19 @@ export const SimpleProgressBar: React.FC<SimpleProgressBarProps> = ({
     }
   }, [projectId, autoStart, pollingInterval, startPolling, stopPolling])
 
-  // 通知父组件进度更新
+  // Notificar o componente pai sobre a atualização de progresso
   useEffect(() => {
     if (progress && onProgressUpdate) {
       onProgressUpdate(progress)
     }
   }, [progress, onProgressUpdate])
 
-  // 如果没有进度数据，显示等待状态
+  // Se não houver dados de progresso, exibir status de espera
   if (!progress) {
     return (
       <Card size="small" style={{ margin: '8px 0' }}>
         <Space direction="vertical" style={{ width: '100%' }}>
-          <Text type="secondary">等待开始处理...</Text>
+          <Text type="secondary">Aguardando para iniciar o processamento...</Text>
           <Progress 
             percent={0} 
             status="active" 
@@ -79,7 +79,7 @@ export const SimpleProgressBar: React.FC<SimpleProgressBarProps> = ({
   const completed = isCompleted(stage)
   const failed = isFailed(message)
 
-  // 确定进度条状态
+  // Determinar o status da barra de progresso
   let progressStatus: 'normal' | 'active' | 'success' | 'exception' = 'normal'
   if (failed) {
     progressStatus = 'exception'
@@ -92,7 +92,7 @@ export const SimpleProgressBar: React.FC<SimpleProgressBarProps> = ({
   return (
     <Card size="small" style={{ margin: '8px 0' }}>
       <Space direction="vertical" style={{ width: '100%' }}>
-        {/* 阶段标签和进度 */}
+        {/* Etapa e progresso */}
         <Space align="center" style={{ width: '100%', justifyContent: 'space-between' }}>
           <Tag color={stageColor} style={{ margin: 0 }}>
             {stageDisplayName}
@@ -102,7 +102,7 @@ export const SimpleProgressBar: React.FC<SimpleProgressBarProps> = ({
           </Text>
         </Space>
 
-        {/* 进度条 */}
+        {/* Barra de progresso */}
         <Progress
           percent={percent}
           status={progressStatus}
@@ -111,17 +111,17 @@ export const SimpleProgressBar: React.FC<SimpleProgressBarProps> = ({
           size="small"
         />
 
-        {/* 详细信息 */}
+        {/* Detalhes */}
         {showDetails && message && (
           <Text type="secondary" style={{ fontSize: '12px' }}>
             {message}
           </Text>
         )}
 
-        {/* 时间戳 */}
+        {/* Timestamp */}
         {showDetails && ts > 0 && (
           <Text type="secondary" style={{ fontSize: '11px' }}>
-            更新时间: {new Date(ts * 1000).toLocaleTimeString()}
+            Hora da atualização: {new Date(ts * 1000).toLocaleTimeString()}
           </Text>
         )}
       </Space>
@@ -129,7 +129,7 @@ export const SimpleProgressBar: React.FC<SimpleProgressBarProps> = ({
   )
 }
 
-// 批量进度显示组件
+// Componente de exibição de progresso em lote
 interface BatchProgressBarProps {
   projectIds: string[]
   autoStart?: boolean
@@ -153,7 +153,7 @@ export const BatchProgressBar: React.FC<BatchProgressBarProps> = ({
 
   const allProgress = getAllProgress()
 
-  // 自动开始轮询
+  // Iniciar pesquisa automaticamente
   useEffect(() => {
     if (autoStart && projectIds.length > 0) {
       startPolling(projectIds, pollingInterval)
@@ -164,7 +164,7 @@ export const BatchProgressBar: React.FC<BatchProgressBarProps> = ({
     }
   }, [projectIds, autoStart, pollingInterval, startPolling, stopPolling])
 
-  // 通知父组件进度更新
+  // Notificar o componente pai sobre a atualização de progresso
   useEffect(() => {
     if (onProgressUpdate) {
       projectIds.forEach(projectId => {
@@ -182,7 +182,7 @@ export const BatchProgressBar: React.FC<BatchProgressBarProps> = ({
         <SimpleProgressBar
           key={projectId}
           projectId={projectId}
-          autoStart={false} // 批量模式下不自动开始
+          autoStart={false} // Não iniciar automaticamente no modo em lote
           showDetails={showDetails}
           onProgressUpdate={(progress) => onProgressUpdate?.(projectId, progress)}
         />
