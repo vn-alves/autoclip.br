@@ -1,0 +1,15 @@
+{
+  "extends": "./frontend/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "frontend/src/**/*.ts",
+    "frontend/src/**/*.tsx",
+    "frontend/vite.config.ts"
+  ],
+  "exclude": [
+    "frontend/dist",
+    "frontend/node_modules"
+  ]
+}
