@@ -8,6 +8,7 @@
     "backend": "python3 -m uvicorn backend.app_factory:create_app --factory --host 127.0.0.1 --port 8000"
   },
   "dependencies": {
+    "@lovable.dev/cloud-auth-js": "^1.1.2",
     "@supabase/supabase-js": "^2.116.0",
     "@tauri-apps/cli": "^2.0.0-rc.18"
   },
