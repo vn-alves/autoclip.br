@@ -183,7 +183,14 @@ async def parse_youtube_video(
                 raise Exception(f"yt-dlp execution failed: {e}")
         
         loop = asyncio.get_event_loop()
-        info_dict = await loop.run_in_executor(None, extract_info_sync, url, browser)
+        try:
+            info_dict = await loop.run_in_executor(None, extract_info_sync, url, browser)
+        except Exception as e:
+            if browser and _is_cookie_error(e):
+                logger.warning(f"Cookies do navegador {browser} indisponíveis no servidor, tentando sem cookies: {e}")
+                info_dict = await loop.run_in_executor(None, extract_info_sync, url, None)
+            else:
+                raise
         
         logger.info(f"YouTube视频信息解析成功: {info_dict.get('title', 'Unknown')}")
         
@@ -201,9 +208,12 @@ async def parse_youtube_video(
             }
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"解析YouTube视频失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Não foi possível ler o vídeo: {str(e)}")
+
 
 @router.post("/download")
 async def create_youtube_download_task(request: YouTubeDownloadRequest):
