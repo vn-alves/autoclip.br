@@ -494,6 +494,31 @@ const SettingsPage: React.FC = () => {
             </Section>
           )}
 
+          {/* ---------------- Conta ---------------- */}
+          {active === 'account' && (
+            <AccountSection
+              user={cloudUser}
+              syncing={syncing}
+              onSyncNow={async () => {
+                setSyncing(true)
+                try {
+                  const cloud = await loadCloudSettings()
+                  if (cloud) {
+                    applySettings(cloud)
+                    saveBrowserSettings(cloud)
+                    message.success('Configurações da conta carregadas')
+                  } else {
+                    message.info('Nenhuma configuração salva na conta ainda')
+                  }
+                } catch (err: any) {
+                  message.error(err?.message || 'Não foi possível buscar as configurações')
+                } finally {
+                  setSyncing(false)
+                }
+              }}
+            />
+          )}
+
           {/* ---------------- Transcrição ---------------- */}
           {active === 'speech' && (
             <Section
