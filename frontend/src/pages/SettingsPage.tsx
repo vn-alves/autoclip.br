@@ -12,6 +12,7 @@ import { getRuntimeInfo } from '../analytics/lifecycle'
 import { FEEDBACK_FORM_URL, FEEDBACK_ISSUES_URL } from '../analytics/feedback'
 import { useTheme } from '../context/ThemeContext'
 import { Btn, Icon, Row, Section, Segmented, StatusDot } from '../ui'
+import { loadBrowserSettings, saveBrowserSettings } from '../utils/browserSettings'
 
 const normalizeBaseUrl = (value: unknown): string =>
   typeof value === 'string' ? value.trim().replace(/\/+$/, '') : ''
@@ -82,8 +83,8 @@ const SettingsPage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const isDesktop = await canSaveSettings()
-      if (isDesktop) {
+      const serverAvailable = await canSaveSettings()
+      if (serverAvailable) {
         const [settings, provider] = await Promise.allSettled([
           settingsApi.getSettings(),
           settingsApi.getCurrentProvider()
@@ -115,10 +116,25 @@ const SettingsPage: React.FC = () => {
         })
         setSelectedProvider(PROVIDERS[providerName] ? providerName : 'dashscope')
       } else {
-        // Modo Web: exibe apenas valores padrão, não chama APIs de desktop
-        form.setFieldsValue({ llm_provider: 'dashscope', model_name: 'qwen-plus', chunk_size: 5000, min_score_threshold: 0.7, max_clips_per_collection: 5 })
-        setSelectedProvider('dashscope')
-        setCurrentProvider({ available: false, provider: 'dashscope', display_name: 'Alibaba Tongyi Qianwen', model: 'qwen-plus' })
+        const saved = loadBrowserSettings()
+        const providerName = (saved?.api?.api_provider || 'dashscope') as ProviderKey
+        form.setFieldsValue({
+          llm_provider: providerName,
+          dashscope_api_key: saved?.api?.api_keys?.dashscope || '',
+          openai_api_key: saved?.api?.api_keys?.openai || '',
+          openai_base_url: providerName === 'openai' ? saved?.api?.api_base_url || '' : '',
+          local_base_url: isLocalProvider(providerName) ? saved?.api?.api_base_url || '' : '',
+          gemini_api_key: saved?.api?.api_keys?.gemini || '',
+          siliconflow_api_key: saved?.api?.api_keys?.siliconflow || '',
+          jimeng_access_key: saved?.api?.api_keys?.jimeng_access || '',
+          jimeng_secret_key: saved?.api?.api_keys?.jimeng_secret || '',
+          model_name: saved?.api?.api_model || 'qwen-plus',
+          chunk_size: saved?.processing?.processing_chunk_size || 5000,
+          min_score_threshold: saved?.processing?.processing_min_score || 0.7,
+          max_clips_per_collection: saved?.processing?.processing_max_clips || 5,
+        })
+        setSelectedProvider(PROVIDERS[providerName] ? providerName : 'dashscope')
+        setCurrentProvider(saved ? { available: true, provider: providerName, display_name: PROVIDERS[providerName]?.name, model: saved.api?.api_model } : { available: false })
       }
     } catch (err) {
       console.error('Falha ao carregar dados:', err)
@@ -128,18 +144,16 @@ const SettingsPage: React.FC = () => {
   const handleSave = async (values: any) => {
     try {
       setLoading(true)
-      const canSave = await canSaveSettings()
-      if (!canSave) {
-        message.error('Não foi possível falar com o servidor local. Verifique se ele está em execução e tente novamente.')
-        return
-      }
       // Primeiro, leia a configuração existente para evitar apagar as chaves salvas de outros provedores
-      let existing: any = null
-      try { existing = await settingsApi.getSettings() } catch (err) { console.warn('Falha ao obter configuração existente:', err) }
+      let existing: any = loadBrowserSettings()
+      const serverAvailable = await canSaveSettings()
+      if (serverAvailable) {
+        try { existing = await settingsApi.getSettings() } catch (err) { console.warn('Falha ao obter configuração existente:', err) }
+      }
       const keys = existing?.api?.api_keys || {}
       const provider = (values.llm_provider || selectedProvider) as ProviderKey
 
-      await settingsApi.updateSettings({
+      const nextSettings = {
         basic: { app_name: 'AutoClip Desktop', app_version: runtime.version !== 'unknown' ? runtime.version : '1.0.0', debug_mode: false, auto_start: true },
         service: { host: '127.0.0.1', port: 8000, max_memory_usage: 2048 },
         api: {
@@ -167,10 +181,17 @@ const SettingsPage: React.FC = () => {
         },
         logs: { log_level: 'INFO', log_retention_days: 7 }
         // paths são determinados pelo backend com base no diretório de dados real, o frontend não os envia
-      })
-      message.success('Salvo')
+      }
+      saveBrowserSettings(nextSettings)
+      if (serverAvailable) {
+        await Promise.race([
+          settingsApi.updateSettings(nextSettings),
+          new Promise((_, reject) => window.setTimeout(() => reject(new Error('O servidor demorou para responder')), 10000)),
+        ])
+      }
+      message.success(serverAvailable ? 'Configurações salvas' : 'Configurações salvas neste navegador')
       trackApiKeyConfigured({ provider, hasKey: isLocalProvider(provider) || !!values[PROVIDERS[provider].apiKeyField] })
-      await loadData()
+      setCurrentProvider({ available: true, provider, display_name: PROVIDERS[provider].name, model: nextSettings.api.api_model })
     } catch (err: any) {
       message.error('Falha ao salvar: ' + (err.message || 'Erro Desconhecido'))
     } finally {

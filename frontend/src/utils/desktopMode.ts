@@ -3,7 +3,6 @@ import { buildApiUrl } from './apiConfig'
 // Tauri = sempre modo desktop. Fora do Tauri (preview no navegador) perguntamos ao
 // backend local: se ele roda em modo desktop, salvar configurações funciona igual.
 let cached: Promise<boolean> | null = null
-let writable: Promise<boolean> | null = null
 
 function isTauri(): boolean {
   return typeof window !== 'undefined' && Boolean((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__)
@@ -24,7 +23,10 @@ async function detect(): Promise<boolean> {
 async function detectWritable(): Promise<boolean> {
   if (isTauri()) return true
   try {
-    const res = await fetch(buildApiUrl('/settings/'))
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 3000)
+    const res = await fetch(buildApiUrl('/settings/'), { signal: controller.signal })
+    window.clearTimeout(timeout)
     return res.ok
   } catch {
     return false
@@ -40,8 +42,5 @@ export async function isDesktopMode(): Promise<boolean> {
 
 // Verdadeiro sempre que o servidor de configurações responder — inclusive no navegador.
 export async function canSaveSettings(): Promise<boolean> {
-  if (!writable) {
-    writable = detectWritable().catch(() => false)
-  }
-  return writable
+  return detectWritable().catch(() => false)
 }
