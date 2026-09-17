@@ -96,15 +96,19 @@ export default defineConfig(({ mode }) => {
       // 生产环境禁用 Service Worker
       serviceWorker: false
     },
+    // As variáveis do Cloud (VITE_SUPABASE_*) vivem no .env da raiz do projeto.
+    envDir: ROOT,
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
+        '@cloud': path.join(ROOT, 'src', 'integrations'),
       },
     },
     server: {
       port: Number(process.env.FRONTEND_PORT || 8080),
       host: true,
       strictPort: false,
+      fs: { allow: [ROOT] },
       hmr: {
         overlay: false // 禁用错误覆盖层
       },
