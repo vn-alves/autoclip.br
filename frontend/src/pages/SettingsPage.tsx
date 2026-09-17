@@ -29,6 +29,22 @@ const toNumber = (v: unknown, fallback: number): number => {
   return Number.isFinite(n) ? n : fallback
 }
 
+function withTimeout<T>(promise: Promise<T>, milliseconds: number, errorMessage: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error(errorMessage)), milliseconds)
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeout)
+        resolve(value)
+      },
+      (error) => {
+        window.clearTimeout(timeout)
+        reject(error)
+      },
+    )
+  })
+}
+
 type ProviderKey = 'dashscope' | 'openai' | 'gemini' | 'siliconflow' | 'ollama' | 'lmstudio'
 type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string }
 const PROVIDERS: Record<ProviderKey, { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; local?: LocalPreset }> = {
@@ -169,12 +185,28 @@ const SettingsPage: React.FC = () => {
       setLoading(true)
       // Primeiro, leia a configuração existente para evitar apagar as chaves salvas de outros provedores
       let existing: any = loadBrowserSettings()
-      const serverAvailable = await canSaveSettings()
+      const serverAvailable = await withTimeout(
+        canSaveSettings(),
+        4000,
+        'O servidor local demorou para responder',
+      ).catch(() => false)
       if (serverAvailable) {
-        try { existing = await settingsApi.getSettings() } catch (err) { console.warn('Falha ao obter configuração existente:', err) }
+        try {
+          existing = await withTimeout(
+            settingsApi.getSettings(),
+            5000,
+            'O servidor local demorou para carregar as configurações',
+          )
+        } catch (err) {
+          console.warn('Falha ao obter configuração existente:', err)
+        }
       }
       if (cloudUser) {
-        const cloudExisting = await loadCloudSettings().catch(() => null)
+        const cloudExisting = await withTimeout(
+          loadCloudSettings(),
+          6000,
+          'A conta demorou para responder',
+        ).catch(() => null)
         if (cloudExisting) existing = cloudExisting
       }
       const keys = existing?.api?.api_keys || {}
@@ -211,22 +243,39 @@ const SettingsPage: React.FC = () => {
       }
       saveBrowserSettings(nextSettings)
       let savedToAccount = false
-      try {
-        savedToAccount = await saveCloudSettings(nextSettings)
-      } catch (err) {
-        console.warn('Falha ao salvar na conta:', err)
+      let savedToServer = false
+      if (cloudUser) {
+        try {
+          savedToAccount = await withTimeout(
+            saveCloudSettings(nextSettings),
+            6000,
+            'A sincronização com a conta demorou para responder',
+          )
+        } catch (err) {
+          console.warn('Falha ao salvar na conta:', err)
+        }
       }
       if (serverAvailable) {
-        await Promise.race([
-          settingsApi.updateSettings(nextSettings),
-          new Promise((_, reject) => window.setTimeout(() => reject(new Error('O servidor demorou para responder')), 10000)),
-        ])
+        try {
+          await withTimeout(
+            settingsApi.updateSettings(nextSettings),
+            6000,
+            'O servidor local demorou para salvar',
+          )
+          savedToServer = true
+        } catch (err) {
+          console.warn('Falha ao salvar no servidor local:', err)
+        }
       }
-      message.success(
-        savedToAccount
-          ? 'Configurações salvas na sua conta'
-          : serverAvailable ? 'Configurações salvas' : 'Configurações salvas neste navegador',
-      )
+      if (savedToAccount) {
+        message.success('Configurações salvas na sua conta')
+      } else if (savedToServer) {
+        message.success('Configurações salvas')
+      } else if (cloudUser) {
+        message.warning('Configurações salvas neste navegador. A conta não respondeu agora.')
+      } else {
+        message.success('Configurações salvas neste navegador')
+      }
       trackApiKeyConfigured({ provider, hasKey: isLocalProvider(provider) || !!values[PROVIDERS[provider].apiKeyField] })
       setCurrentProvider({ available: true, provider, display_name: PROVIDERS[provider].name, model: nextSettings.api.api_model })
     } catch (err: any) {
@@ -338,7 +387,7 @@ const SettingsPage: React.FC = () => {
         <div className="ac-settings-body">
           {/* ---------------- Modelo ---------------- */}
           {active === 'model' && (
-            <Section title="Modelo" description="Qual modelo grande usar para análise de clipes. A chave é salva apenas localmente e não será carregada.">
+            <Section title="Modelo" description="Qual modelo usar para analisar os clipes. A chave é salva na sua conta quando você está conectado ou neste navegador.">
               <Form
                 form={form}
                 layout="vertical"
