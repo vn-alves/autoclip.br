@@ -477,24 +477,34 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         
         loop = asyncio.get_event_loop()
 
-        # O servidor não tem navegador instalado e as legendas do YouTube podem falhar (HTTP 429).
-        # Nenhuma dessas situações deve impedir o download do vídeo: o AutoClip gera a legenda depois.
-        try:
-            await loop.run_in_executor(None, download_sync, request.url, ydl_opts)
-        except Exception as first_error:
-            retried = False
-            if request.browser and _is_cookie_error(first_error):
-                logger.warning(f"Cookies do navegador {request.browser} indisponíveis, baixando sem cookies: {first_error}")
-                _drop_browser_cookies(ydl_opts)
-                retried = True
-            if not list(download_dir.glob("*.mp4")):
-                logger.warning(f"Primeira tentativa de download falhou, repetindo sem legendas do YouTube: {first_error}")
-                ydl_opts['writesubtitles'] = False
-                ydl_opts['writeautomaticsub'] = False
-                retried = True
-            if not retried:
-                raise
-            await loop.run_in_executor(None, download_sync, request.url, ydl_opts)
+        # O servidor pode não ter navegador instalado e as legendas do YouTube podem falhar (HTTP 429).
+        # Nenhuma dessas situações deve impedir o download do vídeo: a legenda é gerada depois.
+        attempts = [dict(ydl_opts)]
+        if 'cookiesfrombrowser' in ydl_opts:
+            without_cookies = dict(ydl_opts)
+            _drop_browser_cookies(without_cookies)
+            attempts.append(without_cookies)
+        no_subs = dict(attempts[-1])
+        no_subs['writesubtitles'] = False
+        no_subs['writeautomaticsub'] = False
+        attempts.append(no_subs)
+
+        last_error = None
+        for index, attempt_opts in enumerate(attempts):
+            try:
+                await loop.run_in_executor(None, download_sync, request.url, attempt_opts)
+                last_error = None
+                break
+            except Exception as attempt_error:
+                last_error = attempt_error
+                logger.warning(f"Tentativa {index + 1} de download falhou: {attempt_error}")
+                if list(download_dir.glob("*.mp4")):
+                    # O vídeo já veio; só a legenda falhou.
+                    last_error = None
+                    break
+        if last_error and not list(download_dir.glob("*.mp4")):
+            raise last_error
+
 
         
         # 查找下载的文件
