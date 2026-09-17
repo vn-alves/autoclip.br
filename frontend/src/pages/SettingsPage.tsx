@@ -82,7 +82,7 @@ const SettingsPage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const isDesktop = await isDesktopMode()
+      const isDesktop = await canSaveSettings()
       if (isDesktop) {
         const [settings, provider] = await Promise.allSettled([
           settingsApi.getSettings(),
