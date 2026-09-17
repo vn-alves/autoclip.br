@@ -567,8 +567,18 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                     logger.error(f"备用字幕获取也失败: {backup_error}")
                     subtitle_path = None  # 确保字幕路径为空，后续会标记项目失败
             except Exception as e:
-                logger.error(f"生成字幕过程中发生未知错误: {e}")
-                subtitle_path = None  # 确保字幕路径为空，后续会标记项目失败
+                logger.error(f"Falha inesperada ao gerar a legenda: {e}")
+                # Tenta as legendas públicas da plataforma antes de desistir
+                try:
+                    subtitle_path = await _try_youtube_subtitle_strategies(request.url, download_dir, None)
+                    if subtitle_path:
+                        logger.info(f"备用字幕获取成功: {subtitle_path}")
+                    else:
+                        subtitle_path = None
+                except Exception as backup_error:
+                    logger.error(f"备用字幕获取也失败: {backup_error}")
+                    subtitle_path = None
+
         
         logger.info(f"下载完成 - 视频文件: {video_path}, 字幕文件: {subtitle_path}")
         
@@ -614,7 +624,7 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             
             # 移动视频文件到项目目录
             import shutil
-            from pathlib import Path
+
             
             if video_path:
                 video_file_path = Path(video_path)
