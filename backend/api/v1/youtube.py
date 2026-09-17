@@ -380,7 +380,7 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
 async def get_youtube_task_status(task_id: str):
     """获取YouTube下载任务状态"""
     if task_id not in download_tasks:
-        raise HTTPException(status_code=404, detail="任务不存在")
+        raise HTTPException(status_code=404, detail="Tarefa não encontrada")
     
     return download_tasks[task_id]
 
@@ -502,7 +502,7 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         subtitle_files = list(download_dir.glob("*.srt"))
         
         if not video_files:
-            raise Exception("未找到下载的视频文件")
+            raise Exception("O arquivo de vídeo baixado não foi encontrado")
         
         video_path = str(video_files[0])
         subtitle_path = str(subtitle_files[0]) if subtitle_files else ""
@@ -642,18 +642,18 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                 project.status = ProjectStatus.FAILED
                 if not project.processing_config:
                     project.processing_config = {}
-                project.processing_config["error_message"] = "字幕文件不存在且Whisper生成失败"
+                project.processing_config["error_message"] = "Não foi possível obter nem gerar a legenda do vídeo"
                 db.commit()
                 
                 # 更新任务状态为失败
                 download_tasks[task_id].status = "failed"
-                download_tasks[task_id].error_message = "字幕文件不存在且Whisper生成失败"
+                download_tasks[task_id].error_message = "Não foi possível obter nem gerar a legenda do vídeo"
                 download_tasks[task_id].progress = 0.0
                 download_tasks[task_id].project_id = str(project.id)
                 download_tasks[task_id].updated_at = datetime.now().isoformat()
                 
                 # 更新项目下载进度为失败
-                await update_project_download_progress(project_id, 0.0, "下载失败：字幕文件不存在")
+                await update_project_download_progress(project_id, 0.0, "Falha na importação: não foi possível obter a legenda")
                 
                 logger.info(f"YouTube下载任务失败: {task_id}, 项目ID: {project.id}, 原因: 字幕文件不存在")
                 return

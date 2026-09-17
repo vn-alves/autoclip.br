@@ -220,7 +220,7 @@ async def create_bilibili_download_task(request: BilibiliDownloadRequest):
 async def get_bilibili_task_status(task_id: str):
     """获取下载任务状态"""
     if task_id not in download_tasks:
-        raise HTTPException(status_code=404, detail="任务不存在")
+        raise HTTPException(status_code=404, detail="Tarefa não encontrada")
     
     return download_tasks[task_id]
 
