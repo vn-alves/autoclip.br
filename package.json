@@ -8,6 +8,12 @@
     "backend": "python3 -m uvicorn backend.app_factory:create_app --factory --host 127.0.0.1 --port 8000"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "@tauri-apps/cli": "^2.0.0-rc.18"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.9"
   }
 }
