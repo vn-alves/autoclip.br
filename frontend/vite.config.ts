@@ -13,6 +13,8 @@ export default defineConfig(({ mode }) => {
       include: ['@tauri-apps/api', '@tauri-apps/api/dialog']
     },
     build: {
+      outDir: fileURLToPath(new URL('../dist', import.meta.url)),
+      emptyOutDir: true,
       sourcemap: false,
       assetsInlineLimit: 4096,
       chunkSizeWarningLimit: 1600,
