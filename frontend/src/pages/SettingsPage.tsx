@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom'
 import { settingsApi } from '../services/api'
 import SpeechRecognitionConfig from '../components/SpeechRecognitionConfig'
 import FeedbackDialog from '../components/FeedbackDialog'
-import { isDesktopMode } from '../utils/desktopMode'
+import { isDesktopMode, canSaveSettings } from '../utils/desktopMode'
 import { openExternalLink } from '../utils/externalLinks'
 import { trackApiKeyConfigured } from '../analytics/events'
 import { isAnalyticsEnabled, setAnalyticsEnabled } from '../analytics/posthog'
@@ -82,7 +82,7 @@ const SettingsPage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const isDesktop = await isDesktopMode()
+      const isDesktop = await canSaveSettings()
       if (isDesktop) {
         const [settings, provider] = await Promise.allSettled([
           settingsApi.getSettings(),
@@ -128,9 +128,9 @@ const SettingsPage: React.FC = () => {
   const handleSave = async (values: any) => {
     try {
       setLoading(true)
-      const isDesktop = await isDesktopMode()
-      if (!isDesktop) {
-        message.info('As configurações não podem ser salvas no modo Web, use o aplicativo de desktop')
+      const canSave = await canSaveSettings()
+      if (!canSave) {
+        message.error('Não foi possível falar com o servidor local. Verifique se ele está em execução e tente novamente.')
         return
       }
       // Primeiro, leia a configuração existente para evitar apagar as chaves salvas de outros provedores
