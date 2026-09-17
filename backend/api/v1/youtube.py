@@ -110,7 +110,7 @@ async def parse_youtube_video(
         
         # 简单的URL验证
         if "youtube.com" not in url and "youtu.be" not in url:
-            raise HTTPException(status_code=400, detail="无效的YouTube视频链接")
+            raise HTTPException(status_code=400, detail="Link do YouTube inválido")
         
         # 记录版本信息，便于排查
         try:
