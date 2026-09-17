@@ -490,13 +490,18 @@ const SettingsPage: React.FC = () => {
                         ? 'Preencha o nome do modelo real fornecido por este serviço (ex: glm-4-flash, deepseek-chat, qwen2.5:7b) e pressione Enter para confirmar.'
                         : 'Você pode inserir o nome do modelo diretamente e pressionar Enter para confirmar.'}
                   >
-                    <Form.Item name="model_name" style={{ width: '100%' }} rules={[{ required: true, message: 'Por favor, insira ou selecione um modelo' }]}>
+                    <Form.Item
+                      name="model_name"
+                      style={{ width: '100%' }}
+                      getValueFromEvent={(value) => Array.isArray(value) ? value.slice(-1) : value}
+                      rules={[{ required: true, message: 'Por favor, insira ou selecione um modelo' }]}
+                    >
                       <Select
                         placeholder={localCfg ? (localCfg.defaultModel || 'Selecione ou insira o nome do modelo') : 'qwen-plus'}
                         showSearch
                         allowClear
                         mode="tags"
-                        maxCount={1}
+                        maxTagCount={1}
                         loading={localCfg ? localModels.loading : false}
                         className="ac-mono"
                         options={(localCfg
