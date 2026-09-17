@@ -24,15 +24,32 @@ router = APIRouter()
 # 存储下载任务的状态
 download_tasks = {}
 
-# 一次请求过多字幕语言会触发 YouTube 的 HTTP 429 并让整次下载失败；
-# 默认只请求中英文，可用 AUTOCLIP_YT_SUBTITLE_LANGS（逗号分隔）覆盖。
-DEFAULT_SUBTITLE_LANGS = ['zh-Hans', 'zh', 'en']
+# Pedir muitos idiomas de legenda de uma vez causa HTTP 429 no YouTube e derruba o download inteiro.
+# Padrão: português e inglês. Pode ser sobrescrito com AUTOCLIP_YT_SUBTITLE_LANGS (separado por vírgula).
+DEFAULT_SUBTITLE_LANGS = ['pt', 'pt-BR', 'en']
 
 
 def get_subtitle_langs() -> list:
     raw = os.getenv('AUTOCLIP_YT_SUBTITLE_LANGS', '')
     langs = [lang.strip() for lang in raw.split(',') if lang.strip()]
     return langs or list(DEFAULT_SUBTITLE_LANGS)
+
+
+def _is_cookie_error(error: Exception) -> bool:
+    """Detecta falhas causadas pela leitura de cookies do navegador."""
+    text = str(error).lower()
+    return 'cookie' in text or 'keyring' in text
+
+
+def _is_subtitle_error(error: Exception) -> bool:
+    """Detecta falhas que vêm apenas do download das legendas."""
+    text = str(error).lower()
+    return 'subtitle' in text or 'subtitles' in text
+
+
+def _drop_browser_cookies(ydl_opts: dict) -> None:
+    ydl_opts.pop('cookiesfrombrowser', None)
+
 
 
 @contextmanager
