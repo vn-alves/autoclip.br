@@ -93,8 +93,37 @@ const SettingsPage: React.FC = () => {
   }, [])
   useEffect(() => { setActive(initialSection) }, [initialSection])
 
+  // Aplica um conjunto de configurações (da conta ou do navegador) no formulário
+  const applySettings = (saved: any) => {
+    const providerName = (saved?.api?.api_provider || 'dashscope') as ProviderKey
+    form.setFieldsValue({
+      llm_provider: providerName,
+      dashscope_api_key: saved?.api?.api_keys?.dashscope || '',
+      openai_api_key: saved?.api?.api_keys?.openai || '',
+      openai_base_url: providerName === 'openai' ? saved?.api?.api_base_url || '' : '',
+      local_base_url: isLocalProvider(providerName) ? saved?.api?.api_base_url || '' : '',
+      gemini_api_key: saved?.api?.api_keys?.gemini || '',
+      siliconflow_api_key: saved?.api?.api_keys?.siliconflow || '',
+      jimeng_access_key: saved?.api?.api_keys?.jimeng_access || '',
+      jimeng_secret_key: saved?.api?.api_keys?.jimeng_secret || '',
+      model_name: saved?.api?.api_model || 'qwen-plus',
+      chunk_size: saved?.processing?.processing_chunk_size || 5000,
+      min_score_threshold: saved?.processing?.processing_min_score || 0.7,
+      max_clips_per_collection: saved?.processing?.processing_max_clips || 5,
+    })
+    setSelectedProvider(PROVIDERS[providerName] ? providerName : 'dashscope')
+    setCurrentProvider(saved ? { available: true, provider: providerName, display_name: PROVIDERS[providerName]?.name, model: saved.api?.api_model } : { available: false })
+  }
+
   const loadData = async () => {
     try {
+      // A conta manda: se houver configurações salvas na conta, elas valem em qualquer navegador
+      const cloud = await loadCloudSettings().catch(() => null)
+      if (cloud) {
+        applySettings(cloud)
+        saveBrowserSettings(cloud)
+        return
+      }
       const serverAvailable = await canSaveSettings()
       if (serverAvailable) {
         const [settings, provider] = await Promise.allSettled([
@@ -128,25 +157,7 @@ const SettingsPage: React.FC = () => {
         })
         setSelectedProvider(PROVIDERS[providerName] ? providerName : 'dashscope')
       } else {
-        const saved = loadBrowserSettings()
-        const providerName = (saved?.api?.api_provider || 'dashscope') as ProviderKey
-        form.setFieldsValue({
-          llm_provider: providerName,
-          dashscope_api_key: saved?.api?.api_keys?.dashscope || '',
-          openai_api_key: saved?.api?.api_keys?.openai || '',
-          openai_base_url: providerName === 'openai' ? saved?.api?.api_base_url || '' : '',
-          local_base_url: isLocalProvider(providerName) ? saved?.api?.api_base_url || '' : '',
-          gemini_api_key: saved?.api?.api_keys?.gemini || '',
-          siliconflow_api_key: saved?.api?.api_keys?.siliconflow || '',
-          jimeng_access_key: saved?.api?.api_keys?.jimeng_access || '',
-          jimeng_secret_key: saved?.api?.api_keys?.jimeng_secret || '',
-          model_name: saved?.api?.api_model || 'qwen-plus',
-          chunk_size: saved?.processing?.processing_chunk_size || 5000,
-          min_score_threshold: saved?.processing?.processing_min_score || 0.7,
-          max_clips_per_collection: saved?.processing?.processing_max_clips || 5,
-        })
-        setSelectedProvider(PROVIDERS[providerName] ? providerName : 'dashscope')
-        setCurrentProvider(saved ? { available: true, provider: providerName, display_name: PROVIDERS[providerName]?.name, model: saved.api?.api_model } : { available: false })
+        applySettings(loadBrowserSettings())
       }
     } catch (err) {
       console.error('Falha ao carregar dados:', err)
