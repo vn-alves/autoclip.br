@@ -128,9 +128,9 @@ const SettingsPage: React.FC = () => {
   const handleSave = async (values: any) => {
     try {
       setLoading(true)
-      const isDesktop = await isDesktopMode()
-      if (!isDesktop) {
-        message.info('As configurações não podem ser salvas no modo Web, use o aplicativo de desktop')
+      const canSave = await canSaveSettings()
+      if (!canSave) {
+        message.error('Não foi possível falar com o servidor local. Verifique se ele está em execução e tente novamente.')
         return
       }
       // Primeiro, leia a configuração existente para evitar apagar as chaves salvas de outros provedores
