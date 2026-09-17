@@ -1,13 +1,78 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
+import { spawn } from 'node:child_process'
+import { existsSync, mkdirSync, openSync } from 'node:fs'
+import path from 'node:path'
+import http from 'node:http'
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url))
+
+function pingBackend(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get({ host: '127.0.0.1', port, path: '/health', timeout: 1500 }, (res) => {
+      res.resume()
+      resolve((res.statusCode || 500) < 500)
+    })
+    req.on('error', () => resolve(false))
+    req.on('timeout', () => {
+      req.destroy()
+      resolve(false)
+    })
+  })
+}
+
+/**
+ * O preview roda apenas o Vite, então o backend FastAPI (que faz o parse dos
+ * links e todo o resto de /api) ficava fora do ar e a UI mostrava
+ * "link inválido". Este plugin sobe o backend junto com o dev server.
+ */
+function autoclipBackend(): Plugin {
+  return {
+    name: 'autoclip-backend',
+    apply: 'serve',
+    async configureServer() {
+      if (process.env.AUTOCLIP_SKIP_BACKEND === '1' || process.env.BACKEND_URL) return
+      const port = Number(process.env.BACKEND_PORT || 8000)
+      if (await pingBackend(port)) return
+
+      const venvPython = path.join(ROOT, '.venv', 'bin', 'python')
+      const python = existsSync(venvPython) ? venvPython : 'python3'
+      const logDir = path.join(ROOT, 'data', 'logs')
+      mkdirSync(logDir, { recursive: true })
+      const log = openSync(path.join(logDir, 'backend.stdout.log'), 'a')
+
+      const child = spawn(
+        python,
+        ['-m', 'uvicorn', 'backend.app_factory:create_app', '--factory', '--host', '127.0.0.1', '--port', String(port)],
+        {
+          cwd: ROOT,
+          detached: true,
+          stdio: ['ignore', log, log],
+          env: {
+            ...process.env,
+            AUTOCLIP_DESKTOP_MODE: '1',
+            AUTOCLIP_MODE: 'desktop',
+            AUTOCLIP_APP_DIR: process.env.AUTOCLIP_APP_DIR || path.join(ROOT, 'data'),
+            AUTOCLIP_DATA_DIR: process.env.AUTOCLIP_DATA_DIR || path.join(ROOT, 'data'),
+            DATABASE_URL: process.env.DATABASE_URL || `sqlite:///${path.join(ROOT, 'data', 'autoclip.db')}`,
+            PYTHONPATH: ROOT,
+            PYTHONUNBUFFERED: '1',
+          },
+        },
+      )
+      child.unref()
+      console.log(`[autoclip] backend iniciado em http://127.0.0.1:${port}`)
+    },
+  }
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const isProduction = mode === 'production'
-  
+
   return {
-    plugins: [react()],
+    plugins: [react(), autoclipBackend()],
     base: isProduction ? './' : '/', // 生产环境使用相对路径
     optimizeDeps: {
       include: ['@tauri-apps/api', '@tauri-apps/api/dialog']

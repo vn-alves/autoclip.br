@@ -61,53 +61,44 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
     }
   }, [pollingInterval])
 
-  const validateVideoUrl = (url: string): boolean => {
-    const bilibiliPatterns = [
-      /^https?:\/\/www\.bilibili\.com\/video\/[Bb][Vv][0-9A-Za-z]+/,
-      /^https?:\/\/bilibili\.com\/video\/[Bb][Vv][0-9A-Za-z]+/,
-      /^https?:\/\/b23\.tv\/[0-9A-Za-z]+/,
-      /^https?:\/\/www\.bilibili\.com\/video\/av\d+/,
-      /^https?:\/\/bilibili\.com\/video\/av\d+/
-    ]
-    
-    const youtubePatterns = [
-      /^https?:\/\/(www\.)?youtube\.com\/watch\?v=[a-zA-Z0-9_-]+/,
-      /^https?:\/\/youtu\.be\/[a-zA-Z0-9_-]+/,
-      /^https?:\/\/(www\.)?youtube\.com\/embed\/[a-zA-Z0-9_-]+/,
-      /^https?:\/\/(www\.)?youtube\.com\/v\/[a-zA-Z0-9_-]+/
-    ]
-    
-    return bilibiliPatterns.some(pattern => pattern.test(url)) || 
-           youtubePatterns.some(pattern => pattern.test(url))
-  }
-  
-  const getVideoType = (url: string): 'bilibili' | 'youtube' | null => {
-    const bilibiliPatterns = [
-      /^https?:\/\/www\.bilibili\.com\/video\/[Bb][Vv][0-9A-Za-z]+/,
-      /^https?:\/\/bilibili\.com\/video\/[Bb][Vv][0-9A-Za-z]+/,
-      /^https?:\/\/b23\.tv\/[0-9A-Za-z]+/,
-      /^https?:\/\/www\.bilibili\.com\/video\/av\d+/,
-      /^https?:\/\/bilibili\.com\/video\/av\d+/
-    ]
-    
-    const youtubePatterns = [
-      /^https?:\/\/(www\.)?youtube\.com\/watch\?v=[a-zA-Z0-9_-]+/,
-      /^https?:\/\/youtu\.be\/[a-zA-Z0-9_-]+/,
-      /^https?:\/\/(www\.)?youtube\.com\/embed\/[a-zA-Z0-9_-]+/,
-      /^https?:\/\/(www\.)?youtube\.com\/v\/[a-zA-Z0-9_-]+/
-    ]
-    
-    if (bilibiliPatterns.some(pattern => pattern.test(url))) {
+  // Aceita as variações comuns de link (m., shorts, live, /video/, encurtados).
+  const BILIBILI_PATTERNS = [
+    /^https?:\/\/((www|m)\.)?bilibili\.com\/video\/[Bb][Vv][0-9A-Za-z]+/,
+    /^https?:\/\/((www|m)\.)?bilibili\.com\/video\/[Aa][Vv]?\d+/,
+    /^https?:\/\/b23\.tv\/[0-9A-Za-z]+/
+  ]
+
+  const YOUTUBE_PATTERNS = [
+    /^https?:\/\/((www|m|music)\.)?youtube\.com\/watch\?/,
+    /^https?:\/\/((www|m)\.)?youtube\.com\/(shorts|live|embed|v)\/[a-zA-Z0-9_-]+/,
+    /^https?:\/\/youtu\.be\/[a-zA-Z0-9_-]+/
+  ]
+
+  const getVideoType = (rawUrl: string): 'bilibili' | 'youtube' | null => {
+    const url = rawUrl.trim()
+    if (BILIBILI_PATTERNS.some(pattern => pattern.test(url))) {
       return 'bilibili'
-    } else if (youtubePatterns.some(pattern => pattern.test(url))) {
+    }
+    if (YOUTUBE_PATTERNS.some(pattern => pattern.test(url))) {
       return 'youtube'
     }
     return null
   }
 
+  // Extrai a mensagem real vinda do servidor, em vez de sempre dizer "link inválido".
+  const describeError = (error: any): string => {
+    const detail = error?.response?.data?.detail ?? error?.response?.data?.message
+    if (typeof detail === 'string' && detail.trim()) return detail
+    if (Array.isArray(detail) && detail[0]?.msg) return String(detail[0].msg)
+    if (error?.response?.status) {
+      return `Falha ao ler o link (erro ${error.response.status}). Tente novamente em instantes.`
+    }
+    return 'Não foi possível falar com o servidor do AutoClip. Verifique se ele está rodando e tente novamente.'
+  }
+
   const parseVideoInfo = async () => {
     if (!url.trim()) {
-      setError('Por favor, insira um link de vídeo válido')
+      setError('Cole o link do vídeo')
       return
     }
 
@@ -140,7 +131,8 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
       
       return parsedVideoInfo
     } catch (error: any) {
-      setError('Por favor, insira um link de vídeo válido')
+      console.error('Falha ao ler o link:', error)
+      setError(describeError(error))
       setVideoInfo(null)
     } finally {
       setParsing(false)
@@ -307,7 +299,7 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
               }}
               onBlur={() => {
                 // Analisar automaticamente ao perder o foco
-                if (url.trim() && !videoInfo && validateVideoUrl(url.trim())) {
+                if (url.trim() && !videoInfo && getVideoType(url.trim())) {
                   parseVideoInfo();
                 }
               }}
