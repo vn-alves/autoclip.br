@@ -18,15 +18,32 @@ export PYTHONUNBUFFERED=1
 
 mkdir -p data/logs data/uploads data/temp data/output data/projects
 
+# python: usa/cria um venv local com as dependencias do backend
+PY="$ROOT/.venv/bin/python"
+if [ ! -x "$PY" ]; then
+  python3 -m venv "$ROOT/.venv" >> data/logs/setup.log 2>&1 || true
+fi
+if [ -x "$PY" ]; then
+  "$PY" -c "import sqlalchemy, uvicorn, fastapi" >/dev/null 2>&1 || \
+    "$PY" -m pip install -q -r requirements.txt >> data/logs/setup.log 2>&1 || true
+else
+  PY="python3"
+fi
+
+# frontend: garante dependencias instaladas
+if [ ! -x "$ROOT/frontend/node_modules/.bin/vite" ]; then
+  npm --prefix frontend install --no-audit --no-fund >> data/logs/setup.log 2>&1 || true
+fi
+
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-8080}"
 
 # banco (idempotente)
-python3 init_database.py >> data/logs/init_db.log 2>&1 || \
+"$PY" init_database.py >> data/logs/init_db.log 2>&1 || \
   echo "[dev] aviso: init_database falhou, veja data/logs/init_db.log"
 
 # backend
-python3 -m uvicorn backend.app_factory:create_app --factory --host 127.0.0.1 --port "$BACKEND_PORT" \
+"$PY" -m uvicorn backend.app_factory:create_app --factory --host 127.0.0.1 --port "$BACKEND_PORT" \
   >> data/logs/backend.stdout.log 2>&1 &
 BACKEND_PID=$!
 
