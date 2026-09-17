@@ -383,7 +383,7 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
               </div>
               
               <div>
-                <Text style={{ color: '#ffffff', marginBottom: '12px', display: 'block', fontSize: '16px', fontWeight: 500 }}>Seleção do navegador (necessário para obter legendas de IA)</Text>
+                <Text style={{ color: '#ffffff', marginBottom: '12px', display: 'block', fontSize: '16px', fontWeight: 500 }}>Navegador para legendas (opcional)</Text>
                 <Select
                   placeholder="Selecione o navegador para obter o cookie (opcional)"
                   value={selectedBrowser || undefined}
@@ -406,8 +406,9 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
                   <Select.Option value="edge">Edge</Select.Option>
                 </Select>
                 <Text style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '12px', marginTop: '8px', display: 'block' }}>
-                  Selecione o navegador para obter o status de login, usado para baixar legendas de IA. Se não selecionar, apenas legendas públicas poderão ser baixadas.
+                  Usa o seu login do navegador para pegar legendas restritas. Só funciona no aplicativo instalado no seu computador; na versão web a importação continua normalmente com as legendas públicas.
                 </Text>
+
               </div>
               
               <div>
