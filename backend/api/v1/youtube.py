@@ -248,7 +248,16 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
                     return ydl.extract_info(url, download=False)
         
         loop = asyncio.get_event_loop()
-        video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
+        try:
+            video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
+        except Exception as e:
+            if request.browser and _is_cookie_error(e):
+                logger.warning(f"Cookies do navegador {request.browser} indisponíveis no servidor, seguindo sem cookies: {e}")
+                _drop_browser_cookies(ydl_opts)
+                video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
+            else:
+                raise
+
         
         # 立即创建项目记录
         from ...core.database import SessionLocal
@@ -354,15 +363,18 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
                 "project_id": project_id,
                 "task_id": task_id,
                 "status": "created",
-                "message": "项目已创建，正在下载中..."
+                "message": "Projeto criado, baixando o vídeo..."
             }
             
         finally:
             db.close()
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"创建YouTube下载任务失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"创建任务失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Não foi possível iniciar a importação: {str(e)}")
+
 
 @router.get("/tasks/{task_id}")
 async def get_youtube_task_status(task_id: str):
