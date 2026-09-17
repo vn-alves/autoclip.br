@@ -13,6 +13,8 @@ import { FEEDBACK_FORM_URL, FEEDBACK_ISSUES_URL } from '../analytics/feedback'
 import { useTheme } from '../context/ThemeContext'
 import { Btn, Icon, Row, Section, Segmented, StatusDot } from '../ui'
 import { loadBrowserSettings, saveBrowserSettings } from '../utils/browserSettings'
+import AccountSection from '../components/AccountSection'
+import { getCloudUser, onCloudAuthChange, loadCloudSettings, saveCloudSettings, type CloudUser } from '../utils/cloudSettings'
 
 const normalizeBaseUrl = (value: unknown): string =>
   typeof value === 'string' ? value.trim().replace(/\/+$/, '') : ''
@@ -51,9 +53,10 @@ const CLOUD_DEFAULT_MODEL: Partial<Record<ProviderKey, string>> = {
   dashscope: 'qwen-plus', openai: 'gpt-4o-mini', gemini: 'gemini-2.5-flash', siliconflow: 'deepseek-ai/DeepSeek-V3',
 }
 
-type SectionKey = 'model' | 'speech' | 'app' | 'feedback'
+type SectionKey = 'model' | 'account' | 'speech' | 'app' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
   { key: 'model', label: 'Modelo' },
+  { key: 'account', label: 'Conta' },
   { key: 'speech', label: 'Transcrever' },
   { key: 'app', label: 'Aplicar' },
   { key: 'feedback', label: 'Feedback' },
@@ -76,9 +79,18 @@ const SettingsPage: React.FC = () => {
   const [localModels, setLocalModels] = useState<{ loading: boolean; reachable: boolean | null; models: string[] }>({ loading: false, reachable: null, models: [] })
   const [analyticsOn, setAnalyticsOn] = useState(isAnalyticsEnabled())
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [cloudUser, setCloudUser] = useState<CloudUser | null>(null)
+  const [syncing, setSyncing] = useState(false)
   const runtime = getRuntimeInfo()
 
   useEffect(() => { loadData() }, [])
+  useEffect(() => {
+    getCloudUser().then(setCloudUser).catch(() => setCloudUser(null))
+    return onCloudAuthChange((user) => {
+      setCloudUser(user)
+      if (user) loadData()
+    })
+  }, [])
   useEffect(() => { setActive(initialSection) }, [initialSection])
 
   const loadData = async () => {
