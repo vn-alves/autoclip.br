@@ -173,6 +173,10 @@ const SettingsPage: React.FC = () => {
       if (serverAvailable) {
         try { existing = await settingsApi.getSettings() } catch (err) { console.warn('Falha ao obter configuração existente:', err) }
       }
+      if (cloudUser) {
+        const cloudExisting = await loadCloudSettings().catch(() => null)
+        if (cloudExisting) existing = cloudExisting
+      }
       const keys = existing?.api?.api_keys || {}
       const provider = (values.llm_provider || selectedProvider) as ProviderKey
 
@@ -206,13 +210,23 @@ const SettingsPage: React.FC = () => {
         // paths são determinados pelo backend com base no diretório de dados real, o frontend não os envia
       }
       saveBrowserSettings(nextSettings)
+      let savedToAccount = false
+      try {
+        savedToAccount = await saveCloudSettings(nextSettings)
+      } catch (err) {
+        console.warn('Falha ao salvar na conta:', err)
+      }
       if (serverAvailable) {
         await Promise.race([
           settingsApi.updateSettings(nextSettings),
           new Promise((_, reject) => window.setTimeout(() => reject(new Error('O servidor demorou para responder')), 10000)),
         ])
       }
-      message.success(serverAvailable ? 'Configurações salvas' : 'Configurações salvas neste navegador')
+      message.success(
+        savedToAccount
+          ? 'Configurações salvas na sua conta'
+          : serverAvailable ? 'Configurações salvas' : 'Configurações salvas neste navegador',
+      )
       trackApiKeyConfigured({ provider, hasKey: isLocalProvider(provider) || !!values[PROVIDERS[provider].apiKeyField] })
       setCurrentProvider({ available: true, provider, display_name: PROVIDERS[provider].name, model: nextSettings.api.api_model })
     } catch (err: any) {
