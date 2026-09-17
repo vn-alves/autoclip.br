@@ -3,9 +3,9 @@ import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import { ConfigProvider } from 'antd'
 import { theme as antdTheme } from 'antd'
-import zhCN from 'antd/locale/zh_CN'
+import ptBR from 'antd/locale/pt_BR'
 import dayjs from 'dayjs'
-import 'dayjs/locale/zh-cn'
+import 'dayjs/locale/pt-br'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import timezone from 'dayjs/plugin/timezone'
 import utc from 'dayjs/plugin/utc'
@@ -26,9 +26,9 @@ dayjs.extend(relativeTime)
 dayjs.extend(timezone)
 dayjs.extend(utc)
 
-// Definir dayjs em chinês e fuso horário
-dayjs.locale('zh-cn')
-dayjs.tz.setDefault('Asia/Shanghai')
+// Definir dayjs em português (Brasil) e fuso horário
+dayjs.locale('pt-br')
+dayjs.tz.setDefault('America/Sao_Paulo')
 
 function Root() {
   // Conecta limites de erro no nó raiz para evitar tela branca devido a exceções em tempo de execução
@@ -45,7 +45,7 @@ function ThemedApp() {
 
   return (
     <ConfigProvider
-      locale={zhCN}
+      locale={ptBR}
       theme={{
       algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
       token: {

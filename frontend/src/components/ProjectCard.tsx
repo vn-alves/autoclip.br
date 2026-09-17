@@ -18,12 +18,12 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import timezone from 'dayjs/plugin/timezone'
 import utc from 'dayjs/plugin/utc'
-import 'dayjs/locale/zh-cn'
+import 'dayjs/locale/pt-br'
 
 dayjs.extend(relativeTime)
 dayjs.extend(timezone)
 dayjs.extend(utc)
-dayjs.locale('zh-cn')
+dayjs.locale('pt-br')
 
 // Adicionar estilo de animação CSS
 const pulseAnimation = `
@@ -422,7 +422,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             height: '52px'
           }}>
             <Text style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.92)' }}>
-              {dayjs(project.created_at).tz('Asia/Shanghai').fromNow()}
+              {dayjs(project.created_at).tz('America/Sao_Paulo').fromNow()}
             </Text>
             
             {/* Botão de ação */}
