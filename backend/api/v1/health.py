@@ -13,7 +13,7 @@ router = APIRouter()
 async def health_check() -> Dict[str, Any]:
     """健康检查端点."""
     return {
-        "status": "healthy",
+        "status": "saudável",
         "timestamp": datetime.now().isoformat(),
         "version": "1.0.0"
     }
