@@ -26,43 +26,43 @@ async def get_video_categories() -> Dict[str, Any]:
         "categories": [
             {
                 "value": "knowledge",
-                "name": "知识科普",
-                "description": "科学、技术、历史、文化等知识类内容",
+                "name": "Conhecimento e Ciência",
+                "description": "Ciência, tecnologia, história, cultura, etc.",
                 "icon": "book",
                 "color": "#1890ff"
             },
             {
                 "value": "entertainment", 
-                "name": "娱乐休闲",
-                "description": "游戏、音乐、电影、综艺等娱乐内容",
+                "name": "Entretenimento",
+                "description": "Jogos, música, filmes, variedades, etc.",
                 "icon": "play-circle",
                 "color": "#52c41a"
             },
             {
                 "value": "experience",
-                "name": "生活经验",
-                "description": "生活技巧、美食、旅行、手工等实用内容",
+                "name": "Estilo de Vida",
+                "description": "Dicas práticas, culinária, viagens, artes, etc.",
                 "icon": "heart",
                 "color": "#fa8c16"
             },
             {
                 "value": "opinion",
-                "name": "观点评论",
-                "description": "时事评论、观点分享、社会话题等",
+                "name": "Opinião e Comentários",
+                "description": "Comentários sobre atualidades, compartilhamento de opiniões, etc.",
                 "icon": "message",
                 "color": "#722ed1"
             },
             {
                 "value": "business",
-                "name": "商业财经",
-                "description": "商业分析、财经资讯、投资理财等",
+                "name": "Negócios e Finanças",
+                "description": "Análises de negócios, notícias financeiras, etc.",
                 "icon": "dollar",
                 "color": "#13c2c2"
             },
             {
                 "value": "speech",
-                "name": "演讲访谈",
-                "description": "演讲、访谈、对话等口语化内容",
+                "name": "Discursos e Entrevistas",
+                "description": "Discursos, entrevistas, diálogos, etc.",
                 "icon": "sound",
                 "color": "#eb2f96"
             }

@@ -116,7 +116,12 @@ class BilibiliDownloader:
             )
             return BilibiliVideoInfo(info_dict)
         except Exception as e:
-            raise ProcessingError(f"获取视频信息失败: {str(e)}")
+            error_msg = str(e)
+            if "could not find chrome cookies database" in error_msg.lower() or "cookies" in error_msg.lower():
+                error_msg = f"Falha ao obter informações do vídeo: Não foi possível acessar os cookies do navegador {self.browser}. Tente sem selecionar um navegador."
+            else:
+                error_msg = f"Falha ao obter informações do vídeo: {error_msg}"
+            raise ProcessingError(error_msg)
     
     def _extract_info_sync(self, url: str, ydl_opts: Dict[str, Any]) -> Dict[str, Any]:
         """同步方式提取视频信息"""
@@ -202,7 +207,12 @@ class BilibiliDownloader:
             return result
             
         except Exception as e:
-            error_msg = f"下载失败: {str(e)}"
+            error_msg = str(e)
+            if "could not find chrome cookies database" in error_msg.lower() or "cookies" in error_msg.lower():
+                error_msg = f"Falha no download: Não foi possível acessar os cookies do navegador {self.browser}. Se você estiver usando o Docker, os cookies do navegador host não estão acessíveis. Tente baixar sem selecionar um navegador ou verifique a configuração."
+            else:
+                error_msg = f"Falha no download: {error_msg}"
+                
             if progress_callback:
                 progress_callback(error_msg, 0)
             raise ProcessingError(error_msg)
