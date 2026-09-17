@@ -62,8 +62,8 @@ const getNotificationColor = (level: Notification['level']) => {
 
 const formatTime = (timestamp: string) => {
   // Lidar corretamente com a conversão de fuso horário para garantir a exibição da hora local
-  const now = dayjs().tz('Asia/Shanghai');
-  const notificationTime = dayjs(timestamp).tz('Asia/Shanghai');
+  const now = dayjs().tz('America/Sao_Paulo');
+  const notificationTime = dayjs(timestamp).tz('America/Sao_Paulo');
   const diff = now.diff(notificationTime, 'millisecond');
   
   if (diff < 60000) { // Em 1 minuto

@@ -24,15 +24,32 @@ router = APIRouter()
 # 存储下载任务的状态
 download_tasks = {}
 
-# 一次请求过多字幕语言会触发 YouTube 的 HTTP 429 并让整次下载失败；
-# 默认只请求中英文，可用 AUTOCLIP_YT_SUBTITLE_LANGS（逗号分隔）覆盖。
-DEFAULT_SUBTITLE_LANGS = ['zh-Hans', 'zh', 'en']
+# Pedir muitos idiomas de legenda de uma vez causa HTTP 429 no YouTube e derruba o download inteiro.
+# Padrão: português e inglês. Pode ser sobrescrito com AUTOCLIP_YT_SUBTITLE_LANGS (separado por vírgula).
+DEFAULT_SUBTITLE_LANGS = ['pt', 'pt-BR', 'en']
 
 
 def get_subtitle_langs() -> list:
     raw = os.getenv('AUTOCLIP_YT_SUBTITLE_LANGS', '')
     langs = [lang.strip() for lang in raw.split(',') if lang.strip()]
     return langs or list(DEFAULT_SUBTITLE_LANGS)
+
+
+def _is_cookie_error(error: Exception) -> bool:
+    """Detecta falhas causadas pela leitura de cookies do navegador."""
+    text = str(error).lower()
+    return 'cookie' in text or 'keyring' in text
+
+
+def _is_subtitle_error(error: Exception) -> bool:
+    """Detecta falhas que vêm apenas do download das legendas."""
+    text = str(error).lower()
+    return 'subtitle' in text or 'subtitles' in text
+
+
+def _drop_browser_cookies(ydl_opts: dict) -> None:
+    ydl_opts.pop('cookiesfrombrowser', None)
+
 
 
 @contextmanager
@@ -93,7 +110,7 @@ async def parse_youtube_video(
         
         # 简单的URL验证
         if "youtube.com" not in url and "youtu.be" not in url:
-            raise HTTPException(status_code=400, detail="无效的YouTube视频链接")
+            raise HTTPException(status_code=400, detail="Link do YouTube inválido")
         
         # 记录版本信息，便于排查
         try:
@@ -166,7 +183,14 @@ async def parse_youtube_video(
                 raise Exception(f"yt-dlp execution failed: {e}")
         
         loop = asyncio.get_event_loop()
-        info_dict = await loop.run_in_executor(None, extract_info_sync, url, browser)
+        try:
+            info_dict = await loop.run_in_executor(None, extract_info_sync, url, browser)
+        except Exception as e:
+            if browser and _is_cookie_error(e):
+                logger.warning(f"Cookies do navegador {browser} indisponíveis no servidor, tentando sem cookies: {e}")
+                info_dict = await loop.run_in_executor(None, extract_info_sync, url, None)
+            else:
+                raise
         
         logger.info(f"YouTube视频信息解析成功: {info_dict.get('title', 'Unknown')}")
         
@@ -184,9 +208,12 @@ async def parse_youtube_video(
             }
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"解析YouTube视频失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Não foi possível ler o vídeo: {str(e)}")
+
 
 @router.post("/download")
 async def create_youtube_download_task(request: YouTubeDownloadRequest):
@@ -221,7 +248,16 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
                     return ydl.extract_info(url, download=False)
         
         loop = asyncio.get_event_loop()
-        video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
+        try:
+            video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
+        except Exception as e:
+            if request.browser and _is_cookie_error(e):
+                logger.warning(f"Cookies do navegador {request.browser} indisponíveis no servidor, seguindo sem cookies: {e}")
+                _drop_browser_cookies(ydl_opts)
+                video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
+            else:
+                raise
+
         
         # 立即创建项目记录
         from ...core.database import SessionLocal
@@ -327,21 +363,24 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
                 "project_id": project_id,
                 "task_id": task_id,
                 "status": "created",
-                "message": "项目已创建，正在下载中..."
+                "message": "Projeto criado, baixando o vídeo..."
             }
             
         finally:
             db.close()
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"创建YouTube下载任务失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"创建任务失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Não foi possível iniciar a importação: {str(e)}")
+
 
 @router.get("/tasks/{task_id}")
 async def get_youtube_task_status(task_id: str):
     """获取YouTube下载任务状态"""
     if task_id not in download_tasks:
-        raise HTTPException(status_code=404, detail="任务不存在")
+        raise HTTPException(status_code=404, detail="Tarefa não encontrada")
     
     return download_tasks[task_id]
 
@@ -437,14 +476,43 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                     return ydl.download([url])
         
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, download_sync, request.url, ydl_opts)
+
+        # O servidor pode não ter navegador instalado e as legendas do YouTube podem falhar (HTTP 429).
+        # Nenhuma dessas situações deve impedir o download do vídeo: a legenda é gerada depois.
+        attempts = [dict(ydl_opts)]
+        if 'cookiesfrombrowser' in ydl_opts:
+            without_cookies = dict(ydl_opts)
+            _drop_browser_cookies(without_cookies)
+            attempts.append(without_cookies)
+        no_subs = dict(attempts[-1])
+        no_subs['writesubtitles'] = False
+        no_subs['writeautomaticsub'] = False
+        attempts.append(no_subs)
+
+        last_error = None
+        for index, attempt_opts in enumerate(attempts):
+            try:
+                await loop.run_in_executor(None, download_sync, request.url, attempt_opts)
+                last_error = None
+                break
+            except Exception as attempt_error:
+                last_error = attempt_error
+                logger.warning(f"Tentativa {index + 1} de download falhou: {attempt_error}")
+                if list(download_dir.glob("*.mp4")):
+                    # O vídeo já veio; só a legenda falhou.
+                    last_error = None
+                    break
+        if last_error and not list(download_dir.glob("*.mp4")):
+            raise last_error
+
+
         
         # 查找下载的文件
         video_files = list(download_dir.glob("*.mp4"))
         subtitle_files = list(download_dir.glob("*.srt"))
         
         if not video_files:
-            raise Exception("未找到下载的视频文件")
+            raise Exception("O arquivo de vídeo baixado não foi encontrado")
         
         video_path = str(video_files[0])
         subtitle_path = str(subtitle_files[0]) if subtitle_files else ""
@@ -499,8 +567,18 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                     logger.error(f"备用字幕获取也失败: {backup_error}")
                     subtitle_path = None  # 确保字幕路径为空，后续会标记项目失败
             except Exception as e:
-                logger.error(f"生成字幕过程中发生未知错误: {e}")
-                subtitle_path = None  # 确保字幕路径为空，后续会标记项目失败
+                logger.error(f"Falha inesperada ao gerar a legenda: {e}")
+                # Tenta as legendas públicas da plataforma antes de desistir
+                try:
+                    subtitle_path = await _try_youtube_subtitle_strategies(request.url, download_dir, None)
+                    if subtitle_path:
+                        logger.info(f"备用字幕获取成功: {subtitle_path}")
+                    else:
+                        subtitle_path = None
+                except Exception as backup_error:
+                    logger.error(f"备用字幕获取也失败: {backup_error}")
+                    subtitle_path = None
+
         
         logger.info(f"下载完成 - 视频文件: {video_path}, 字幕文件: {subtitle_path}")
         
@@ -546,7 +624,7 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             
             # 移动视频文件到项目目录
             import shutil
-            from pathlib import Path
+
             
             if video_path:
                 video_file_path = Path(video_path)
@@ -584,18 +662,18 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                 project.status = ProjectStatus.FAILED
                 if not project.processing_config:
                     project.processing_config = {}
-                project.processing_config["error_message"] = "字幕文件不存在且Whisper生成失败"
+                project.processing_config["error_message"] = "Não foi possível obter nem gerar a legenda do vídeo"
                 db.commit()
                 
                 # 更新任务状态为失败
                 download_tasks[task_id].status = "failed"
-                download_tasks[task_id].error_message = "字幕文件不存在且Whisper生成失败"
+                download_tasks[task_id].error_message = "Não foi possível obter nem gerar a legenda do vídeo"
                 download_tasks[task_id].progress = 0.0
                 download_tasks[task_id].project_id = str(project.id)
                 download_tasks[task_id].updated_at = datetime.now().isoformat()
                 
                 # 更新项目下载进度为失败
-                await update_project_download_progress(project_id, 0.0, "下载失败：字幕文件不存在")
+                await update_project_download_progress(project_id, 0.0, "Falha na importação: não foi possível obter a legenda")
                 
                 logger.info(f"YouTube下载任务失败: {task_id}, 项目ID: {project.id}, 原因: 字幕文件不存在")
                 return
