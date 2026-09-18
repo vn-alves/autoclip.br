@@ -795,9 +795,22 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
     except Exception as e:
         logger.error(f"处理下载任务失败: {str(e)}")
         download_tasks[task_id].status = "failed"
-        download_tasks[task_id].error_message = str(e)
+        download_tasks[task_id].error_message = _friendly_yt_error(e)
         download_tasks[task_id].progress = 0.0
         download_tasks[task_id].updated_at = datetime.now().isoformat()
+
+        # Marca o projeto como falho para a importação não ficar "importando" para sempre
+        try:
+            from backend.core.database import SessionLocal
+            from backend.services.project_service import ProjectService
+            db_fail = SessionLocal()
+            try:
+                ProjectService(db_fail).update_project_status(project_id, "failed")
+            finally:
+                db_fail.close()
+        except Exception as status_error:
+            logger.error(f"Não foi possível marcar o projeto como falho: {status_error}")
+
 
 
 async def _try_youtube_subtitle_strategies(url: str, download_dir: Path, browser: Optional[str] = None) -> str:
