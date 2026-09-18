@@ -543,6 +543,10 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         no_subs['writeautomaticsub'] = False
         attempts.append(no_subs)
 
+        # Quando o YouTube pede verificação, tenta clientes alternativos
+        for fallback in YT_CLIENT_FALLBACKS:
+            attempts.append(_with_client(no_subs, fallback))
+
         last_error = None
         for index, attempt_opts in enumerate(attempts):
             try:
@@ -557,7 +561,8 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                     last_error = None
                     break
         if last_error and not list(download_dir.glob("*.mp4")):
-            raise last_error
+            raise Exception(_friendly_yt_error(last_error))
+
 
 
         
