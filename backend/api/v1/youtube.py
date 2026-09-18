@@ -51,6 +51,38 @@ def _drop_browser_cookies(ydl_opts: dict) -> None:
     ydl_opts.pop('cookiesfrombrowser', None)
 
 
+# Clientes alternativos usados quando o YouTube pede verificação ("não sou um robô")
+YT_CLIENT_FALLBACKS = ['web_safari', 'tv', 'android_vr', 'ios', 'mweb']
+
+
+def _is_bot_check_error(error: Exception) -> bool:
+    text = str(error).lower()
+    return (
+        'confirm you' in text
+        or 'sign in to confirm' in text
+        or 'not a bot' in text
+        or 'needs to be reloaded' in text
+        or 'requested format is not available' in text
+    )
+
+
+def _friendly_yt_error(error: Exception) -> str:
+    if _is_bot_check_error(error):
+        return (
+            "O YouTube está pedindo verificação para este vídeo a partir deste servidor. "
+            "Tente novamente em alguns minutos ou importe o arquivo de vídeo direto do seu computador."
+        )
+    return str(error)
+
+
+def _with_client(ydl_opts: dict, client: str) -> dict:
+    opts = dict(ydl_opts)
+    opts['extractor_args'] = {'youtube': {'player_client': [client]}}
+    return opts
+
+
+
+
 
 @contextmanager
 def sanitized_yt_env():
