@@ -13,6 +13,7 @@ from backend.pipeline.step3_scoring import run_step3_scoring
 from backend.pipeline.step4_title import run_step4_title
 from backend.pipeline.step5_clustering import run_step5_clustering
 from backend.pipeline.step6_video import run_step6_video
+from backend.pipeline.fallback_clips import build_fallback_clips
 
 logger = logging.getLogger(__name__)
 
@@ -240,21 +241,36 @@ class SimplePipelineAdapter:
                     metadata_dir=str(metadata_dir)
                 )
             else:
-                logger.warning("没有大纲数据，跳过标题生成、主题聚类和视频切割")
-                # 创建空的标题和合集文件
+                logger.warning("A análise de IA não produziu resultados; criando cortes a partir das legendas")
+                # A falha de uma chave/modelo não pode concluir o projeto com zero cortes.
+                # Use as marcações das legendas para produzir cortes equilibrados e válidos.
+                from backend.utils.text_processor import TextProcessor
                 titles_file = metadata_dir / "step4_titles.json"
                 collections_file = metadata_dir / "step5_collections.json"
                 import json
+                subtitle_source = Path(input_srt_path) if input_srt_path else None
+                srt_entries = TextProcessor.parse_srt(subtitle_source) if subtitle_source and subtitle_source.exists() else []
+                titled_clips = build_fallback_clips(srt_entries)
+                if not titled_clips:
+                    raise RuntimeError("Não foi possível criar cortes: as legendas estão vazias ou inválidas")
                 with open(titles_file, 'w', encoding='utf-8') as f:
-                    json.dump([], f, ensure_ascii=False, indent=2)
+                    json.dump(titled_clips, f, ensure_ascii=False, indent=2)
                 with open(collections_file, 'w', encoding='utf-8') as f:
                     json.dump([], f, ensure_ascii=False, indent=2)
-                # 初始化空变量
-                titled_clips = []
                 collections = []
                 emit_progress(self.project_id, "HIGHLIGHT", "片段定位完成", subpercent=100)
                 emit_progress(self.project_id, "EXPORT", "开始视频导出")
-                video_result = {"status": "skipped", "message": "没有内容可处理"}
+                video_result = run_step6_video(
+                    titles_file,
+                    collections_file,
+                    Path(input_video_path),
+                    output_dir=output_dir,
+                    clips_dir=str(clips_output_dir),
+                    collections_dir=str(collections_output_dir),
+                    metadata_dir=str(metadata_dir),
+                )
+                if video_result.get("clips_generated", 0) < 1:
+                    raise RuntimeError("O corte do vídeo falhou; nenhum arquivo foi gerado")
             emit_progress(self.project_id, "EXPORT", "视频导出完成", subpercent=100)
             
             # 阶段6: 处理完成

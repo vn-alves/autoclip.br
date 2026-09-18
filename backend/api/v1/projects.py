@@ -46,7 +46,8 @@ async def upload_files(
     srt_file: Optional[UploadFile] = File(None),
     project_name: str = Form(...),
     video_category: Optional[str] = Form(None),
-    project_service: ProjectService = Depends(get_project_service)
+    project_service: ProjectService = Depends(get_project_service),
+    db: Session = Depends(get_db),
 ):
     """Upload video file and optional subtitle file to create a new project. If no subtitle is provided, Whisper will automatically generate one."""
     try:
@@ -142,9 +143,8 @@ async def upload_files(
                 logger.info(f"项目 {project_id} 异步处理任务已启动，Celery任务ID: {celery_task.id}")
             
         except Exception as e:
-            logger.error(f"启动项目 {project_id} 异步处理失败: {str(e)}")
-            # 即使异步任务启动失败，也要返回项目创建成功
-            # 用户可以通过重试按钮重新启动处理
+            logger.error(f"Falha ao iniciar o processamento do projeto {project_id}: {str(e)}", exc_info=True)
+            project_service.update_project_status(project_id, "failed")
         
         # 返回项目响应
         response_data = {
