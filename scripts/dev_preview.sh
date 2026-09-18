@@ -30,10 +30,39 @@ else
   PY="python3"
 fi
 
-# frontend: garante dependencias instaladas
-if [ ! -x "$ROOT/frontend/node_modules/.bin/vite" ]; then
+# frontend: garante dependencias instaladas E INTEIRAS.
+# O node_modules nao sobrevive a reinicios do ambiente; quando um pacote fica
+# instalado pela metade (ex.: antd sem a pasta dist) o Vite devolve 500 e a tela
+# fica em branco. Aqui validamos os arquivos de entrada e reparamos antes de subir.
+frontend_deps_ok() {
+  [ -x "$ROOT/frontend/node_modules/.bin/vite" ] || return 1
+  [ -f "$ROOT/frontend/node_modules/antd/dist/antd.js" ] || return 1
+  [ -d "$ROOT/frontend/node_modules/antd/es" ] || return 1
+  [ -f "$ROOT/frontend/node_modules/react/index.js" ] || return 1
+  [ -f "$ROOT/frontend/node_modules/react-dom/index.js" ] || return 1
+  [ -d "$ROOT/frontend/node_modules/react-router-dom" ] || return 1
+  return 0
+}
+
+for attempt in 1 2 3; do
+  frontend_deps_ok && break
+  echo "[dev] dependencias do frontend incompletas (tentativa $attempt), instalando..."
   npm --prefix frontend install --no-audit --no-fund >> data/logs/setup.log 2>&1 || true
+  if ! frontend_deps_ok && [ "$attempt" -ge 2 ]; then
+    rm -rf "$ROOT/frontend/node_modules/antd"
+    npm --prefix frontend install antd@5.27.4 --no-audit --no-fund >> data/logs/setup.log 2>&1 || true
+  fi
+done
+
+if ! frontend_deps_ok; then
+  echo "[dev] aviso: dependencias do frontend seguem incompletas, veja data/logs/setup.log"
 fi
+
+# limpa o cache do Vite quando ele aponta para modulos que nao existem mais
+if [ -d "$ROOT/frontend/node_modules/.vite" ] && ! frontend_deps_ok; then
+  rm -rf "$ROOT/frontend/node_modules/.vite"
+fi
+
 
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-8080}"
