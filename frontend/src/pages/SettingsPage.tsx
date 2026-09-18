@@ -138,6 +138,16 @@ const SettingsPage: React.FC = () => {
       if (cloud) {
         applySettings(cloud)
         saveBrowserSettings(cloud)
+        // O processamento roda no servidor local. Ao entrar em outro navegador,
+        // copie para ele as configurações recuperadas da conta antes de importar.
+        const serverAvailable = await withTimeout(canSaveSettings(), 4000, 'O servidor local demorou para responder').catch(() => false)
+        if (serverAvailable) {
+          await withTimeout(
+            settingsApi.updateSettings(cloud),
+            6000,
+            'O servidor local demorou para sincronizar as configurações',
+          ).catch((err) => console.warn('Falha ao sincronizar configurações da conta com o servidor local:', err))
+        }
         return
       }
       const serverAvailable = await canSaveSettings()
