@@ -2,6 +2,7 @@
   "scripts": {
     "dev": "bash scripts/dev_preview.sh",
     "frontend:install": "npm --prefix frontend install --no-audit --no-fund",
+    "postinstall": "npm --prefix frontend install --no-audit --no-fund",
     "build": "npm run frontend:install && npm --prefix frontend run build",
     "build:dev": "npm run frontend:install && npm --prefix frontend run build",
     "typecheck": "npm run frontend:install && npm --prefix frontend run typecheck",
