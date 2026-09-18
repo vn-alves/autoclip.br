@@ -155,7 +155,7 @@ async def parse_youtube_video(
         import json
         import asyncio
         
-        def extract_info_sync(url, browser):
+        def extract_info_sync(url, browser, client_override=None):
             # 用当前解释器的 yt_dlp 模块，保证与后端运行环境（venv / Docker / 桌面便携 Python）一致
             cmd = [
                 sys.executable, '-m', 'yt_dlp',
@@ -170,10 +170,11 @@ async def parse_youtube_video(
             if browser:
                 cmd.extend(['--cookies-from-browser', browser.lower()])
 
-            # 可选兜底客户端，规避 SABR
-            yt_client = (client or os.getenv('AUTOCLIP_YT_CLIENT', '')).strip().lower()
-            if yt_client in {"android", "ios", "tv"}:
+            # 可选兜底客户端，规避 SABR / 机器人验证
+            yt_client = (client_override or client or os.getenv('AUTOCLIP_YT_CLIENT', '')).strip().lower()
+            if yt_client:
                 cmd.extend(['--extractor-args', f"youtube:player_client={yt_client}"])
+
             
             cmd.append(url)
             
