@@ -302,15 +302,37 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
                     return ydl.extract_info(url, download=False)
         
         loop = asyncio.get_event_loop()
+        video_info = None
+        info_error = None
         try:
             video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
         except Exception as e:
+            info_error = e
             if request.browser and _is_cookie_error(e):
                 logger.warning(f"Cookies do navegador {request.browser} indisponíveis no servidor, seguindo sem cookies: {e}")
                 _drop_browser_cookies(ydl_opts)
-                video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
-            else:
-                raise
+                try:
+                    video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
+                    info_error = None
+                except Exception as retry_error:
+                    info_error = retry_error
+
+        if video_info is None and info_error is not None:
+            if not _is_bot_check_error(info_error):
+                raise Exception(_friendly_yt_error(info_error))
+            for fallback in YT_CLIENT_FALLBACKS:
+                try:
+                    logger.warning(f"YouTube pediu verificação, tentando cliente alternativo: {fallback}")
+                    video_info = await loop.run_in_executor(
+                        None, extract_info_sync, request.url, _with_client(ydl_opts, fallback)
+                    )
+                    info_error = None
+                    break
+                except Exception as fallback_error:
+                    info_error = fallback_error
+            if info_error:
+                raise Exception(_friendly_yt_error(info_error))
+
 
         
         # 立即创建项目记录
