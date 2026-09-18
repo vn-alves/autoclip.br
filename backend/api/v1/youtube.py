@@ -221,9 +221,30 @@ async def parse_youtube_video(
         except Exception as e:
             if browser and _is_cookie_error(e):
                 logger.warning(f"Cookies do navegador {browser} indisponíveis no servidor, tentando sem cookies: {e}")
-                info_dict = await loop.run_in_executor(None, extract_info_sync, url, None)
+                try:
+                    info_dict = await loop.run_in_executor(None, extract_info_sync, url, None)
+                except Exception as retry_error:
+                    e = retry_error
+                    info_dict = None
             else:
-                raise
+                info_dict = None
+
+            if info_dict is None:
+                if not _is_bot_check_error(e):
+                    raise
+                # O YouTube pediu verificação: tenta os clientes alternativos
+                last_error = e
+                for fallback in YT_CLIENT_FALLBACKS:
+                    try:
+                        logger.warning(f"YouTube pediu verificação, tentando cliente alternativo: {fallback}")
+                        info_dict = await loop.run_in_executor(None, extract_info_sync, url, None, fallback)
+                        last_error = None
+                        break
+                    except Exception as fallback_error:
+                        last_error = fallback_error
+                if last_error:
+                    raise Exception(_friendly_yt_error(last_error))
+
         
         logger.info(f"YouTube视频信息解析成功: {info_dict.get('title', 'Unknown')}")
         
