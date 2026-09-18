@@ -75,7 +75,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), autoclipBackend()],
     base: isProduction ? './' : '/', // 生产环境使用相对路径
     optimizeDeps: {
-      include: ['@tauri-apps/api', '@tauri-apps/api/dialog']
+      // '@tauri-apps/api/dialog' nao existe no Tauri v2 e fazia o pre-bundle falhar
+      include: ['@tauri-apps/api']
     },
     build: {
       outDir: fileURLToPath(new URL('../dist', import.meta.url)),
