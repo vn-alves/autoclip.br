@@ -51,6 +51,38 @@ def _drop_browser_cookies(ydl_opts: dict) -> None:
     ydl_opts.pop('cookiesfrombrowser', None)
 
 
+# Clientes alternativos usados quando o YouTube pede verificação ("não sou um robô")
+YT_CLIENT_FALLBACKS = ['web_safari', 'tv', 'android_vr', 'ios', 'mweb']
+
+
+def _is_bot_check_error(error: Exception) -> bool:
+    text = str(error).lower()
+    return (
+        'confirm you' in text
+        or 'sign in to confirm' in text
+        or 'not a bot' in text
+        or 'needs to be reloaded' in text
+        or 'requested format is not available' in text
+    )
+
+
+def _friendly_yt_error(error: Exception) -> str:
+    if _is_bot_check_error(error):
+        return (
+            "O YouTube está pedindo verificação para este vídeo a partir deste servidor. "
+            "Tente novamente em alguns minutos ou importe o arquivo de vídeo direto do seu computador."
+        )
+    return str(error)
+
+
+def _with_client(ydl_opts: dict, client: str) -> dict:
+    opts = dict(ydl_opts)
+    opts['extractor_args'] = {'youtube': {'player_client': [client]}}
+    return opts
+
+
+
+
 
 @contextmanager
 def sanitized_yt_env():
@@ -123,7 +155,7 @@ async def parse_youtube_video(
         import json
         import asyncio
         
-        def extract_info_sync(url, browser):
+        def extract_info_sync(url, browser, client_override=None):
             # 用当前解释器的 yt_dlp 模块，保证与后端运行环境（venv / Docker / 桌面便携 Python）一致
             cmd = [
                 sys.executable, '-m', 'yt_dlp',
@@ -138,10 +170,11 @@ async def parse_youtube_video(
             if browser:
                 cmd.extend(['--cookies-from-browser', browser.lower()])
 
-            # 可选兜底客户端，规避 SABR
-            yt_client = (client or os.getenv('AUTOCLIP_YT_CLIENT', '')).strip().lower()
-            if yt_client in {"android", "ios", "tv"}:
+            # 可选兜底客户端，规避 SABR / 机器人验证
+            yt_client = (client_override or client or os.getenv('AUTOCLIP_YT_CLIENT', '')).strip().lower()
+            if yt_client:
                 cmd.extend(['--extractor-args', f"youtube:player_client={yt_client}"])
+
             
             cmd.append(url)
             
@@ -188,9 +221,30 @@ async def parse_youtube_video(
         except Exception as e:
             if browser and _is_cookie_error(e):
                 logger.warning(f"Cookies do navegador {browser} indisponíveis no servidor, tentando sem cookies: {e}")
-                info_dict = await loop.run_in_executor(None, extract_info_sync, url, None)
+                try:
+                    info_dict = await loop.run_in_executor(None, extract_info_sync, url, None)
+                except Exception as retry_error:
+                    e = retry_error
+                    info_dict = None
             else:
-                raise
+                info_dict = None
+
+            if info_dict is None:
+                if not _is_bot_check_error(e):
+                    raise
+                # O YouTube pediu verificação: tenta os clientes alternativos
+                last_error = e
+                for fallback in YT_CLIENT_FALLBACKS:
+                    try:
+                        logger.warning(f"YouTube pediu verificação, tentando cliente alternativo: {fallback}")
+                        info_dict = await loop.run_in_executor(None, extract_info_sync, url, None, fallback)
+                        last_error = None
+                        break
+                    except Exception as fallback_error:
+                        last_error = fallback_error
+                if last_error:
+                    raise Exception(_friendly_yt_error(last_error))
+
         
         logger.info(f"YouTube视频信息解析成功: {info_dict.get('title', 'Unknown')}")
         
@@ -248,15 +302,37 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
                     return ydl.extract_info(url, download=False)
         
         loop = asyncio.get_event_loop()
+        video_info = None
+        info_error = None
         try:
             video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
         except Exception as e:
+            info_error = e
             if request.browser and _is_cookie_error(e):
                 logger.warning(f"Cookies do navegador {request.browser} indisponíveis no servidor, seguindo sem cookies: {e}")
                 _drop_browser_cookies(ydl_opts)
-                video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
-            else:
-                raise
+                try:
+                    video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
+                    info_error = None
+                except Exception as retry_error:
+                    info_error = retry_error
+
+        if video_info is None and info_error is not None:
+            if not _is_bot_check_error(info_error):
+                raise Exception(_friendly_yt_error(info_error))
+            for fallback in YT_CLIENT_FALLBACKS:
+                try:
+                    logger.warning(f"YouTube pediu verificação, tentando cliente alternativo: {fallback}")
+                    video_info = await loop.run_in_executor(
+                        None, extract_info_sync, request.url, _with_client(ydl_opts, fallback)
+                    )
+                    info_error = None
+                    break
+                except Exception as fallback_error:
+                    info_error = fallback_error
+            if info_error:
+                raise Exception(_friendly_yt_error(info_error))
+
 
         
         # 立即创建项目记录
@@ -489,6 +565,10 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         no_subs['writeautomaticsub'] = False
         attempts.append(no_subs)
 
+        # Quando o YouTube pede verificação, tenta clientes alternativos
+        for fallback in YT_CLIENT_FALLBACKS:
+            attempts.append(_with_client(no_subs, fallback))
+
         last_error = None
         for index, attempt_opts in enumerate(attempts):
             try:
@@ -503,7 +583,8 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                     last_error = None
                     break
         if last_error and not list(download_dir.glob("*.mp4")):
-            raise last_error
+            raise Exception(_friendly_yt_error(last_error))
+
 
 
         
@@ -736,9 +817,22 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
     except Exception as e:
         logger.error(f"处理下载任务失败: {str(e)}")
         download_tasks[task_id].status = "failed"
-        download_tasks[task_id].error_message = str(e)
+        download_tasks[task_id].error_message = _friendly_yt_error(e)
         download_tasks[task_id].progress = 0.0
         download_tasks[task_id].updated_at = datetime.now().isoformat()
+
+        # Marca o projeto como falho para a importação não ficar "importando" para sempre
+        try:
+            from backend.core.database import SessionLocal
+            from backend.services.project_service import ProjectService
+            db_fail = SessionLocal()
+            try:
+                ProjectService(db_fail).update_project_status(project_id, "failed")
+            finally:
+                db_fail.close()
+        except Exception as status_error:
+            logger.error(f"Não foi possível marcar o projeto como falho: {status_error}")
+
 
 
 async def _try_youtube_subtitle_strategies(url: str, download_dir: Path, browser: Optional[str] = None) -> str:
