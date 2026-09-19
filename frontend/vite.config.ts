@@ -99,6 +99,8 @@ export default defineConfig(({ mode }) => {
     },
     // As variáveis do Cloud (VITE_SUPABASE_*) vivem no .env da raiz do projeto.
     envDir: ROOT,
+    // O .env não é publicado, então garantimos os valores públicos do Cloud no build.
+    define: cloudDefines(mode),
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
