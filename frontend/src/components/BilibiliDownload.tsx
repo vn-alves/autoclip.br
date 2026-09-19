@@ -406,10 +406,15 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
                   <Select.Option value="edge">Edge</Select.Option>
                 </Select>
                 <Text style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '12px', marginTop: '8px', display: 'block' }}>
-                  Usa o seu login do navegador para pegar legendas restritas. Só funciona no aplicativo instalado no seu computador; na versão web a importação continua normalmente com as legendas públicas.
+                  Usa o seu login do navegador para pegar legendas restritas. Só funciona no aplicativo instalado no seu computador; na versão web use o envio de cookies abaixo.
                 </Text>
 
               </div>
+
+              {getVideoType(url) === 'youtube' && (
+                <YouTubeCookiesPanel disabled={downloading} />
+              )}
+
               
               <div>
                 <Text style={{ color: '#ffffff', marginBottom: '12px', display: 'block', fontSize: '16px', fontWeight: 500 }}>Classificação de Vídeo</Text>
