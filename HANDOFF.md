@@ -176,7 +176,7 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - CLI / MCP：`backend/cli.py`、`backend/mcp_server.py`，共用 `backend/services/local_runner.py`（环境 / LLM 覆盖 / 项目准备 / 跑流水线 / 结果汇总）；进度监听 `services/simple_progress.py#add_progress_listener`；打包 `pyproject.toml`；Agent skill `skills/autoclip/SKILL.md`；文档 `docs/CLI_AND_MCP.md`
 - 出片质量：`backend/pipeline/quality.py`（时长画像 / refine / 评分兜底），接入 step1–3；回归 `backend/eval/`；方案 `docs/QUALITY_AND_PUBLISH_PLAN.md`
 - 发布导出：`backend/services/publish_export.py`；API `POST /projects/{id}/clips/{id}/export`；CLI `autoclip export`；MCP `export_clip`；前端 `ClipCard` Dialog
-- YouTube 导入：`backend/api/v1/youtube.py`（`AUTOCLIP_YT_SUBTITLE_LANGS`、`AUTOCLIP_YT_CLIENT`）
+- YouTube 导入：`backend/api/v1/youtube.py`（`AUTOCLIP_YT_SUBTITLE_LANGS`、`AUTOCLIP_YT_CLIENT`、`AUTOCLIP_YT_COOKIES_FILE` 指向导出的 cookies.txt，无浏览器的服务器上绕过 "sign in to confirm you're not a bot"）
 - Whisper 运行时（按需安装）：`backend/services/whisper_runtime.py`、`whisper_model_manager.py`、
   前端 `frontend/src/components/SpeechRecognitionConfig.tsx`
 - 前端 UI 原语（`DESIGN.md` App Layer）：`frontend/src/ui/index.tsx` + `ui/ac.css`；已迁移页面：`pages/ProjectDetailPage.tsx`、`pages/SettingsPage.tsx`、`components/ClipCard.tsx`、`CollectionCard.tsx`、`SpeechRecognitionConfig.tsx`

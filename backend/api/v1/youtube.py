@@ -49,6 +49,29 @@ def _is_subtitle_error(error: Exception) -> bool:
 
 def _drop_browser_cookies(ydl_opts: dict) -> None:
     ydl_opts.pop('cookiesfrombrowser', None)
+    ydl_opts.pop('cookiefile', None)
+
+
+def get_cookies_file() -> Optional[str]:
+    """Cookies exportados (formato Netscape) de uma conta logada do YouTube.
+
+    Em servidor sem navegador instalado/logado, 'cookiesfrombrowser' não
+    funciona. Um arquivo cookies.txt apontado por AUTOCLIP_YT_COOKIES_FILE
+    é a forma confiável de evitar o bloqueio "sign in to confirm you're not
+    a bot" nesse cenário.
+    """
+    path = os.getenv('AUTOCLIP_YT_COOKIES_FILE', '').strip()
+    if path and os.path.isfile(path):
+        return path
+    return None
+
+
+def _apply_cookies(ydl_opts: dict, browser: Optional[str] = None) -> None:
+    cookies_file = get_cookies_file()
+    if cookies_file:
+        ydl_opts['cookiefile'] = cookies_file
+    elif browser:
+        ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
 
 
 # Clientes alternativos usados quando o YouTube pede verificação ("não sou um robô")
@@ -155,7 +178,7 @@ async def parse_youtube_video(
         import json
         import asyncio
         
-        def extract_info_sync(url, browser, client_override=None):
+        def extract_info_sync(url, browser, client_override=None, skip_cookies=False):
             # 用当前解释器的 yt_dlp 模块，保证与后端运行环境（venv / Docker / 桌面便携 Python）一致
             cmd = [
                 sys.executable, '-m', 'yt_dlp',
@@ -166,8 +189,11 @@ async def parse_youtube_video(
                 '--skip-download',  # 修正参数名
                 '--no-cache-dir'
             ]
-            
-            if browser:
+
+            cookies_file = None if skip_cookies else get_cookies_file()
+            if cookies_file:
+                cmd.extend(['--cookies', cookies_file])
+            elif browser and not skip_cookies:
                 cmd.extend(['--cookies-from-browser', browser.lower()])
 
             # 可选兜底客户端，规避 SABR / 机器人验证
@@ -219,10 +245,10 @@ async def parse_youtube_video(
         try:
             info_dict = await loop.run_in_executor(None, extract_info_sync, url, browser)
         except Exception as e:
-            if browser and _is_cookie_error(e):
-                logger.warning(f"Cookies do navegador {browser} indisponíveis no servidor, tentando sem cookies: {e}")
+            if (browser or get_cookies_file()) and _is_cookie_error(e):
+                logger.warning(f"Cookies indisponíveis/inválidos no servidor, tentando sem cookies: {e}")
                 try:
-                    info_dict = await loop.run_in_executor(None, extract_info_sync, url, None)
+                    info_dict = await loop.run_in_executor(None, extract_info_sync, url, None, None, True)
                 except Exception as retry_error:
                     e = retry_error
                     info_dict = None
@@ -288,14 +314,13 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
             'cachedir': False,
         }
         
-        if request.browser:
-            ydl_opts['cookiesfrombrowser'] = (request.browser.lower(),)
+        _apply_cookies(ydl_opts, request.browser)
 
         # 可选兜底客户端
         yt_client_env = os.getenv('AUTOCLIP_YT_CLIENT', '').strip().lower()
         if yt_client_env in {"android", "ios", "tv"}:
             ydl_opts.setdefault('extractor_args', {}).setdefault('youtube', {}).setdefault('player_client', []).append(yt_client_env)
-        
+
         def extract_info_sync(url, ydl_opts):
             with sanitized_yt_env():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -308,8 +333,8 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
             video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
         except Exception as e:
             info_error = e
-            if request.browser and _is_cookie_error(e):
-                logger.warning(f"Cookies do navegador {request.browser} indisponíveis no servidor, seguindo sem cookies: {e}")
+            if (request.browser or 'cookiefile' in ydl_opts) and _is_cookie_error(e):
+                logger.warning(f"Cookies indisponíveis/inválidos no servidor, seguindo sem cookies: {e}")
                 _drop_browser_cookies(ydl_opts)
                 try:
                     video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
@@ -538,25 +563,24 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             'cachedir': False,
         }
         
-        if request.browser:
-            ydl_opts['cookiesfrombrowser'] = (request.browser.lower(),)
+        _apply_cookies(ydl_opts, request.browser)
 
         # 可选兜底客户端
         yt_client_env = os.getenv('AUTOCLIP_YT_CLIENT', '').strip().lower()
         if yt_client_env in {"android", "ios", "tv"}:
             ydl_opts.setdefault('extractor_args', {}).setdefault('youtube', {}).setdefault('player_client', []).append(yt_client_env)
-        
+
         def download_sync(url, ydl_opts):
             with sanitized_yt_env():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     return ydl.download([url])
-        
+
         loop = asyncio.get_event_loop()
 
         # O servidor pode não ter navegador instalado e as legendas do YouTube podem falhar (HTTP 429).
         # Nenhuma dessas situações deve impedir o download do vídeo: a legenda é gerada depois.
         attempts = [dict(ydl_opts)]
-        if 'cookiesfrombrowser' in ydl_opts:
+        if 'cookiesfrombrowser' in ydl_opts or 'cookiefile' in ydl_opts:
             without_cookies = dict(ydl_opts)
             _drop_browser_cookies(without_cookies)
             attempts.append(without_cookies)
@@ -879,8 +903,7 @@ async def _try_download_with_different_formats(url: str, download_dir: Path, bro
                 'config_locations': [],
             }
             
-            if browser:
-                ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
+            _apply_cookies(ydl_opts, browser)
             
             def download_sync(url, ydl_opts):
                 with sanitized_yt_env():
@@ -938,8 +961,7 @@ async def _try_download_with_different_langs(url: str, download_dir: Path, brows
                 'config_locations': [],
             }
             
-            if browser:
-                ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
+            _apply_cookies(ydl_opts, browser)
             
             def download_sync(url, ydl_opts):
                 with sanitized_yt_env():
@@ -974,9 +996,8 @@ async def _try_extract_from_metadata(url: str, download_dir: Path, browser: Opti
             'config_locations': [],
         }
         
-        if browser:
-            ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
-        
+        _apply_cookies(ydl_opts, browser)
+
         def extract_info_sync(url, ydl_opts):
             with sanitized_yt_env():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
