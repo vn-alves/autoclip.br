@@ -74,7 +74,7 @@ function autoclipBackend(): Plugin {
  * públicos do projeto (publicáveis por definição).
  */
 const CLOUD_FALLBACKS: Record<string, string> = {
-  VITE_SUPABASE_URL: 'https://alozbqulvxqgsczqhilb.supabase.co',
+  VITE_SUPABASE_URL: 'https://c--452a92cf-a065-4be8-bc25-8c08c9c76b44-prod.lovable.cloud',
   VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_qsF5iYUZ1BDt3nH34QfJBQ_Z05qjiBC',
   VITE_SUPABASE_PROJECT_ID: 'alozbqulvxqgsczqhilb',
 }
