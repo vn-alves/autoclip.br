@@ -160,6 +160,47 @@ class YouTubeDownloadTask(BaseModel):
     created_at: str
     updated_at: str
 
+
+@router.get("/cookies")
+async def get_youtube_cookies_status():
+    """Situação atual dos cookies do YouTube usados no download."""
+    return {"success": True, **cookies_status()}
+
+
+@router.post("/cookies")
+async def upload_youtube_cookies(
+    file: Optional[UploadFile] = File(None),
+    content: Optional[str] = Form(None),
+):
+    """Recebe um cookies.txt (Netscape) exportado de uma conta logada do YouTube."""
+    text = content or ''
+    if file is not None:
+        raw = await file.read()
+        if len(raw) > 2 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="O arquivo de cookies é muito grande (máximo 2 MB).")
+        text = raw.decode('utf-8', errors='ignore')
+
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Envie o arquivo cookies.txt ou cole o conteúdo dele.")
+
+    ok, detail = save_cookies_text(text)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+
+    return {"success": True, "message": detail, **cookies_status()}
+
+
+@router.delete("/cookies")
+async def delete_youtube_cookies():
+    """Remove os cookies salvos do YouTube."""
+    removed = delete_cookies()
+    return {
+        "success": True,
+        "message": "Cookies removidos." if removed else "Não havia cookies salvos.",
+        **cookies_status(),
+    }
+
+
 @router.post("/parse")
 async def parse_youtube_video(
     url: str = Form(...),
