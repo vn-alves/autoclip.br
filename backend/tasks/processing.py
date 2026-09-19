@@ -202,7 +202,7 @@ def process_video_pipeline(
                 _active_pipeline_projects.discard(project_id)
 
     except Exception as e:
-        error_msg = f"视频流水线处理失败: {str(e)}"
+        error_msg = f"Falha no processamento: {str(e)}"
         logger.error(error_msg)
 
         # 兜底释放并发锁（正常路径已在内层 finally 释放，这里防止极早期异常泄漏）

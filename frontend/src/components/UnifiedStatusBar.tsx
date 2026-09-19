@@ -112,7 +112,7 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
           setIsPolling(false)
         }
         if (onStatusChange) {
-          onStatusChange(isCompleted(progress.stage) ? 'completed' : 'failed')
+          onStatusChange(isFailed(progress.message) ? 'failed' : 'completed')
         }
       }
     }

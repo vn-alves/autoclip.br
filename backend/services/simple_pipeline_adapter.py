@@ -206,42 +206,61 @@ class SimplePipelineAdapter:
             
             # 阶段4: 片段定位
             emit_progress(self.project_id, "HIGHLIGHT", "开始片段定位")
-            
+
             # Step 4: 标题生成
             logger.info("执行Step 4: 标题生成")
+            titled_clips = None
+            collections = None
+            video_result = None
             if outlines:  # 只有当有大纲时才执行后续步骤
-                titled_clips = run_step4_title(
-                    metadata_dir / "step3_high_score_clips.json",
-                    metadata_dir=str(metadata_dir),
-                    prompt_files=prompt_files,
-                )
-                emit_progress(self.project_id, "HIGHLIGHT", "标题生成完成", subpercent=40)
-                
-                # Step 5: 主题聚类
-                logger.info("执行Step 5: 主题聚类")
-                collections = run_step5_clustering(
-                    metadata_dir / "step4_titles.json",
-                    metadata_dir=str(metadata_dir),
-                    prompt_files=prompt_files,
-                )
-                emit_progress(self.project_id, "HIGHLIGHT", "片段定位完成", subpercent=100)
-                
-                # 阶段5: 视频导出
-                emit_progress(self.project_id, "EXPORT", "开始视频导出")
-                
-                # Step 6: 视频切割
-                logger.info("执行Step 6: 视频切割")
-                video_result = run_step6_video(
-                    metadata_dir / "step4_titles.json",
-                    metadata_dir / "step5_collections.json",
-                    input_video_path,
-                    output_dir=output_dir,
-                    clips_dir=str(clips_output_dir),
-                    collections_dir=str(collections_output_dir),
-                    metadata_dir=str(metadata_dir)
-                )
-            else:
-                logger.warning("A análise de IA não produziu resultados; criando cortes a partir das legendas")
+                # Qualquer etapa de IA daqui em diante pode falhar (chave inválida,
+                # rate limit, timeout). Isso não pode derrubar o projeto inteiro com
+                # zero cortes - cai no mesmo fallback determinístico usado quando o
+                # Step 1 não produz nenhum outline.
+                try:
+                    titled_clips = run_step4_title(
+                        metadata_dir / "step3_high_score_clips.json",
+                        metadata_dir=str(metadata_dir),
+                        prompt_files=prompt_files,
+                    )
+                    emit_progress(self.project_id, "HIGHLIGHT", "标题生成完成", subpercent=40)
+
+                    # Step 5: 主题聚类
+                    logger.info("执行Step 5: 主题聚类")
+                    collections = run_step5_clustering(
+                        metadata_dir / "step4_titles.json",
+                        metadata_dir=str(metadata_dir),
+                        prompt_files=prompt_files,
+                    )
+                    emit_progress(self.project_id, "HIGHLIGHT", "片段定位完成", subpercent=100)
+
+                    # 阶段5: 视频导出
+                    emit_progress(self.project_id, "EXPORT", "开始视频导出")
+
+                    # Step 6: 视频切割
+                    logger.info("执行Step 6: 视频切割")
+                    video_result = run_step6_video(
+                        metadata_dir / "step4_titles.json",
+                        metadata_dir / "step5_collections.json",
+                        input_video_path,
+                        output_dir=output_dir,
+                        clips_dir=str(clips_output_dir),
+                        collections_dir=str(collections_output_dir),
+                        metadata_dir=str(metadata_dir)
+                    )
+                    if video_result.get("clips_generated", 0) < 1:
+                        raise RuntimeError("A análise de IA não produziu cortes válidos")
+                except Exception as ai_error:
+                    logger.warning(f"Pipeline de IA falhou depois do Step 1 ({ai_error}); usando fallback a partir das legendas")
+                    titled_clips = None
+                    collections = None
+                    video_result = None
+
+            if titled_clips is None:
+                if outlines:
+                    logger.warning("Fallback determinístico acionado após falha da IA")
+                else:
+                    logger.warning("A análise de IA não produziu resultados; criando cortes a partir das legendas")
                 # A falha de uma chave/modelo não pode concluir o projeto com zero cortes.
                 # Use as marcações das legendas para produzir cortes equilibrados e válidos.
                 from backend.utils.text_processor import TextProcessor
@@ -310,11 +329,11 @@ class SimplePipelineAdapter:
             }
             
         except Exception as e:
-            error_msg = f"流水线处理失败: {str(e)}"
+            error_msg = f"Falha no processamento: {str(e)}"
             logger.error(error_msg)
-            
+
             # 发送失败状态
-            emit_progress(self.project_id, "DONE", f"处理失败: {error_msg}")
+            emit_progress(self.project_id, "DONE", error_msg)
             
             return {
                 "status": "failed",
