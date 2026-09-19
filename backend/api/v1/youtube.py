@@ -52,21 +52,20 @@ def _drop_browser_cookies(ydl_opts: dict) -> None:
     ydl_opts.pop('cookiefile', None)
 
 
-def get_cookies_file() -> Optional[str]:
-    """Cookies exportados (formato Netscape) de uma conta logada do YouTube.
-
-    Em servidor sem navegador instalado/logado, 'cookiesfrombrowser' não
-    funciona. Um arquivo cookies.txt apontado por AUTOCLIP_YT_COOKIES_FILE
-    é a forma confiável de evitar o bloqueio "sign in to confirm you're not
-    a bot" nesse cenário.
-    """
-    path = os.getenv('AUTOCLIP_YT_COOKIES_FILE', '').strip()
-    if path and os.path.isfile(path):
-        return path
-    return None
+from ...utils.yt_cookies import (  # noqa: E402
+    cookies_status,
+    delete_cookies,
+    get_cookies_file,
+    save_cookies_text,
+)
 
 
 def _apply_cookies(ydl_opts: dict, browser: Optional[str] = None) -> None:
+    """Cookies do YouTube: arquivo cookies.txt tem prioridade sobre o navegador.
+
+    Em servidor sem navegador logado, 'cookiesfrombrowser' nunca funciona;
+    o cookies.txt enviado pelo usuário é o caminho confiável.
+    """
     cookies_file = get_cookies_file()
     if cookies_file:
         ydl_opts['cookiefile'] = cookies_file
@@ -91,11 +90,19 @@ def _is_bot_check_error(error: Exception) -> bool:
 
 def _friendly_yt_error(error: Exception) -> str:
     if _is_bot_check_error(error):
+        if get_cookies_file():
+            return (
+                "O YouTube recusou este vídeo mesmo usando os cookies enviados. "
+                "Eles podem ter expirado: exporte um cookies.txt novo (estando logado no YouTube) "
+                "e envie de novo, ou importe o arquivo de vídeo direto do seu computador."
+            )
         return (
             "O YouTube está pedindo verificação para este vídeo a partir deste servidor. "
-            "Tente novamente em alguns minutos ou importe o arquivo de vídeo direto do seu computador."
+            "Envie um arquivo cookies.txt de uma conta logada do YouTube na tela de importação "
+            "para liberar o download, ou importe o arquivo de vídeo direto do seu computador."
         )
     return str(error)
+
 
 
 def _with_client(ydl_opts: dict, client: str) -> dict:
@@ -152,6 +159,47 @@ class YouTubeDownloadTask(BaseModel):
     project_id: Optional[str] = None
     created_at: str
     updated_at: str
+
+
+@router.get("/cookies")
+async def get_youtube_cookies_status():
+    """Situação atual dos cookies do YouTube usados no download."""
+    return {"success": True, **cookies_status()}
+
+
+@router.post("/cookies")
+async def upload_youtube_cookies(
+    file: Optional[UploadFile] = File(None),
+    content: Optional[str] = Form(None),
+):
+    """Recebe um cookies.txt (Netscape) exportado de uma conta logada do YouTube."""
+    text = content or ''
+    if file is not None:
+        raw = await file.read()
+        if len(raw) > 2 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="O arquivo de cookies é muito grande (máximo 2 MB).")
+        text = raw.decode('utf-8', errors='ignore')
+
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Envie o arquivo cookies.txt ou cole o conteúdo dele.")
+
+    ok, detail = save_cookies_text(text)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+
+    return {"success": True, "message": detail, **cookies_status()}
+
+
+@router.delete("/cookies")
+async def delete_youtube_cookies():
+    """Remove os cookies salvos do YouTube."""
+    removed = delete_cookies()
+    return {
+        "success": True,
+        "message": "Cookies removidos." if removed else "Não havia cookies salvos.",
+        **cookies_status(),
+    }
+
 
 @router.post("/parse")
 async def parse_youtube_video(

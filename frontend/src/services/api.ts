@@ -666,6 +666,35 @@ export const bilibiliApi = {
   }
 }
 
+export interface YouTubeCookiesStatus {
+  configured: boolean
+  source: 'env' | 'upload' | null
+  updated_at: string | null
+  cookie_count: number
+  has_session_cookie: boolean
+}
+
+// Cookies do YouTube (arquivo cookies.txt de uma conta logada)
+export const youtubeCookiesApi = {
+  getStatus: async (): Promise<YouTubeCookiesStatus> => {
+    return api.get('/youtube/cookies')
+  },
+
+  upload: async (file: File): Promise<YouTubeCookiesStatus & { message: string }> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/youtube/cookies', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  remove: async (): Promise<YouTubeCookiesStatus & { message: string }> => {
+    return api.delete('/youtube/cookies')
+  },
+}
+
+
+
 // APIs relacionadas ao status do sistema
 export const systemApi = {
   // Obter status do sistema
