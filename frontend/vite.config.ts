@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
 import { spawn } from 'node:child_process'
@@ -67,6 +67,28 @@ function autoclipBackend(): Plugin {
   }
 }
 
+/**
+ * O arquivo .env da raiz não vai para o build publicado, então a conexão com o
+ * Cloud ficava sem URL/chave e o login falhava ("indisponível neste endereço").
+ * Aqui resolvemos os valores na ordem: .env → ambiente do build → valores
+ * públicos do projeto (publicáveis por definição).
+ */
+const CLOUD_FALLBACKS: Record<string, string> = {
+  VITE_SUPABASE_URL: 'https://c--452a92cf-a065-4be8-bc25-8c08c9c76b44-prod.lovable.cloud',
+  VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_qsF5iYUZ1BDt3nH34QfJBQ_Z05qjiBC',
+  VITE_SUPABASE_PROJECT_ID: 'alozbqulvxqgsczqhilb',
+}
+
+function cloudDefines(mode: string): Record<string, string> {
+  const fileEnv = loadEnv(mode, ROOT, 'VITE_')
+  const defines: Record<string, string> = {}
+  for (const key of Object.keys(CLOUD_FALLBACKS)) {
+    const value = fileEnv[key] || process.env[key] || CLOUD_FALLBACKS[key]
+    defines[`import.meta.env.${key}`] = JSON.stringify(value)
+  }
+  return defines
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const isProduction = mode === 'production'
@@ -99,6 +121,8 @@ export default defineConfig(({ mode }) => {
     },
     // As variáveis do Cloud (VITE_SUPABASE_*) vivem no .env da raiz do projeto.
     envDir: ROOT,
+    // O .env não é publicado, então garantimos os valores públicos do Cloud no build.
+    define: cloudDefines(mode),
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
