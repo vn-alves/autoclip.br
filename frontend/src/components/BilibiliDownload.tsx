@@ -4,6 +4,8 @@ import { DownloadOutlined } from '@ant-design/icons'
 import { projectApi, bilibiliApi, VideoCategory, BilibiliDownloadTask } from '../services/api'
 import { useProjectStore } from '../store/useProjectStore'
 import { validateApiConfigBeforeProjectCreation } from '../utils/apiConfigCheck'
+import YouTubeCookiesPanel from './YouTubeCookiesPanel'
+
 
 const { Text } = Typography
 
