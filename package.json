@@ -1,11 +1,12 @@
 {
   "scripts": {
     "dev": "bash scripts/dev_preview.sh",
+    "root:install": "npm install --no-audit --no-fund",
     "frontend:install": "npm --prefix frontend install --no-audit --no-fund",
     "postinstall": "npm --prefix frontend install --no-audit --no-fund",
-    "build": "npm run frontend:install && npm --prefix frontend run build",
-    "build:dev": "npm run frontend:install && npm --prefix frontend run build",
-    "typecheck": "npm run frontend:install && npm --prefix frontend run typecheck",
+    "build": "npm run root:install && npm run frontend:install && npm --prefix frontend run build",
+    "build:dev": "npm run root:install && npm run frontend:install && npm --prefix frontend run build",
+    "typecheck": "npm run root:install && npm run frontend:install && npm --prefix frontend run typecheck",
     "backend": "python3 -m uvicorn backend.app_factory:create_app --factory --host 127.0.0.1 --port 8000"
   },
   "dependencies": {

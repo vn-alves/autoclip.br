@@ -47,7 +47,7 @@ services:
       - redis
     command: >
       sh -c "
-        source venv/bin/activate &&
+        . venv/bin/activate &&
         python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload &
         cd frontend && 
         if [ ! -d node_modules ]; then npm install; fi &&
@@ -86,7 +86,7 @@ services:
       - AUTOCLIP_YT_SUBTITLE_LANGS=${AUTOCLIP_YT_SUBTITLE_LANGS:-}
     command: >
       sh -c "
-        source venv/bin/activate &&
+        . venv/bin/activate &&
         celery -A backend.core.celery_app worker --loglevel=debug --reload -Q celery,processing,video,notification,upload
       "
     depends_on:

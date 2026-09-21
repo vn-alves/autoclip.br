@@ -226,6 +226,13 @@ PY
 
 build_frontend() {
     echo "==> Building frontend"
+    # src/integrations/* (aliased as @cloud) lives at the repo root, not under
+    # frontend/. Node/Rollup resolve its bare imports (@lovable.dev/cloud-auth-js,
+    # @supabase/supabase-js) by walking up from that file's own directory, which
+    # never reaches frontend/node_modules - only the repo root's node_modules.
+    # Skipping this install makes the Vite build fail with "Rollup failed to
+    # resolve import" even though frontend/node_modules has everything else.
+    npm ci --silent
     (cd frontend && npm ci --silent && npm run build)
     echo "OK"
 }

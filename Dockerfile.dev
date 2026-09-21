@@ -31,8 +31,9 @@ RUN . venv/bin/activate && pip install -r requirements.txt
 # 复制前端依赖文件
 COPY frontend/package*.json ./frontend/
 
-# 安装前端依赖
-RUN cd frontend && npm install && npm run build
+# 安装前端依赖（开发模式用 vite 实时服务，不在镜像构建阶段打包；
+# index.html/src 此时还没被复制进来，npm run build 会因为找不到入口文件失败）
+RUN cd frontend && npm install
 
 # 复制项目文件
 COPY . .

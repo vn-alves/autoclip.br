@@ -4,7 +4,7 @@
 # 第一阶段：构建前端
 FROM node:18-slim AS frontend-builder
 
-WORKDIR /app/frontend
+WORKDIR /app
 
 # 安装必要的系统依赖
 RUN apt-get update && apt-get install -y \
@@ -13,17 +13,20 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制前端依赖文件
-COPY frontend/package*.json ./
-
-# 安装前端依赖（使用完整安装，包括devDependencies）
+# frontend/src/integrations 通过 vite.config.ts 的 @cloud 别名指向仓库根目录的
+# src/integrations（云端登录 @lovable.dev/cloud-auth-js、@supabase/supabase-js）。
+# Node/Rollup 按该文件自身路径向上查找依赖，只会到达 /app/node_modules，到不了
+# /app/frontend/node_modules；只装 frontend 依赖会导致构建报
+# "Rollup failed to resolve import"。根 package.json 的 postinstall 会级联安装
+# frontend 依赖，所以这里只需要 npm ci 一次。
+COPY package*.json ./
+COPY frontend/package*.json ./frontend/
+COPY src/ ./src/
 RUN npm ci
 
-# 复制前端源代码
-COPY frontend/ ./
-
-# 构建前端
-RUN npm run build
+# 复制前端源代码并构建
+COPY frontend/ ./frontend/
+RUN npm --prefix frontend run build
 
 # 第二阶段：构建后端
 # yt-dlp 已停止支持 Python 3.9（3.9 下 YouTube 提取只能靠 android client 回退，且仅有 360p）
