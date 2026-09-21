@@ -234,7 +234,13 @@ build_frontend() {
     # resolve import" even though frontend/node_modules has everything else.
     # No --silent here: npm's loglevel=silent swallows npm ERR! output too,
     # so a real failure shows nothing but "exit code 1" with no clue why.
-    npm ci
+    #
+    # --ignore-scripts on the root install: root package.json's postinstall
+    # already runs `npm --prefix frontend install`, which duplicates the
+    # frontend install below. Two npm installs racing on the same
+    # frontend/node_modules is what caused Windows to fail with
+    # "EPERM: operation not permitted, rmdir ...node_modules\@opentelemetry\...".
+    npm ci --ignore-scripts
     (cd frontend && npm ci && npm run build)
     echo "OK"
 }
