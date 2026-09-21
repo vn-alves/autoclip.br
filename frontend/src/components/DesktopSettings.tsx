@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { resolveApiUrl } from '../utils/apiConfig';
 import { 
   Card, 
   Tabs, 
@@ -85,7 +86,7 @@ const DesktopSettings: React.FC = () => {
   // Carregar configuração
   const loadConfig = async () => {
     try {
-      const response = await fetch('/api/v1/desktop/config');
+      const response = await fetch(resolveApiUrl('/api/v1/desktop/config'));
       if (response.ok) {
         const data = await response.json();
         setConfig(data.config);
@@ -102,7 +103,7 @@ const DesktopSettings: React.FC = () => {
   // Carregar informações do sistema
   const loadSystemInfo = async () => {
     try {
-      const response = await fetch('/api/v1/desktop/system/info');
+      const response = await fetch(resolveApiUrl('/api/v1/desktop/system/info'));
       if (response.ok) {
         const data = await response.json();
         setSystemInfo(data);
@@ -115,7 +116,7 @@ const DesktopSettings: React.FC = () => {
   // Carregar status do serviço
   const loadServiceStatus = async () => {
     try {
-      const response = await fetch('/api/v1/desktop/service/status');
+      const response = await fetch(resolveApiUrl('/api/v1/desktop/service/status'));
       if (response.ok) {
         const data = await response.json();
         setServiceStatus(data);
@@ -156,7 +157,7 @@ const DesktopSettings: React.FC = () => {
         log_retention_days: values.log_retention_days || 7
       };
 
-      const response = await fetch('/api/v1/desktop/config', {
+      const response = await fetch(resolveApiUrl('/api/v1/desktop/config'), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

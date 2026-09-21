@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Button, Modal, Form, Input, Table, Tag, Space, message, Popconfirm, Tabs, Alert, Typography, Select, Row, Col, Tooltip, Progress, Descriptions, Statistic, Card } from 'antd'
 import { PlusOutlined, DeleteOutlined, UserOutlined, CheckCircleOutlined, CloseCircleOutlined, UploadOutlined, QuestionCircleOutlined, ReloadOutlined, EyeOutlined, RedoOutlined, StopOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import { uploadApi, BilibiliAccount, BILIBILI_PARTITIONS, UploadRecord } from '../services/uploadApi'
+import { resolveApiUrl } from '../utils/apiConfig'
 import './BilibiliManager.css'
 
 const { TextArea } = Input
@@ -191,7 +192,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
       }
 
       // Chamar API de upload
-      const response = await fetch(`/api/v1/upload/projects/${projectId}/upload`, {
+      const response = await fetch(resolveApiUrl(`/api/v1/upload/projects/${projectId}/upload`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

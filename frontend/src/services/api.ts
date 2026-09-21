@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { Project, Clip, Collection } from '../store/useProjectStore'
 import { errorHandler } from '../utils/errorHandler'
-import { apiConfigManager } from '../utils/apiConfig'
+import { apiConfigManager, resolveApiUrl } from '../utils/apiConfig'
 import {
   trackVideoImported,
   trackClipsExported,
@@ -477,7 +477,7 @@ export const projectApi = {
     
     try {
       // Para respostas do tipo blob, é necessário usar axios diretamente, sem passar pelo interceptor
-      const response = await axios.get(`/api/v1${url}`, { 
+      const response = await axios.get(resolveApiUrl(`/api/v1${url}`), {
         responseType: 'blob',
         headers: {
           'Accept': 'application/octet-stream'
@@ -547,13 +547,13 @@ export const projectApi = {
   // Obter URL do vídeo cortado
   getClipVideoUrl: (projectId: string, clipId: string, _clipTitle?: string): string => {
     // Usar a rota projects para obter vídeos fatiados
-    return `/api/v1/projects/${projectId}/clips/${clipId}`
+    return resolveApiUrl(`/api/v1/projects/${projectId}/clips/${clipId}`)
   },
 
   // Obter URL do vídeo da coleção
   getCollectionVideoUrl: (projectId: string, collectionId: string): string => {
     // Usar a rota files para obter vídeos de coleção
-    return `/api/v1/files/projects/${projectId}/collections/${collectionId}`
+    return resolveApiUrl(`/api/v1/files/projects/${projectId}/collections/${collectionId}`)
   },
 
   // Gerar miniatura do projeto
@@ -580,7 +580,7 @@ export const projectApi = {
   },
 
   downloadExport: async (projectId: string, jobId: string) => {
-    const response = await axios.get(`/api/v1/projects/${projectId}/exports/${jobId}/download`, {
+    const response = await axios.get(resolveApiUrl(`/api/v1/projects/${projectId}/exports/${jobId}/download`), {
       responseType: 'blob',
       headers: { Accept: 'application/octet-stream' },
     })

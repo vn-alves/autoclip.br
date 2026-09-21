@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { Progress, Typography } from 'antd'
+import { resolveApiUrl } from '../utils/apiConfig'
 import { useSimpleProgressStore, getStageDisplayName, getStageColor, isCompleted, isFailed } from '../stores/useSimpleProgressStore'
 
 const { Text } = Typography
@@ -67,7 +68,7 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
       const pollDownloadProgress = async () => {
         try {
           console.log(`Verificando progresso do download: ${projectId}`)
-          const response = await fetch(`/api/v1/projects/${projectId}`)
+          const response = await fetch(resolveApiUrl(`/api/v1/projects/${projectId}`))
           if (response.ok) {
             const projectData = await response.json()
             console.log('Dados do projeto:', projectData)

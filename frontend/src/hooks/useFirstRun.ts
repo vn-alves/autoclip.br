@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { resolveApiUrl } from '../utils/apiConfig'
 
 interface FirstRunState {
   isFirstRun: boolean
@@ -27,7 +28,7 @@ export const useFirstRun = () => {
       
       try {
         // Verificar se já existe configuração
-        const response = await fetch('/api/v1/settings/', {
+        const response = await fetch(resolveApiUrl('/api/v1/settings/'), {
           signal: controller.signal
         })
         clearTimeout(timeoutId)

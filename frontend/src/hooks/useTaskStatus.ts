@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { resolveApiUrl } from '../utils/apiConfig';
 import { TaskUpdateMessage, ProjectUpdateMessage } from './useWebSocket';
 
 export interface TaskStatus {
@@ -114,7 +115,7 @@ export const useTaskStatus = () => {
     console.log('📤 Iniciando carregamento de tarefas do projeto:', projectId);
     setLoading(true);
     try {
-      const response = await fetch(`/api/v1/tasks/project/${projectId}`);
+      const response = await fetch(resolveApiUrl(`/api/v1/tasks/project/${projectId}`));
       console.log('📡 Status da resposta da API:', response.status);
       
       if (response.ok) {

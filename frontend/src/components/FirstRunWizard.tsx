@@ -11,6 +11,7 @@ import {
 import { ExternalLink } from '../utils/externalLinks'
 import { settingsApi } from '../services/api'
 import { isDesktopMode } from '../utils/desktopMode'
+import { resolveApiUrl } from '../utils/apiConfig'
 
 const { Title, Text } = Typography
 const { Option } = Select
@@ -281,7 +282,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
         output_format: 'srt'
       }
       
-      const response = await fetch('/api/v1/speech-recognition/config', {
+      const response = await fetch(resolveApiUrl('/api/v1/speech-recognition/config'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(speechConfig)
@@ -305,7 +306,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
 
   const downloadWhisperModel = async (modelName: string) => {
     try {
-      const response = await fetch('/api/v1/speech-recognition/whisper-models/download', {
+      const response = await fetch(resolveApiUrl('/api/v1/speech-recognition/whisper-models/download'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: modelName })
@@ -336,7 +337,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
     }
     
     try {
-      const response = await fetch('/api/v1/settings/test-api', {
+      const response = await fetch(resolveApiUrl('/api/v1/settings/test-api'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider, api_key: currentApiKey })

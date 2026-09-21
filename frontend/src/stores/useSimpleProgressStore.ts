@@ -3,6 +3,7 @@
  */
 
 import { create } from 'zustand'
+import { resolveApiUrl } from '../utils/apiConfig'
 
 export interface SimpleProgress {
   project_id: string
@@ -71,7 +72,7 @@ export const useSimpleProgressStore = create<SimpleProgressState>((set, get) => 
       const fetchSnapshots = async () => {
         try {
           const queryString = projectIds.map(id => `project_ids=${id}`).join('&')
-          const response = await fetch(`/api/v1/simple-progress/snapshot?${queryString}`)
+          const response = await fetch(resolveApiUrl(`/api/v1/simple-progress/snapshot?${queryString}`))
           
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`)

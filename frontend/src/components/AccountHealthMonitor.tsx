@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { resolveApiUrl } from '../utils/apiConfig';
 import {
   Card,
   Table,
@@ -139,7 +140,7 @@ const AccountHealthMonitor: React.FC<AccountHealthMonitorProps> = () => {
     try {
       setRefreshing(prev => [...prev, accountId]);
       
-      const response = await fetch(`/api/v1/health/check/${accountId}?force_check=${forceCheck}`, {
+      const response = await fetch(resolveApiUrl(`/api/v1/health/check/${accountId}?force_check=${forceCheck}`), {
         method: 'GET',
       });
       

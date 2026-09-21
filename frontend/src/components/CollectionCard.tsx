@@ -3,6 +3,7 @@ import { message } from 'antd'
 import { Collection, Clip } from '../store/useProjectStore'
 import EditableCollectionTitle from './EditableCollectionTitle'
 import { Btn, Icon, parseTimecode, fmtDuration } from '../ui'
+import { resolveApiUrl } from '../utils/apiConfig'
 
 interface CollectionCardProps {
   collection: Collection
@@ -29,7 +30,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({ collection, clips, onVi
   const thumbnailUrl = useMemo(() => {
     if (!collection.project_id) return ''
     const ts = encodeURIComponent(collection.created_at || '')
-    return `/api/v1/projects/${collection.project_id}/collections/${collection.id}/thumbnail?t=${ts}`
+    return resolveApiUrl(`/api/v1/projects/${collection.project_id}/collections/${collection.id}/thumbnail?t=${ts}`)
   }, [collection.project_id, collection.id, collection.created_at])
 
   const [imgError, setImgError] = useState(false)

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, Row, Col, Statistic, Button } from 'antd';
+import { resolveApiUrl } from '../utils/apiConfig';
 import TaskProgress from './TaskProgress';
 import { NotificationList } from './NotificationList';
 import { useNotifications } from '../hooks/useNotifications';
@@ -30,7 +31,7 @@ export const RealTimeStatus: React.FC<RealTimeStatusProps> = ({ userId, projectI
     console.log('📤 Iniciando carregamento de tarefas do projeto:', projectId);
     setLoading(true);
     try {
-      const response = await fetch(`/api/v1/tasks/project/${projectId}`);
+      const response = await fetch(resolveApiUrl(`/api/v1/tasks/project/${projectId}`));
       console.log('📡 Status da resposta da API:', response.status);
       
       if (response.ok) {

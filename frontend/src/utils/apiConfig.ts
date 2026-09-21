@@ -145,6 +145,18 @@ class ApiConfigManager {
   }
 
   /**
+   * Resolve um caminho absoluto do backend (ex.: '/api/v1/projects/1/clips/2') na URL
+   * certa. No app desktop a interface roda em tauri.localhost e o backend numa porta
+   * aleatória, então um caminho relativo cai num servidor que não existe (404) —
+   * <video>, <img> e fetch() não passam pelo baseURL do axios.
+   */
+  resolveUrl(path: string): string {
+    if (/^https?:\/\//i.test(path)) return path;
+    const origin = this.config.baseUrl.replace(/\/api\/v1\/?$/, '');
+    return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
+  }
+
+  /**
    * Construir URL completo da API
    */
   buildUrl(path: string): string {
@@ -177,4 +189,5 @@ export const getApiBaseUrl = () => apiConfigManager.getBaseUrl();
 export const isApiReady = () => apiConfigManager.isReady();
 export const waitForApiReady = (timeout?: number) => apiConfigManager.waitForReady(timeout);
 export const buildApiUrl = (path: string) => apiConfigManager.buildUrl(path);
+export const resolveApiUrl = (path: string) => apiConfigManager.resolveUrl(path);
 export const checkApiHealth = () => apiConfigManager.healthCheck();
