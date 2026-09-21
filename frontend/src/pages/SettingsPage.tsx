@@ -362,7 +362,6 @@ const SettingsPage: React.FC = () => {
   // Ao abrir a página de configurações, se já for uma predefinição local, detecte uma vez
   useEffect(() => {
     if (isLocalProvider(selectedProvider)) void detectLocalModels(selectedProvider, form.getFieldValue('local_base_url'))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProvider])
 
   const openaiBaseUrl = Form.useWatch('openai_base_url', form)
