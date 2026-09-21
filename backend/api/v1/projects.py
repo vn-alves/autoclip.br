@@ -602,19 +602,33 @@ async def retry_processing(
                         }
                     elif 'youtube.com' in source_url or 'youtu.be' in source_url:
                         # YouTube视频重新下载
-                        from .youtube import process_youtube_download_task, YouTubeDownloadRequest
+                        from .youtube import process_youtube_download_task, YouTubeDownloadRequest, YouTubeDownloadTask, download_tasks
                         import uuid
-                        
+
                         # 创建下载请求
                         download_request = YouTubeDownloadRequest(
                             url=source_url,
                             project_name=project.name,
                             video_category=project.project_metadata.get('category', 'general')
                         )
-                        
+
                         # 生成新的任务ID
                         download_task_id = str(uuid.uuid4())
-                        
+
+                        # process_youtube_download_task lê/atualiza download_tasks[task_id]; sem este
+                        # registro ela quebrava com KeyError e o "tentar de novo" nunca baixava nada.
+                        download_tasks[download_task_id] = YouTubeDownloadTask(
+                            id=download_task_id,
+                            url=source_url,
+                            project_name=project.name,
+                            video_category=project.project_metadata.get('category', 'general'),
+                            status="pending",
+                            progress=0.0,
+                            project_id=project_id,
+                            created_at=str(uuid.uuid1().time),
+                            updated_at=str(uuid.uuid1().time)
+                        )
+
                         # 异步启动下载任务
                         from .async_task_manager import task_manager
                         await task_manager.create_safe_task(

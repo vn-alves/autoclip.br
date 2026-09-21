@@ -60,6 +60,16 @@ from ...utils.yt_cookies import (  # noqa: E402
 )
 
 
+def _apply_ffmpeg(ydl_opts: dict) -> None:
+    """O yt-dlp só procura o ffmpeg no PATH. O app desktop traz o dele embutido e
+    o expõe via AUTOCLIP_FFMPEG_PATH; sem repassar isso, juntar vídeo+áudio falha
+    com "ffmpeg is not installed" mesmo com o ffmpeg instalado junto do app."""
+    from ...utils.ffmpeg_utils import get_ffmpeg_path
+    ffmpeg_path = get_ffmpeg_path()
+    if ffmpeg_path and os.path.isfile(ffmpeg_path):
+        ydl_opts['ffmpeg_location'] = ffmpeg_path
+
+
 def _apply_cookies(ydl_opts: dict, browser: Optional[str] = None) -> None:
     """Cookies do YouTube: arquivo cookies.txt tem prioridade sobre o navegador.
 
@@ -88,7 +98,17 @@ def _is_bot_check_error(error: Exception) -> bool:
     )
 
 
+def _is_missing_ffmpeg_error(error: Exception) -> bool:
+    text = str(error).lower()
+    return 'ffmpeg' in text and 'not installed' in text
+
+
 def _friendly_yt_error(error: Exception) -> str:
+    if _is_missing_ffmpeg_error(error):
+        return (
+            "O ffmpeg não foi encontrado, então o vídeo e o áudio não puderam ser juntados. "
+            "Reinstale o AutoClip ou instale o ffmpeg e tente de novo."
+        )
     if _is_bot_check_error(error):
         if get_cookies_file():
             return (
@@ -597,7 +617,15 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         
         # 设置下载选项
         ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            # Não fixar o áudio em [ext=m4a]: o YouTube responde 403 para o áudio m4a direto
+            # (exige token de origem), enquanto o opus/webm baixa normalmente. Sem teto de
+            # altura o seletor antigo pegava AV1 2160p, pesado demais para baixar e cortar.
+            'format': (
+                'bestvideo[height<=1080][vcodec^=avc1]+bestaudio'
+                '/bestvideo[height<=1080]+bestaudio'
+                '/best[height<=1080]/best'
+            ),
+            'merge_output_format': 'mp4',
             'writesubtitles': True,
             'writeautomaticsub': True,  # 下载自动生成的字幕
             'subtitleslangs': get_subtitle_langs(),
@@ -610,8 +638,9 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             'config_locations': [],
             'cachedir': False,
         }
-        
+
         _apply_cookies(ydl_opts, request.browser)
+        _apply_ffmpeg(ydl_opts)
 
         # 可选兜底客户端
         yt_client_env = os.getenv('AUTOCLIP_YT_CLIENT', '').strip().lower()
@@ -642,6 +671,7 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             attempts.append(_with_client(no_subs, fallback))
 
         last_error = None
+        attempt_errors = []
         for index, attempt_opts in enumerate(attempts):
             try:
                 await loop.run_in_executor(None, download_sync, request.url, attempt_opts)
@@ -649,13 +679,17 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                 break
             except Exception as attempt_error:
                 last_error = attempt_error
+                attempt_errors.append(attempt_error)
                 logger.warning(f"Tentativa {index + 1} de download falhou: {attempt_error}")
                 if list(download_dir.glob("*.mp4")):
                     # O vídeo já veio; só a legenda falhou.
                     last_error = None
                     break
         if last_error and not list(download_dir.glob("*.mp4")):
-            raise Exception(_friendly_yt_error(last_error))
+            # As tentativas com outros "clients" repetem um erro genérico de formato; o
+            # motivo real (ex.: ffmpeg ausente) fica numa tentativa anterior.
+            root_error = next((e for e in attempt_errors if _is_missing_ffmpeg_error(e)), last_error)
+            raise Exception(_friendly_yt_error(root_error))
 
 
 
