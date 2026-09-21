@@ -77,7 +77,9 @@ WORKDIR /app
 # 从构建阶段复制文件
 COPY --from=backend-builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=backend-builder /usr/local/bin /usr/local/bin
-COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
+# vite.config.ts grava o build em <raiz>/dist (não frontend/dist) para bater
+# com o que a Lovable espera hospedar - ver frontend/vite.config.ts build.outDir.
+COPY --from=frontend-builder /app/dist /app/frontend/dist
 
 # 复制项目文件
 COPY backend/ ./backend/
