@@ -667,6 +667,17 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   return (
     <Section title="Aplicar" description="Aparência, inicialização e privacidade.">
       <div className="ac-rows">
+        {!desktop && (
+          <Row
+            wide
+            label="Aplicativo desktop"
+            hint="A importação de vídeo (YouTube, Bilibili, corte por IA) roda no aplicativo instalado no seu computador — este site é só para conta e configurações. Baixe o instalador para Windows ou macOS."
+          >
+            <Btn variant="cta" size="sm" onClick={() => openExternalLink('https://github.com/vn-alves/autoclip.br/releases/latest')}>
+              Baixar o app <Icon.External size={12} />
+            </Btn>
+          </Row>
+        )}
         <Row label="Aparência" hint="Primeira inicialização segue o sistema.">
           <Segmented size="sm" ariaLabel="Aparência" value={theme} onChange={setTheme} options={[{ value: 'light', label: 'Claro' }, { value: 'dark', label: 'Escuro' }]} />
         </Row>
