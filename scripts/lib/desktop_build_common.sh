@@ -232,8 +232,10 @@ build_frontend() {
     # never reaches frontend/node_modules - only the repo root's node_modules.
     # Skipping this install makes the Vite build fail with "Rollup failed to
     # resolve import" even though frontend/node_modules has everything else.
-    npm ci --silent
-    (cd frontend && npm ci --silent && npm run build)
+    # No --silent here: npm's loglevel=silent swallows npm ERR! output too,
+    # so a real failure shows nothing but "exit code 1" with no clue why.
+    npm ci
+    (cd frontend && npm ci && npm run build)
     echo "OK"
 }
 
