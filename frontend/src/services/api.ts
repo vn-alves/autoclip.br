@@ -149,6 +149,26 @@ export interface ProcessingStatus {
   error_message?: string
 }
 
+// Espelha backend/schemas/clip.py ClipResponse — start_time/end_time/duration em SEGUNDOS
+// (diferente do tipo Clip do useProjectStore, que traz strings "HH:MM:SS,mmm" da listagem legada).
+export interface ClipDetail {
+  id: string
+  project_id: string
+  title: string
+  description?: string
+  start_time?: number
+  end_time?: number
+  duration?: number
+  score?: number
+  status: string
+  video_path?: string
+  tags?: string[]
+  clip_metadata?: Record<string, any>
+  created_at: string
+  updated_at: string
+  collection_ids?: string[]
+}
+
 // Tipos de interface relacionados ao Bilibili
 export interface BilibiliVideoInfo {
   title: string
@@ -550,6 +570,11 @@ export const projectApi = {
   getClipVideoUrl: (projectId: string, clipId: string, _clipTitle?: string): string => {
     // Usar a rota projects para obter vídeos fatiados
     return resolveApiUrl(`/api/v1/projects/${projectId}/clips/${clipId}`)
+  },
+
+  // Obter um clip específico (GET /clips/{clip_id}) — usado pelo Editor de Corte.
+  getClipDetail: (clipId: string): Promise<ClipDetail> => {
+    return api.get(`/clips/${clipId}`)
   },
 
   // Obter URL do vídeo da coleção

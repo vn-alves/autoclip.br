@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Modal, message } from 'antd'
+import { useNavigate } from 'react-router-dom'
 import ReactPlayer from 'react-player'
 import { Clip } from '../store/useProjectStore'
 import BilibiliManager from './BilibiliManager'
@@ -17,6 +18,7 @@ interface ClipCardProps {
 
 // Calm Premium clip card — see DESIGN.md → App Layer / Media card
 const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, projectId, onClipUpdate }) => {
+  const navigate = useNavigate()
   const [showPlayer, setShowPlayer] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [showBilibiliManager, setShowBilibiliManager] = useState(false)
@@ -145,6 +147,7 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
               <Btn variant="text" onClick={() => setShowPlayer(true)}>Reproduzir</Btn>
               <Btn variant="text" onClick={handleDownload}>Baixar</Btn>
               {projectId && <Btn variant="text" onClick={() => { setShowExport(true); setExportDone(null); setExportError(null) }}>Exportar</Btn>}
+              {projectId && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/editor/${clip.id}`)}>Editar corte</Btn>}
             </div>
           </div>
         </div>

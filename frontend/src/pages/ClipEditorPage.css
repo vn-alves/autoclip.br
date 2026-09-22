@@ -1,0 +1,237 @@
+/* Editor de Corte — Etapa 1 (fundação). Estilos isolados desta página, não tocam em ac.css. */
+
+.ac-editor-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--ac-bg);
+  color: var(--ac-ink);
+}
+
+.ac-editor-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--ac-line);
+}
+
+.ac-editor-header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ac-editor-header-title h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ac-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40ch;
+}
+
+.ac-editor-badge {
+  font-size: 11.5px;
+  color: var(--ac-sub);
+  border: 1px solid var(--ac-line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.ac-editor-body {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 240px 1fr 220px;
+  min-height: 0;
+}
+
+.ac-editor-panel {
+  border-right: 1px solid var(--ac-line);
+  padding: 20px 16px;
+  overflow-y: auto;
+}
+
+.ac-editor-panel--right {
+  border-right: none;
+  border-left: 1px solid var(--ac-line);
+}
+
+.ac-editor-panel-section {
+  margin-bottom: 24px;
+}
+
+.ac-editor-panel-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ac-sub);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+
+.ac-editor-layer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ac-ink);
+  background: var(--ac-line-2);
+  border: 1px solid var(--ac-line);
+}
+
+.ac-editor-color-input {
+  width: 100%;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--ac-line);
+  background: var(--ac-card);
+  padding: 2px;
+  cursor: pointer;
+}
+
+.ac-editor-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--ac-bg);
+}
+
+.ac-editor-canvas-container {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 24px;
+  overflow: hidden;
+}
+
+.ac-editor-frame {
+  position: relative;
+  background: #000;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: var(--ac-shadow);
+}
+
+.ac-editor-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.ac-editor-bg--blur video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ac-editor-video {
+  position: absolute;
+  object-fit: contain;
+  background: #000;
+  cursor: move;
+}
+
+.ac-editor-controls {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 24px;
+  border-top: 1px solid var(--ac-line);
+}
+
+.ac-editor-controls-play {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--ac-line);
+  background: var(--ac-card);
+  color: var(--ac-ink);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.ac-editor-controls-play:hover { background: var(--ac-line-2); }
+
+.ac-editor-controls-time {
+  font-size: 12.5px;
+  color: var(--ac-sub);
+  font-family: ui-monospace, monospace;
+  white-space: nowrap;
+}
+
+.ac-editor-timeline {
+  flex: 0 0 auto;
+  padding: 10px 24px 18px;
+}
+
+.ac-editor-timeline-times {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--ac-sub);
+  font-family: ui-monospace, monospace;
+  margin-bottom: 6px;
+}
+
+.ac-editor-timeline-track {
+  position: relative;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.ac-editor-timeline-clip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ac-line-2);
+  border: 1px solid var(--ac-line);
+}
+
+.ac-editor-timeline-progress {
+  position: absolute;
+  left: 0;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ac-accent);
+  pointer-events: none;
+}
+
+.ac-editor-timeline-playhead {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 22px;
+  margin-left: -1.5px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: var(--ac-ink);
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  .ac-editor-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+  .ac-editor-panel { border-right: none; border-bottom: 1px solid var(--ac-line); }
+  .ac-editor-panel--right { border-left: none; border-top: 1px solid var(--ac-line); border-bottom: none; }
+}

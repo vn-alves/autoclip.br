@@ -3,6 +3,7 @@ import { Routes, Route, useLocation } from 'react-router-dom'
 import { Layout } from 'antd'
 import HomePage from './pages/HomePage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
+import ClipEditorPage from './pages/ClipEditorPage'
 import SettingsPage from './pages/SettingsPage'
 import Header from './components/Header'
 import { trackPageview } from './analytics/posthog'
@@ -28,6 +29,7 @@ function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/project/:id" element={<ProjectDetailPage />} />
+          <Route path="/project/:id/editor/:clipId" element={<ClipEditorPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </Content>

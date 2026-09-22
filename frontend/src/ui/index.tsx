@@ -138,6 +138,9 @@ const I: React.FC<{ d: string; size?: number }> = ({ d, size = 14 }) => (
 export const Icon = {
   Back: (p?: { size?: number }) => <I size={p?.size} d="M15 18l-6-6 6-6" />,
   Play: (p?: { size?: number }) => <I size={p?.size} d="M7 5v14l11-7z" />,
+  Pause: (p?: { size?: number }) => <I size={p?.size} d="M7 5h3v14H7zM14 5h3v14h-3z" />,
+  Volume: (p?: { size?: number }) => <I size={p?.size} d="M4 9v6h4l5 5V4L8 9H4zM16.5 8.5a5 5 0 0 1 0 7" />,
+  Mute: (p?: { size?: number }) => <I size={p?.size} d="M4 9v6h4l5 5V4L8 9H4zM16 9l5 5m0-5l-5 5" />,
   Plus: (p?: { size?: number }) => <I size={p?.size} d="M12 5v14M5 12h14" />,
   Down: (p?: { size?: number }) => <I size={p?.size} d="M12 4v12m0 0l-5-5m5 5l5-5M4 20h16" />,
   Trash: (p?: { size?: number }) => <I size={p?.size} d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />,
