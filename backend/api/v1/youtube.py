@@ -157,6 +157,10 @@ class YouTubeDownloadRequest(BaseModel):
     project_name: str
     video_category: Optional[str] = "default"
     browser: Optional[str] = None
+    # Escolhas opcionais da tela de importação; None = deixa o profile automático
+    # (duração do vídeo) decidir, como sempre foi.
+    target_clip_seconds: Optional[int] = None
+    clip_count: Optional[int] = None
 
 class YouTubeVideoInfo(BaseModel):
     title: str
@@ -477,7 +481,11 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
                         "duration": video_info.get('duration', 0),
                         "view_count": video_info.get('view_count', 0),
                         "thumbnail_url": thumbnail_url
-                    }
+                    },
+                    "clip_options": {
+                        "target_clip_seconds": request.target_clip_seconds,
+                        "clip_count": request.clip_count,
+                    },
                 }
             )
             

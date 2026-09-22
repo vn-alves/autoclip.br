@@ -167,6 +167,8 @@ export interface BilibiliDownloadRequest {
   project_name: string
   video_category?: string
   browser?: string
+  target_clip_seconds?: number
+  clip_count?: number
 }
 
 export interface BilibiliDownloadTask {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Button, message, Progress, Input, Card, Typography, Space, Spin, Select } from 'antd'
+import { Button, message, Progress, Input, Card, Typography, Space, Spin, Select, InputNumber } from 'antd'
 import { DownloadOutlined } from '@ant-design/icons'
 import { projectApi, bilibiliApi, VideoCategory, BilibiliDownloadTask } from '../services/api'
 import { useProjectStore } from '../store/useProjectStore'
@@ -8,6 +8,14 @@ import YouTubeCookiesPanel from './YouTubeCookiesPanel'
 
 
 const { Text } = Typography
+
+const CLIP_DURATION_PRESETS: { value: string; label: string; seconds: number | null }[] = [
+  { value: 'auto', label: 'Automático (recomendado)', seconds: null },
+  { value: 'short', label: 'Curto (~45 segundos)', seconds: 45 },
+  { value: 'medium', label: 'Médio (~1 min 30)', seconds: 90 },
+  { value: 'long', label: 'Longo (~3 minutos)', seconds: 180 },
+  { value: 'xlong', label: 'Muito longo (~6 minutos)', seconds: 360 },
+]
 
 interface BilibiliDownloadProps {
   onDownloadSuccess?: (projectId: string) => void
@@ -20,6 +28,8 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
   const [projectName, setProjectName] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [selectedBrowser, setSelectedBrowser] = useState<string>('')
+  const [clipDuration, setClipDuration] = useState<string>('auto')
+  const [clipCount, setClipCount] = useState<number | null>(null)
   const [categories, setCategories] = useState<VideoCategory[]>([])
   const [loadingCategories, setLoadingCategories] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -211,6 +221,14 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
       
       if (selectedBrowser) {
         requestBody.browser = selectedBrowser
+      }
+
+      const durationPreset = CLIP_DURATION_PRESETS.find(p => p.value === clipDuration)
+      if (durationPreset?.seconds) {
+        requestBody.target_clip_seconds = durationPreset.seconds
+      }
+      if (clipCount) {
+        requestBody.clip_count = clipCount
       }
 
       let response
@@ -477,6 +495,39 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
                   </div>
                 )}
               </div>
+
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 220px' }}>
+                  <Text style={{ color: '#ffffff', marginBottom: '12px', display: 'block', fontSize: '16px', fontWeight: 500 }}>Duração média de cada corte</Text>
+                  <Select
+                    value={clipDuration}
+                    onChange={setClipDuration}
+                    style={{ width: '100%', height: '48px' }}
+                    dropdownStyle={{ background: 'var(--ac-line-2)', border: '1px solid rgba(79, 172, 254, 0.3)', borderRadius: '12px' }}
+                    disabled={downloading}
+                  >
+                    {CLIP_DURATION_PRESETS.map(preset => (
+                      <Select.Option key={preset.value} value={preset.value}>{preset.label}</Select.Option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div style={{ flex: '1 1 220px' }}>
+                  <Text style={{ color: '#ffffff', marginBottom: '12px', display: 'block', fontSize: '16px', fontWeight: 500 }}>Quantidade de cortes</Text>
+                  <InputNumber
+                    value={clipCount ?? undefined}
+                    onChange={(v) => setClipCount(typeof v === 'number' ? v : null)}
+                    min={1}
+                    max={30}
+                    placeholder="Automático"
+                    style={{ width: '100%', height: '48px' }}
+                    disabled={downloading}
+                  />
+                </div>
+              </div>
+              <Text style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '12px', display: 'block', marginTop: '-8px' }}>
+                Deixe em "Automático" para a IA decidir com base na duração do vídeo. Um número muito alto de cortes num vídeo curto pode gerar trechos pequenos demais.
+              </Text>
             </>
           )}
         </Space>

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -70,10 +70,11 @@ class DurationProfile:
         lo, hi = self.target_clip_sec
         n_lo, n_hi = self.topics_hint
         total = f"{int(self.total_sec // 60)} 分 {int(self.total_sec % 60)} 秒"
+        topics_line = f"整条视频必须正好提取 {n_lo} 个话题" if n_lo == n_hi else f"整条视频建议提取 {n_lo}–{n_hi} 个话题"
         return (
             "\n\n---\n\n## 本次任务参数（优先级高于上文所有时长与数量规则）\n"
             f"- 视频总时长：{total}（{self.tier} 类型）\n"
-            f"- 整条视频建议提取 {n_lo}–{n_hi} 个话题；话题之间不要重叠\n"
+            f"- {topics_line}；话题之间不要重叠\n"
             f"- 每个片段目标时长 {_fmt_dur(lo)}–{_fmt_dur(hi)}，最短不少于 {_fmt_dur(self.min_clip_sec)}，最长不超过 {_fmt_dur(self.max_clip_sec)}\n"
             "- 上文中「至少 90 秒」「3–6 分钟」等具体数字一律以本节为准\n"
             "- 起止时间必须落在字幕行的边界上，直接引用字幕行的时间戳，不要自行推算\n"
@@ -95,33 +96,80 @@ def _fmt_dur(sec: float) -> str:
     return f"{sec // 60} 分 {sec % 60} 秒"
 
 
-def profile_for(total_sec: float) -> DurationProfile:
-    """按总时长分档。数字是产品判断，不是实验结论——回归集起来后再调。"""
+def profile_for(
+    total_sec: float,
+    *,
+    target_clip_seconds: Optional[float] = None,
+    clip_count: Optional[int] = None,
+) -> DurationProfile:
+    """按总时长分档。数字是产品判断，不是实验结论——回归集起来后再调。
+
+    target_clip_seconds / clip_count: escolhas do usuário na tela de importação
+    (duração média do corte / quantidade de cortes). Sobrescrevem o que o tier
+    automático calcularia — ver apply_overrides().
+    """
     total_sec = max(0.0, float(total_sec))
     if total_sec < 8 * 60:
-        return DurationProfile(
+        profile = DurationProfile(
             tier="short", total_sec=total_sec,
             min_clip_sec=20, target_clip_sec=(30, 90), max_clip_sec=150,
             topics_hint=(3, 6), min_keep=2, max_clips=6,
         )
-    if total_sec < 30 * 60:
-        return DurationProfile(
+    elif total_sec < 30 * 60:
+        profile = DurationProfile(
             tier="medium", total_sec=total_sec,
             min_clip_sec=45, target_clip_sec=(60, 180), max_clip_sec=300,
             topics_hint=(4, 10), min_keep=3, max_clips=10,
         )
-    # 长视频：保持原有播客口径，但上限收紧到 8 分钟
-    hours = total_sec / 3600
-    return DurationProfile(
-        tier="long", total_sec=total_sec,
-        min_clip_sec=90, target_clip_sec=(120, 360), max_clip_sec=480,
-        topics_hint=(max(6, int(6 * hours)), max(12, int(14 * hours))), min_keep=3, max_clips=max(12, int(16 * hours)),
-    )
+    else:
+        # 长视频：保持原有播客口径，但上限收紧到 8 分钟
+        hours = total_sec / 3600
+        profile = DurationProfile(
+            tier="long", total_sec=total_sec,
+            min_clip_sec=90, target_clip_sec=(120, 360), max_clip_sec=480,
+            topics_hint=(max(6, int(6 * hours)), max(12, int(14 * hours))), min_keep=3, max_clips=max(12, int(16 * hours)),
+        )
+    return apply_overrides(profile, target_clip_seconds=target_clip_seconds, clip_count=clip_count)
 
 
-def profile_from_srt(srt_entries: Sequence[Dict[str, Any]]) -> DurationProfile:
+def apply_overrides(
+    profile: DurationProfile,
+    *,
+    target_clip_seconds: Optional[float] = None,
+    clip_count: Optional[int] = None,
+) -> DurationProfile:
+    """Aplica as escolhas do usuário (duração média / quantidade de cortes) por cima
+    do profile automático. Qualquer um dos dois pode faltar — nesse caso o tier
+    automático decide aquele aspecto normalmente."""
+    updates: Dict[str, Any] = {}
+
+    if target_clip_seconds and target_clip_seconds > 0:
+        t = float(target_clip_seconds)
+        lo = max(10.0, t * 0.6)
+        hi = max(lo + 5.0, t * 1.4)
+        updates["target_clip_sec"] = (lo, hi)
+        updates["min_clip_sec"] = max(8.0, t * 0.4)
+        updates["max_clip_sec"] = max(hi + 10.0, t * 2.2)
+
+    if clip_count and clip_count > 0:
+        n = int(clip_count)
+        updates["topics_hint"] = (n, n)
+        updates["max_clips"] = n
+        updates["min_keep"] = max(1, min(n, profile.min_keep))
+
+    if not updates:
+        return profile
+    return replace(profile, **updates)
+
+
+def profile_from_srt(
+    srt_entries: Sequence[Dict[str, Any]],
+    *,
+    target_clip_seconds: Optional[float] = None,
+    clip_count: Optional[int] = None,
+) -> DurationProfile:
     total = to_seconds(srt_entries[-1]["end_time"]) if srt_entries else 0.0
-    return profile_for(total)
+    return profile_for(total, target_clip_seconds=target_clip_seconds, clip_count=clip_count)
 
 
 def save_profile(profile: DurationProfile, metadata_dir: Path) -> Path:

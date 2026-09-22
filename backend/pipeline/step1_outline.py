@@ -41,13 +41,14 @@ class OutlineExtractor:
         self.srt_chunks_dir = self.metadata_dir / "step1_srt_chunks"
         self.srt_chunks_dir.mkdir(parents=True, exist_ok=True)
 
-    def extract_outline(self, srt_path: Path) -> List[Dict]:
+    def extract_outline(self, srt_path: Path, clip_overrides: Optional[Dict] = None) -> List[Dict]:
         """
         从SRT文件提取视频大纲
-        
+
         Args:
             srt_path: SRT文件路径
-            
+            clip_overrides: 用户在导入界面选择的时长/数量覆盖（target_clip_seconds / clip_count）
+
         Returns:
             视频大纲列表
         """
@@ -65,7 +66,12 @@ class OutlineExtractor:
             
         # 1.5 时长画像：短视频不能套播客参数（#59）。写盘给 step2 / step3 复用
         from .quality import profile_from_srt, save_profile
-        profile = profile_from_srt(srt_data)
+        overrides = clip_overrides or {}
+        profile = profile_from_srt(
+            srt_data,
+            target_clip_seconds=overrides.get("target_clip_seconds"),
+            clip_count=overrides.get("clip_count"),
+        )
         save_profile(profile, self.metadata_dir)
         outline_prompt = self.outline_prompt + profile.prompt_hint()
         logger.info(f"时长画像: {profile.tier}，总时长 {profile.total_sec:.0f}s，建议话题数 {profile.topics_hint}")
@@ -209,15 +215,15 @@ class OutlineExtractor:
         with open(input_path, 'r', encoding='utf-8') as f:
             return json.load(f)
 
-def run_step1_outline(srt_path: Path, metadata_dir: Path = None, output_path: Optional[Path] = None, prompt_files: Dict = None) -> List[Dict]:
+def run_step1_outline(srt_path: Path, metadata_dir: Path = None, output_path: Optional[Path] = None, prompt_files: Dict = None, clip_overrides: Optional[Dict] = None) -> List[Dict]:
     """
     运行Step 1: 大纲提取
     """
     if metadata_dir is None:
         metadata_dir = METADATA_DIR
-        
+
     extractor = OutlineExtractor(metadata_dir, prompt_files)
-    outlines = extractor.extract_outline(srt_path)
+    outlines = extractor.extract_outline(srt_path, clip_overrides)
     
     if output_path is None:
         output_path = metadata_dir / "step1_outline.json"

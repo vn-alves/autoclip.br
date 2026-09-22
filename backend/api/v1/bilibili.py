@@ -32,6 +32,10 @@ class BilibiliDownloadRequest(BaseModel):
     project_name: str
     video_category: Optional[str] = "default"
     browser: Optional[str] = None
+    # Escolhas opcionais da tela de importação; None = deixa o profile automático
+    # (duração do vídeo) decidir, como sempre foi.
+    target_clip_seconds: Optional[int] = None
+    clip_count: Optional[int] = None
 
 class BilibiliVideoInfo(BaseModel):
     title: str
@@ -151,7 +155,11 @@ async def create_bilibili_download_task(request: BilibiliDownloadRequest):
                         "duration": video_info.duration,
                         "view_count": video_info.view_count,
                         "thumbnail_url": video_info.thumbnail_url
-                    }
+                    },
+                    "clip_options": {
+                        "target_clip_seconds": request.target_clip_seconds,
+                        "clip_count": request.clip_count,
+                    },
                 }
             )
             

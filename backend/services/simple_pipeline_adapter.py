@@ -53,7 +53,31 @@ class SimplePipelineAdapter:
                 pass
         logger.info(f"使用类别提示词: {category}")
         return get_prompt_files(category)
-        
+
+    def _clip_overrides(self) -> Dict[str, Any]:
+        """Duração média do corte / quantidade de cortes escolhidas na tela de
+        importação (POST /youtube/download, /bilibili/download), salvas em
+        Project.processing_config['clip_options']. Ausente = deixa o profile
+        automático (DurationProfile) decidir, como sempre foi."""
+        try:
+            from backend.core.database import SessionLocal
+            from backend.models.project import Project
+            db = SessionLocal()
+            try:
+                row = db.query(Project).filter(Project.id == self.project_id).first()
+                opts = (row.processing_config or {}).get("clip_options") if row else None
+                if opts:
+                    return {
+                        "target_clip_seconds": opts.get("target_clip_seconds"),
+                        "clip_count": opts.get("clip_count"),
+                    }
+            finally:
+                db.close()
+        except Exception:  # noqa: BLE001
+            pass
+        return {}
+
+
     async def _generate_subtitle_automatically(self, video_path: str, metadata_dir: Path) -> Path:
         """
         自动生成字幕文件
@@ -139,7 +163,8 @@ class SimplePipelineAdapter:
             clips_output_dir.mkdir(parents=True, exist_ok=True)
             collections_output_dir.mkdir(parents=True, exist_ok=True)
             prompt_files = self._prompt_files(project_dir)
-            
+            clip_overrides = self._clip_overrides()
+
             # 阶段1: 素材准备
             emit_progress(self.project_id, "INGEST", "素材准备完成")
             
@@ -150,14 +175,14 @@ class SimplePipelineAdapter:
             logger.info("执行Step 1: 大纲提取")
             if input_srt_path and Path(input_srt_path).exists():
                 logger.info(f"使用现有SRT文件: {input_srt_path}")
-                outlines = run_step1_outline(Path(input_srt_path), metadata_dir=metadata_dir, prompt_files=prompt_files)
+                outlines = run_step1_outline(Path(input_srt_path), metadata_dir=metadata_dir, prompt_files=prompt_files, clip_overrides=clip_overrides)
             else:
                 logger.warning("没有SRT文件，尝试自动生成字幕")
                 # 尝试自动生成字幕
                 srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
                 if srt_path and srt_path.exists():
                     logger.info(f"自动生成字幕成功: {srt_path}")
-                    outlines = run_step1_outline(srt_path, metadata_dir=metadata_dir, prompt_files=prompt_files)
+                    outlines = run_step1_outline(srt_path, metadata_dir=metadata_dir, prompt_files=prompt_files, clip_overrides=clip_overrides)
                 else:
                     logger.warning("自动生成字幕失败，创建空大纲")
                     # 创建一个空的大纲文件
@@ -269,7 +294,13 @@ class SimplePipelineAdapter:
                 import json
                 subtitle_source = Path(input_srt_path) if input_srt_path else None
                 srt_entries = TextProcessor.parse_srt(subtitle_source) if subtitle_source and subtitle_source.exists() else []
-                titled_clips = build_fallback_clips(srt_entries)
+                from backend.pipeline.quality import profile_from_srt
+                fallback_profile = profile_from_srt(
+                    srt_entries,
+                    target_clip_seconds=clip_overrides.get("target_clip_seconds"),
+                    clip_count=clip_overrides.get("clip_count"),
+                ) if srt_entries else None
+                titled_clips = build_fallback_clips(srt_entries, profile=fallback_profile)
                 if not titled_clips:
                     raise RuntimeError("Não foi possível criar cortes: as legendas estão vazias ou inválidas")
                 with open(titles_file, 'w', encoding='utf-8') as f:
