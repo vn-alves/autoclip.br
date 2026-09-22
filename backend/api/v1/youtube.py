@@ -36,9 +36,20 @@ def get_subtitle_langs() -> list:
 
 
 def _is_cookie_error(error: Exception) -> bool:
-    """Detecta falhas causadas pela leitura de cookies do navegador."""
+    """Detecta falhas causadas pela leitura de cookies do navegador.
+
+    'cookiesfrombrowser' do yt-dlp lê direto o banco de cookies do navegador
+    instalado na máquina. No Windows isso é frágil: navegador aberto (banco
+    bloqueado), perfil ausente, ou peculiaridades do SQLite/DPAPI fazem o
+    yt-dlp propagar um OSError genérico do sistema (ex.: "[Errno 22] Invalid
+    argument") em vez de uma mensagem que mencione "cookie" — sem isso o
+    fallback para "seguir sem cookies" nunca era acionado e a importação
+    falhava de imediato.
+    """
     text = str(error).lower()
-    return 'cookie' in text or 'keyring' in text
+    if 'cookie' in text or 'keyring' in text:
+        return True
+    return 'errno 22' in text or 'invalid argument' in text or 'winerror' in text
 
 
 def _is_subtitle_error(error: Exception) -> bool:
