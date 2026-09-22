@@ -1,4 +1,4 @@
-/* Editor de Corte — Etapa 1 (fundação). Estilos isolados desta página, não tocam em ac.css. */
+/* Editor de Corte — Etapa 1 (fundação) + Etapa 2 (legendas). Estilos isolados desta página, não tocam em ac.css. */
 
 .ac-editor-page {
   display: flex;
@@ -234,4 +234,128 @@
   .ac-editor-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
   .ac-editor-panel { border-right: none; border-bottom: 1px solid var(--ac-line); }
   .ac-editor-panel--right { border-left: none; border-top: 1px solid var(--ac-line); border-bottom: none; }
+}
+
+/* ---------------------------------------------------------- Legendas (Etapa 2) --- */
+
+.ac-editor-subtitle-box {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  text-align: center;
+  line-height: 1.25;
+  cursor: move;
+  user-select: none;
+  word-break: break-word;
+}
+
+@keyframes ac-editor-subtitle-pop {
+  0% { transform: translateY(6px) scale(0.94); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.ac-editor-subtitle-box--pop {
+  animation: ac-editor-subtitle-pop 220ms ease-out;
+}
+
+.ac-editor-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--ac-sub);
+  line-height: 1.5;
+}
+
+.ac-editor-value-label {
+  font-size: 12px;
+  color: var(--ac-sub);
+  font-family: ui-monospace, monospace;
+  min-width: 40px;
+  text-align: right;
+}
+
+.ac-editor-color-row {
+  display: flex;
+  gap: 16px;
+}
+
+.ac-editor-color-row label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ac-editor-color-row label span {
+  font-size: 12px;
+  color: var(--ac-sub);
+}
+
+/* Cards de estilo de legenda */
+.ac-editor-style-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.ac-editor-style-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--ac-line);
+  background: var(--ac-line-2);
+  cursor: pointer;
+}
+
+.ac-editor-style-card:hover { border-color: var(--ac-accent); }
+
+.ac-editor-style-card--active {
+  border-color: var(--ac-accent);
+  box-shadow: 0 0 0 1px var(--ac-accent);
+}
+
+.ac-editor-style-card-preview {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.ac-editor-style-card-label {
+  font-size: 11px;
+  color: var(--ac-sub);
+  text-align: center;
+}
+
+/* Blocos de legenda na Timeline */
+.ac-editor-subtitle-timeline {
+  position: relative;
+  height: 22px;
+  margin-top: 8px;
+}
+
+.ac-editor-subtitle-block {
+  position: absolute;
+  top: 0;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid var(--ac-line);
+  background: var(--ac-line-2);
+  color: var(--ac-sub);
+  font-size: 10.5px;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ac-editor-subtitle-block:hover { border-color: var(--ac-accent); color: var(--ac-ink); }
+
+.ac-editor-subtitle-block--active {
+  border-color: var(--ac-accent);
+  background: color-mix(in srgb, var(--ac-accent) 18%, var(--ac-line-2));
+  color: var(--ac-ink);
 }

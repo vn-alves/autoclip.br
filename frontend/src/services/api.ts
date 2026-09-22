@@ -169,6 +169,32 @@ export interface ClipDetail {
   collection_ids?: string[]
 }
 
+// Espelha backend/utils/subtitle_processor.py _process_subtitle_segment/_split_text_to_words —
+// timestamps em segundos, já relativos ao início do clip (o endpoint desloca isso no backend).
+export interface SubtitleWord {
+  id: string
+  text: string
+  startTime: number
+  endTime: number
+}
+
+export interface SubtitleSegment {
+  id: string
+  startTime: number
+  endTime: number
+  text: string
+  index: number
+  words: SubtitleWord[]
+}
+
+// Espelha backend/api/v1/subtitle_editor.py SubtitleDataResponse
+export interface SubtitleDataResponse {
+  segments: SubtitleSegment[]
+  total_duration: number
+  word_count: number
+  segment_count: number
+}
+
 // Tipos de interface relacionados ao Bilibili
 export interface BilibiliVideoInfo {
   title: string
@@ -575,6 +601,13 @@ export const projectApi = {
   // Obter um clip específico (GET /clips/{clip_id}) — usado pelo Editor de Corte.
   getClipDetail: (clipId: string): Promise<ClipDetail> => {
     return api.get(`/clips/${clipId}`)
+  },
+
+  // Legendas do clip, já em granularidade de palavra e relativizadas ao tempo do
+  // clip — reaproveita o endpoint existente do editor de legendas (subtitle_editor.py),
+  // sem criar um novo processamento de SRT. 404 = corte sem legenda disponível (não é erro fatal).
+  getClipSubtitles: (projectId: string, clipId: string): Promise<SubtitleDataResponse> => {
+    return api.get(`/subtitle-editor/${projectId}/clips/${clipId}/subtitles`)
   },
 
   // Obter URL do vídeo da coleção

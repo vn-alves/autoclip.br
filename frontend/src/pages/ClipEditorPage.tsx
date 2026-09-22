@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Spin } from 'antd'
-import { projectApi, ClipDetail } from '../services/api'
+import { projectApi, ClipDetail, SubtitleSegment } from '../services/api'
 import { Btn, Icon, Segmented } from '../ui'
 import EditorCanvas from '../components/editor/EditorCanvas'
 import EditorTimeline from '../components/editor/EditorTimeline'
+import SubtitleControls from '../components/editor/SubtitleControls'
 import {
   BackgroundType, CanvasFormat, EditorState, NormalizedTransform,
-  createDefaultEditorState, fitTransform, resizeTransformForFormat,
+  SubtitlePosition, SubtitlePositionPreset, SubtitleStyle, SubtitleStylePreset,
+  createDefaultEditorState, fitTransform, resizeTransformForFormat, SUBTITLE_POSITION_PRESETS,
 } from '../components/editor/types'
 import './ClipEditorPage.css'
 
@@ -52,6 +54,12 @@ const ClipEditorPage: React.FC = () => {
   const [duration, setDuration] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
 
+  const [subtitleSegments, setSubtitleSegments] = useState<SubtitleSegment[]>([])
+  const [subtitleLoading, setSubtitleLoading] = useState(true)
+  const [subtitleError, setSubtitleError] = useState<string | null>(null)
+  // false = corte sem SRT/legenda disponível (404 do backend) — nunca tratado como erro fatal.
+  const [subtitleAvailable, setSubtitleAvailable] = useState(true)
+
   useEffect(() => {
     if (!clipId) return
     let alive = true
@@ -65,6 +73,27 @@ const ClipEditorPage: React.FC = () => {
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [clipId])
+
+  // Legendas: busca separada da do clip — uma falha aqui nunca deve travar o resto do editor.
+  useEffect(() => {
+    if (!projectId || !clipId) return
+    let alive = true
+    setSubtitleLoading(true)
+    setSubtitleError(null)
+    setSubtitleAvailable(true)
+    projectApi.getClipSubtitles(projectId, clipId)
+      .then((data) => { if (alive) setSubtitleSegments(data.segments || []) })
+      .catch((err: any) => {
+        if (!alive) return
+        if (err?.response?.status === 404) {
+          setSubtitleAvailable(false)
+        } else {
+          setSubtitleError(err?.response?.data?.detail || err?.message || 'Não foi possível carregar as legendas')
+        }
+      })
+      .finally(() => { if (alive) setSubtitleLoading(false) })
+    return () => { alive = false }
+  }, [projectId, clipId])
 
   const videoUrl = projectId && clipId ? projectApi.getClipVideoUrl(projectId, clipId) : ''
 
@@ -98,6 +127,45 @@ const ClipEditorPage: React.FC = () => {
 
   const handleBackgroundColor = (color: string) => {
     setEditorState((s) => ({ ...s, canvas: { ...s.canvas, background: { ...s.canvas.background, color } } }))
+  }
+
+  const handleApplySubtitlePreset = (preset: SubtitleStylePreset) => {
+    setEditorState((s) => ({
+      ...s,
+      subtitle: { ...s.subtitle, style: { ...s.subtitle.style, ...preset.style, id: preset.id } },
+    }))
+  }
+
+  const handleSubtitleStyleChange = (patch: Partial<Omit<SubtitleStyle, 'id' | 'outline'>>) => {
+    setEditorState((s) => ({
+      ...s,
+      subtitle: { ...s.subtitle, style: { ...s.subtitle.style, ...patch, id: 'custom' } },
+    }))
+  }
+
+  const handleSubtitleOutlineChange = (patch: Partial<SubtitleStyle['outline']>) => {
+    setEditorState((s) => ({
+      ...s,
+      subtitle: { ...s.subtitle, style: { ...s.subtitle.style, outline: { ...s.subtitle.style.outline, ...patch }, id: 'custom' } },
+    }))
+  }
+
+  const handleSubtitlePositionPreset = (preset: Exclude<SubtitlePositionPreset, 'custom'>) => {
+    setEditorState((s) => ({
+      ...s,
+      subtitle: { ...s.subtitle, position: { preset, ...SUBTITLE_POSITION_PRESETS[preset] } },
+    }))
+  }
+
+  const handleSubtitlePositionChange = (patch: Partial<SubtitlePosition>) => {
+    setEditorState((s) => ({ ...s, subtitle: { ...s.subtitle, position: { ...s.subtitle.position, ...patch } } }))
+  }
+
+  // Clicar num bloco da timeline de legendas: seleciona (destaque visual) e move o playhead
+  // para o início do segmento, como pedido no item 2 da Etapa 2.
+  const handleSelectSubtitleSegment = (segment: SubtitleSegment) => {
+    setEditorState((s) => ({ ...s, subtitle: { ...s.subtitle, selectedSegmentId: segment.id } }))
+    handleSeek(segment.startTime)
   }
 
   const togglePlay = () => {
@@ -166,6 +234,19 @@ const ClipEditorPage: React.FC = () => {
               />
             )}
           </div>
+
+          <SubtitleControls
+            loading={subtitleLoading}
+            error={subtitleError}
+            available={subtitleAvailable}
+            hasSegments={subtitleSegments.length > 0}
+            style={editorState.subtitle.style}
+            position={editorState.subtitle.position}
+            onApplyPreset={handleApplySubtitlePreset}
+            onStyleChange={handleSubtitleStyleChange}
+            onOutlineChange={handleSubtitleOutlineChange}
+            onPositionPreset={handleSubtitlePositionPreset}
+          />
         </aside>
 
         <main className="ac-editor-main">
@@ -174,6 +255,11 @@ const ClipEditorPage: React.FC = () => {
             format={editorState.canvas.format}
             background={editorState.canvas.background}
             transform={editorState.videoLayer.transform}
+            currentTime={currentTime}
+            subtitleSegments={subtitleSegments}
+            subtitleStyle={editorState.subtitle.style}
+            subtitlePosition={editorState.subtitle.position}
+            onSubtitlePositionChange={handleSubtitlePositionChange}
             onTransformChange={handleTransformChange}
             onLoadedMetadata={handleLoadedMetadata}
             videoRef={videoRef}
@@ -190,13 +276,21 @@ const ClipEditorPage: React.FC = () => {
             <span className="ac-editor-controls-time">{fmtTime(currentTime)} / {fmtTime(duration)}</span>
           </div>
 
-          <EditorTimeline currentTime={currentTime} duration={duration} onSeek={handleSeek} />
+          <EditorTimeline
+            currentTime={currentTime}
+            duration={duration}
+            onSeek={handleSeek}
+            subtitleSegments={subtitleSegments}
+            selectedSubtitleId={editorState.subtitle.selectedSegmentId}
+            onSelectSubtitle={handleSelectSubtitleSegment}
+          />
         </main>
 
         <aside className="ac-editor-panel ac-editor-panel--right">
           <div className="ac-editor-panel-section">
             <div className="ac-editor-panel-label">Camadas</div>
             <div className="ac-editor-layer-item">🎥 Vídeo original</div>
+            {subtitleSegments.length > 0 && <div className="ac-editor-layer-item">💬 Legenda</div>}
           </div>
         </aside>
       </div>

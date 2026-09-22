@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Moveable, { type OnDrag, type OnResize } from 'react-moveable'
-import { BackgroundConfig, CANVAS_DIMENSIONS, CanvasFormat, NormalizedTransform } from './types'
+import { BackgroundConfig, CANVAS_DIMENSIONS, CanvasFormat, NormalizedTransform, SubtitlePosition, SubtitleSegment, SubtitleStyle } from './types'
+import SubtitleLayer from './SubtitleLayer'
 
 interface EditorCanvasProps {
   videoUrl: string
@@ -14,6 +15,12 @@ interface EditorCanvasProps {
   onDurationChange: (d: number) => void
   onEnded: () => void
   onPlayStateChange: (playing: boolean) => void
+  /** Etapa 2 — legenda. */
+  currentTime: number
+  subtitleSegments: SubtitleSegment[]
+  subtitleStyle: SubtitleStyle
+  subtitlePosition: SubtitlePosition
+  onSubtitlePositionChange: (p: Partial<SubtitlePosition>) => void
 }
 
 /**
@@ -28,12 +35,14 @@ interface EditorCanvasProps {
 const EditorCanvas: React.FC<EditorCanvasProps> = ({
   videoUrl, format, background, transform, onTransformChange,
   onLoadedMetadata, videoRef, onTimeUpdate, onDurationChange, onEnded, onPlayStateChange,
+  currentTime, subtitleSegments, subtitleStyle, subtitlePosition, onSubtitlePositionChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const frameRef = useRef<HTMLDivElement>(null)
   const bgVideoRef = useRef<HTMLVideoElement>(null)
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
   const [selected, setSelected] = useState(false)
+  const [subtitleSelected, setSubtitleSelected] = useState(false)
   // Precisa de um valor de estado (não só a ref) para o Moveable saber que o <video> já existe no DOM.
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null)
 
@@ -131,7 +140,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
         ref={frameRef}
         className="ac-editor-frame"
         style={{ width: frameSize.width, height: frameSize.height }}
-        onMouseDown={(e) => { if (e.target === frameRef.current) setSelected(false) }}
+        onMouseDown={(e) => { if (e.target === frameRef.current) { setSelected(false); setSubtitleSelected(false) } }}
       >
         {/* Fundo */}
         {background.type === 'color' ? (
@@ -179,7 +188,11 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
             snappable
             snapCenter
             snapThreshold={6}
-            renderDirections={['nw', 'ne', 'sw', 'se']}
+            // 8 handles (cantos + centros de cada borda). keepRatio preserva o aspect ratio do
+            // vídeo em qualquer um deles — o Canvas tem overflow:hidden (ac.editor-frame), então
+            // ampliar o vídeo além do frame e arrastar funciona como janela de recorte, sem
+            // precisar de uma segunda lógica de transformação.
+            renderDirections={['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se']}
             verticalGuidelines={[0, frameSize.width / 2, frameSize.width]}
             horizontalGuidelines={[0, frameSize.height / 2, frameSize.height]}
             onDrag={handleDrag}
@@ -188,6 +201,19 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
             onResizeEnd={({ target }) => commitFromTarget(target)}
           />
         )}
+
+        <SubtitleLayer
+          segments={subtitleSegments}
+          currentTime={currentTime}
+          style={subtitleStyle}
+          position={subtitlePosition}
+          frameSize={frameSize}
+          frameEl={frameRef.current}
+          logicalWidth={dims.width}
+          selected={subtitleSelected}
+          onSelect={() => setSubtitleSelected(true)}
+          onPositionChange={onSubtitlePositionChange}
+        />
       </div>
     </div>
   )

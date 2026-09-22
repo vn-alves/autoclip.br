@@ -1,9 +1,15 @@
 import React, { useCallback, useRef, useState } from 'react'
+import SubtitleTimeline from './SubtitleTimeline'
+import { SubtitleSegment } from './types'
 
 interface EditorTimelineProps {
   currentTime: number
   duration: number
   onSeek: (t: number) => void
+  /** Etapa 2 — opcionais: sem eles a Timeline se comporta exatamente como na Etapa 1. */
+  subtitleSegments?: SubtitleSegment[]
+  selectedSubtitleId?: string | null
+  onSelectSubtitle?: (segment: SubtitleSegment) => void
 }
 
 const fmt = (sec: number): string => {
@@ -18,7 +24,9 @@ const fmt = (sec: number): string => {
  * Representa só o clip principal (0 = início do corte). Camadas na
  * timeline ficam para uma etapa futura.
  */
-const EditorTimeline: React.FC<EditorTimelineProps> = ({ currentTime, duration, onSeek }) => {
+const EditorTimeline: React.FC<EditorTimelineProps> = ({
+  currentTime, duration, onSeek, subtitleSegments, selectedSubtitleId, onSelectSubtitle,
+}) => {
   const trackRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
 
@@ -63,6 +71,14 @@ const EditorTimeline: React.FC<EditorTimelineProps> = ({ currentTime, duration, 
         <div className="ac-editor-timeline-progress" style={{ width: `${percent}%` }} />
         <div className="ac-editor-timeline-playhead" style={{ left: `${percent}%` }} />
       </div>
+      {subtitleSegments && onSelectSubtitle && (
+        <SubtitleTimeline
+          segments={subtitleSegments}
+          duration={duration}
+          selectedSegmentId={selectedSubtitleId ?? null}
+          onSelectSegment={onSelectSubtitle}
+        />
+      )}
     </div>
   )
 }

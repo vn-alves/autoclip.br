@@ -1,11 +1,15 @@
 /**
- * Estado do Editor de Corte — ETAPA 1 (fundação).
+ * Estado do Editor de Corte — ETAPA 1 (fundação) + ETAPA 2 (legendas).
  *
  * Só existe em memória (React state) nesta etapa; não é persistido no
  * backend. A forma já é pensada para crescer nas próximas etapas
  * (múltiplas layers, legendas, render spec) sem precisar reescrever o
  * que já existe — ver docs/EDITOR_SPEC.md.
  */
+
+import type { SubtitleSegment, SubtitleWord } from '../../services/api'
+
+export type { SubtitleSegment, SubtitleWord }
 
 export type CanvasFormat = '9:16' | '16:9' | '1:1'
 
@@ -54,12 +58,133 @@ export interface VideoLayerState {
   transform: NormalizedTransform
 }
 
+/* ---------------------------------------------------------------- Legendas (Etapa 2) --- */
+
+export type SubtitlePositionPreset = 'top' | 'center' | 'bottom' | 'custom'
+
+/** Igual a NormalizedTransform em espírito (0..1 relativo ao canvas), mas sem altura —
+ * a caixa de legenda tem altura automática (definida pelo texto), nunca esticada. */
+export interface SubtitlePosition {
+  preset: SubtitlePositionPreset
+  x: number
+  y: number
+  width: number
+}
+
+export const SUBTITLE_POSITION_PRESETS: Record<Exclude<SubtitlePositionPreset, 'custom'>, Omit<SubtitlePosition, 'preset'>> = {
+  top: { x: 0.07, y: 0.06, width: 0.86 },
+  center: { x: 0.07, y: 0.46, width: 0.86 },
+  bottom: { x: 0.07, y: 0.78, width: 0.86 },
+}
+
+export type SubtitleAnimation = 'none' | 'karaoke' | 'pop_in'
+
+export interface SubtitleOutline {
+  enabled: boolean
+  color: string
+  width: number
+}
+
+export interface SubtitleStyle {
+  /** id do preset aplicado por último (ver SUBTITLE_STYLE_PRESETS), ou 'custom' após qualquer edição manual. */
+  id: string
+  fontFamily: string
+  /** px, relativo à resolução lógica do canvas (CANVAS_DIMENSIONS) — escalado na hora de renderizar. */
+  fontSize: number
+  fontWeight: 400 | 500 | 600 | 700 | 800
+  color: string
+  highlightColor: string
+  outline: SubtitleOutline
+  animation: SubtitleAnimation
+}
+
+export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
+  id: 'white-outline',
+  fontFamily: "Inter, 'Noto Sans SC', system-ui, sans-serif",
+  fontSize: 46,
+  fontWeight: 700,
+  color: '#FFFFFF',
+  highlightColor: '#2D6BFF',
+  outline: { enabled: true, color: '#000000', width: 2 },
+  animation: 'none',
+}
+
+export const DEFAULT_SUBTITLE_POSITION: SubtitlePosition = { preset: 'bottom', ...SUBTITLE_POSITION_PRESETS.bottom }
+
+export interface SubtitleStylePreset {
+  id: string
+  label: string
+  /** aplicado por cima de DEFAULT_SUBTITLE_STYLE (merge raso; outline é substituído por inteiro quando presente). */
+  style: Partial<Omit<SubtitleStyle, 'id'>>
+}
+
+/** Base pequena e fácil de expandir — cada card é só um objeto novo nesta lista. */
+export const SUBTITLE_STYLE_PRESETS: SubtitleStylePreset[] = [
+  {
+    id: 'white-outline',
+    label: 'Branco + contorno',
+    style: { color: '#FFFFFF', outline: { enabled: true, color: '#000000', width: 2 }, fontWeight: 700, animation: 'none' },
+  },
+  {
+    id: 'yellow-black',
+    label: 'Amarelo + preto',
+    style: { color: '#FFE14D', outline: { enabled: true, color: '#000000', width: 3 }, fontWeight: 700, animation: 'none' },
+  },
+  {
+    id: 'big-text',
+    label: 'Texto grande',
+    style: { fontSize: 64, color: '#FFFFFF', outline: { enabled: true, color: '#000000', width: 2 }, fontWeight: 700, animation: 'none' },
+  },
+  {
+    id: 'bold',
+    label: 'Texto bold',
+    style: { color: '#FFFFFF', fontWeight: 800, outline: { enabled: false, color: '#000000', width: 2 }, animation: 'none' },
+  },
+  {
+    id: 'karaoke',
+    label: 'Karaokê',
+    style: { color: '#FFFFFF', highlightColor: '#2D6BFF', outline: { enabled: true, color: '#000000', width: 2 }, fontWeight: 700, animation: 'karaoke' },
+  },
+]
+
+/** Sombra em 8 direções — aproxima um contorno uniforme ao redor do texto (mais suave que -webkit-text-stroke sozinho). */
+export function subtitleOutlineShadow(outline: SubtitleOutline): string {
+  if (!outline.enabled || outline.width <= 0) return 'none'
+  const w = outline.width
+  const offsets: [number, number][] = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]]
+  return offsets.map(([dx, dy]) => `${dx * w}px ${dy * w}px 0 ${outline.color}`).join(', ')
+}
+
+/** O segmento cujo intervalo [startTime, endTime] contém currentTime, ou null fora de qualquer legenda. */
+export function findActiveSegment(segments: SubtitleSegment[], currentTime: number): SubtitleSegment | null {
+  for (const seg of segments) {
+    if (currentTime >= seg.startTime && currentTime <= seg.endTime) return seg
+  }
+  return null
+}
+
+/** A palavra ativa dentro do segmento (para o destaque karaokê), usando os timestamps já fornecidos pelo backend. */
+export function findActiveWord(segment: SubtitleSegment, currentTime: number): SubtitleWord | null {
+  for (const w of segment.words) {
+    if (currentTime >= w.startTime && currentTime <= w.endTime) return w
+  }
+  return null
+}
+
+export interface SubtitleEditorState {
+  style: SubtitleStyle
+  position: SubtitlePosition
+  /** Só para destacar o bloco na timeline de legendas; não controla o que aparece no canvas (isso é sempre derivado de currentTime). */
+  selectedSegmentId: string | null
+}
+
 export interface EditorState {
   canvas: {
     format: CanvasFormat
     background: BackgroundConfig
   }
   videoLayer: VideoLayerState
+  subtitle: SubtitleEditorState
 }
 
 /** Enquadra o vídeo dentro do canvas preservando a proporção original (contain-fit), centralizado. */
@@ -99,5 +224,10 @@ export function createDefaultEditorState(): EditorState {
   return {
     canvas: { format: '9:16', background: { ...DEFAULT_BACKGROUND } },
     videoLayer: { id: 'main', transform: { x: 0, y: 0, width: 1, height: 1, rotation: 0 } },
+    subtitle: {
+      style: { ...DEFAULT_SUBTITLE_STYLE, outline: { ...DEFAULT_SUBTITLE_STYLE.outline } },
+      position: { ...DEFAULT_SUBTITLE_POSITION },
+      selectedSegmentId: null,
+    },
   }
 }
