@@ -83,28 +83,38 @@ async def get_clip_subtitles(
         # 解析字幕数据
         subtitle_data = subtitle_processor.parse_srt_to_word_level(srt_file)
         
-        # 过滤出属于当前片段的时间范围
-        # 如果start_time和end_time是整数（秒），直接使用
-        if isinstance(clip.start_time, int):
-            clip_start = clip.start_time
-        else:
-            clip_start = subtitle_processor._srt_time_to_seconds(
-                subtitle_processor._seconds_to_srt_time_object(clip.start_time)
-            )
-        
-        if isinstance(clip.end_time, int):
-            clip_end = clip.end_time
-        else:
-            clip_end = subtitle_processor._srt_time_to_seconds(
-                subtitle_processor._seconds_to_srt_time_object(clip.end_time)
-            )
-        
+        # 过滤出属于当前片段的时间范围。
+        # IMPORTANTE: clip.start_time/end_time no banco são inteiros truncados
+        # (DataSyncService._convert_time_to_seconds faz int(total_seconds)), mas o
+        # arquivo físico do clip foi cortado pelo ffmpeg no timestamp PRECISO (com
+        # milissegundos) vindo do timeline gerado pela IA. Usar o valor truncado aqui
+        # desalinha toda legenda em até ~1s em relação ao vídeo real. clip_metadata
+        # guarda o dict original do pipeline (start_time/end_time como string
+        # "HH:MM:SS,mmm") — quando presente, usamos ele para o offset preciso, e só
+        # caímos para o inteiro do banco como fallback (clipes criados fora do
+        # pipeline de IA, sem esse metadata).
+        raw_meta = clip.clip_metadata or {}
+
+        def _precise_seconds(meta_key: str, fallback) -> float:
+            raw = raw_meta.get(meta_key)
+            if isinstance(raw, str) and raw.strip():
+                try:
+                    return subtitle_processor._srt_time_to_seconds(
+                        subtitle_processor._seconds_to_srt_time_object(raw)
+                    )
+                except Exception:
+                    pass
+            return float(fallback or 0)
+
+        clip_start = _precise_seconds('start_time', clip.start_time)
+        clip_end = _precise_seconds('end_time', clip.end_time)
+
         # 过滤字幕段
         clip_subtitles = [
-            seg for seg in subtitle_data 
+            seg for seg in subtitle_data
             if seg['startTime'] >= clip_start and seg['endTime'] <= clip_end
         ]
-        
+
         # 调整时间戳为相对于片段的
         for seg in clip_subtitles:
             seg['startTime'] -= clip_start
