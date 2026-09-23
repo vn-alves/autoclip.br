@@ -187,12 +187,34 @@ export interface SubtitleSegment {
   words: SubtitleWord[]
 }
 
+// Sincronização precisa de legendas (Whisper + alinhamento) — ver
+// backend/services/subtitle_sync_service.py. "not_synced" = ainda usando a
+// estimativa linear; "synced" = timestamps reais já persistidos e em uso.
+export type SubtitleSyncStatus = 'not_synced' | 'syncing' | 'synced' | 'error'
+
 // Espelha backend/api/v1/subtitle_editor.py SubtitleDataResponse
 export interface SubtitleDataResponse {
   segments: SubtitleSegment[]
   total_duration: number
   word_count: number
   segment_count: number
+  sync_status: SubtitleSyncStatus
+  synced_at: string | null
+  words: SubtitleWord[] | null
+}
+
+// Espelha backend/api/v1/subtitle_editor.py SubtitleSyncStartResponse/SubtitleSyncStatusResponse
+export interface SubtitleSyncStartResponse {
+  job_id: string
+  status: string
+}
+
+export interface SubtitleSyncStatusResponse {
+  status: 'analyzing_audio' | 'aligning_words' | 'synced' | 'error'
+  progress: number
+  error: string | null
+  synced_at: string | null
+  word_count: number | null
 }
 
 // Tipos de interface relacionados ao Bilibili
@@ -608,6 +630,16 @@ export const projectApi = {
   // sem criar um novo processamento de SRT. 404 = corte sem legenda disponível (não é erro fatal).
   getClipSubtitles: (projectId: string, clipId: string): Promise<SubtitleDataResponse> => {
     return api.get(`/subtitle-editor/${projectId}/clips/${clipId}/subtitles`)
+  },
+
+  // Dispara a sincronização precisa (Whisper + alinhamento, roda em background no
+  // backend) — devolve um job_id para consultar o progresso com getClipSubtitleSyncStatus.
+  startClipSubtitleSync: (projectId: string, clipId: string): Promise<SubtitleSyncStartResponse> => {
+    return api.post(`/subtitle-editor/${projectId}/clips/${clipId}/subtitles/sync`)
+  },
+
+  getClipSubtitleSyncStatus: (projectId: string, clipId: string, jobId: string): Promise<SubtitleSyncStatusResponse> => {
+    return api.get(`/subtitle-editor/${projectId}/clips/${clipId}/subtitles/sync/${jobId}`)
   },
 
   // Obter URL do vídeo da coleção

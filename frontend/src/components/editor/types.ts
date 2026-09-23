@@ -7,9 +7,9 @@
  * que já existe — ver docs/EDITOR_SPEC.md.
  */
 
-import type { SubtitleSegment, SubtitleWord } from '../../services/api'
+import type { SubtitleSegment, SubtitleWord, SubtitleSyncStatus } from '../../services/api'
 
-export type { SubtitleSegment, SubtitleWord }
+export type { SubtitleSegment, SubtitleWord, SubtitleSyncStatus }
 
 export type CanvasFormat = '9:16' | '16:9' | '1:1'
 
@@ -171,11 +171,80 @@ export function findActiveWord(segment: SubtitleSegment, currentTime: number): S
   return null
 }
 
+/* ------------------------------------------------------ Sincronização precisa (Etapa 2 — evolução) --- */
+
+/** 'auto' deixa o sistema escolher a quantidade por bloco (pausas/pontuação/tamanho); os demais valores
+ * são uma contagem fixa de palavras por legenda. Reagrupar NUNCA chama IA — é só reparticionar a mesma
+ * lista de palavras já sincronizada (ver groupWordsIntoSegments), por isso é instantâneo. */
+export type SubtitleWordsPerCaption = 'auto' | 1 | 2 | 3 | 4 | 5 | 6 | 8 | 10
+
+export const WORDS_PER_CAPTION_OPTIONS: { value: SubtitleWordsPerCaption; label: string }[] = [
+  { value: 'auto', label: 'Automático' },
+  { value: 1, label: '1 palavra' },
+  { value: 2, label: '2 palavras' },
+  { value: 3, label: '3 palavras' },
+  { value: 4, label: '4 palavras' },
+  { value: 5, label: '5 palavras' },
+  { value: 6, label: '6 palavras' },
+  { value: 8, label: '8 palavras' },
+  { value: 10, label: '10 palavras' },
+]
+
+const AUTO_MAX_WORDS = 8
+const AUTO_MAX_CHARS = 42
+const AUTO_PAUSE_GAP_SECONDS = 0.6
+const SENTENCE_END_RE = /[.!?;]$/
+
+/**
+ * Reagrupa uma lista "achatada" de palavras (já com timestamps reais, sincronizados
+ * uma única vez com IA) em blocos de legenda — puramente local, sem tocar nos
+ * timestamps individuais de cada palavra (item 7/13 da tarefa de sincronização).
+ */
+export function groupWordsIntoSegments(words: SubtitleWord[], mode: SubtitleWordsPerCaption): SubtitleSegment[] {
+  if (words.length === 0) return []
+
+  const groups: SubtitleWord[][] = []
+  let current: SubtitleWord[] = []
+  let currentChars = 0
+
+  const flush = () => {
+    if (current.length > 0) {
+      groups.push(current)
+      current = []
+      currentChars = 0
+    }
+  }
+
+  words.forEach((w, i) => {
+    current.push(w)
+    currentChars += w.text.length + 1
+    if (mode === 'auto') {
+      const next = words[i + 1]
+      const pause = next ? next.startTime - w.endTime : Infinity
+      const tooLong = current.length >= AUTO_MAX_WORDS || currentChars >= AUTO_MAX_CHARS
+      if (!next || SENTENCE_END_RE.test(w.text) || pause >= AUTO_PAUSE_GAP_SECONDS || tooLong) flush()
+    } else if (current.length >= mode) {
+      flush()
+    }
+  })
+  flush()
+
+  return groups.map((group, index) => ({
+    id: `synced-seg-${index}`,
+    startTime: group[0].startTime,
+    endTime: group[group.length - 1].endTime,
+    text: group.map((w) => w.text).join(' '),
+    index,
+    words: group,
+  }))
+}
+
 export interface SubtitleEditorState {
   style: SubtitleStyle
   position: SubtitlePosition
   /** Só para destacar o bloco na timeline de legendas; não controla o que aparece no canvas (isso é sempre derivado de currentTime). */
   selectedSegmentId: string | null
+  wordsPerCaption: SubtitleWordsPerCaption
 }
 
 export interface EditorState {
@@ -228,6 +297,7 @@ export function createDefaultEditorState(): EditorState {
       style: { ...DEFAULT_SUBTITLE_STYLE, outline: { ...DEFAULT_SUBTITLE_STYLE.outline } },
       position: { ...DEFAULT_SUBTITLE_POSITION },
       selectedSegmentId: null,
+      wordsPerCaption: 'auto',
     },
   }
 }

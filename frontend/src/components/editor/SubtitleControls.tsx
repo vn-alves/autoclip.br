@@ -1,9 +1,10 @@
 import React from 'react'
 import { Spin } from 'antd'
-import { Segmented } from '../../ui'
+import { Btn, Segmented } from '../../ui'
 import SubtitleStyleCards from './SubtitleStyleCards'
 import {
   SubtitleAnimation, SubtitlePosition, SubtitlePositionPreset, SubtitleStyle, SubtitleStylePreset,
+  SubtitleSyncStatus, SubtitleWordsPerCaption, WORDS_PER_CAPTION_OPTIONS,
 } from './types'
 
 interface SubtitleControlsProps {
@@ -17,6 +18,14 @@ interface SubtitleControlsProps {
   onStyleChange: (patch: Partial<Omit<SubtitleStyle, 'id' | 'outline'>>) => void
   onOutlineChange: (patch: Partial<SubtitleStyle['outline']>) => void
   onPositionPreset: (preset: Exclude<SubtitlePositionPreset, 'custom'>) => void
+  /** Sincronização precisa (Whisper + alinhamento) — ver subtitle_sync_service.py. */
+  syncStatus: SubtitleSyncStatus
+  syncMessage: string | null
+  syncError: string | null
+  syncedAt: string | null
+  onStartSync: () => void
+  wordsPerCaption: SubtitleWordsPerCaption
+  onWordsPerCaptionChange: (value: SubtitleWordsPerCaption) => void
 }
 
 const FONT_OPTIONS = [
@@ -46,10 +55,20 @@ const POSITION_OPTIONS: { value: Exclude<SubtitlePositionPreset, 'custom'>; labe
   { value: 'bottom', label: 'Inferior' },
 ]
 
+const formatSyncedAt = (iso: string): string => {
+  try {
+    return new Date(iso).toLocaleString()
+  } catch {
+    return iso
+  }
+}
+
 /** Painel de propriedades da legenda — Etapa 2. Some sozinho quando o corte não tem legenda. */
 const SubtitleControls: React.FC<SubtitleControlsProps> = ({
   loading, error, available, hasSegments, style, position,
   onApplyPreset, onStyleChange, onOutlineChange, onPositionPreset,
+  syncStatus, syncMessage, syncError, syncedAt, onStartSync,
+  wordsPerCaption, onWordsPerCaptionChange,
 }) => {
   if (loading) {
     return (
@@ -84,6 +103,47 @@ const SubtitleControls: React.FC<SubtitleControlsProps> = ({
 
   return (
     <>
+      <div className="ac-editor-panel-section">
+        <div className="ac-editor-panel-label">Sincronização</div>
+        {syncStatus === 'syncing' ? (
+          <Btn size="sm" loading disabled>{syncMessage || 'Sincronizando…'}</Btn>
+        ) : syncStatus === 'synced' ? (
+          <>
+            <p className="ac-editor-hint" style={{ color: 'var(--ac-accent)', marginTop: 0 }}>
+              ✓ Sincronizado{syncedAt ? ` · ${formatSyncedAt(syncedAt)}` : ''}
+            </p>
+            <Btn size="sm" onClick={onStartSync}>Sincronizar novamente</Btn>
+          </>
+        ) : (
+          <>
+            <Btn size="sm" onClick={onStartSync}>Sincronizar com IA</Btn>
+            <p className="ac-editor-hint">
+              Alinha a legenda ao áudio real do corte (timing preciso por palavra, karaokê correto).
+            </p>
+          </>
+        )}
+        {syncStatus === 'error' && syncError && (
+          <p style={{ color: 'var(--ac-error)', fontSize: 12, marginTop: 8 }}>{syncError}</p>
+        )}
+      </div>
+
+      <div className="ac-editor-panel-section">
+        <div className="ac-editor-panel-label">Palavras por legenda</div>
+        <select
+          className="ac-input"
+          value={String(wordsPerCaption)}
+          disabled={syncStatus !== 'synced'}
+          onChange={(e) => onWordsPerCaptionChange((e.target.value === 'auto' ? 'auto' : Number(e.target.value)) as SubtitleWordsPerCaption)}
+        >
+          {WORDS_PER_CAPTION_OPTIONS.map((o) => (
+            <option key={String(o.value)} value={String(o.value)}>{o.label}</option>
+          ))}
+        </select>
+        {syncStatus !== 'synced' && (
+          <p className="ac-editor-hint">Sincronize com IA para poder ajustar o agrupamento de palavras.</p>
+        )}
+      </div>
+
       <div className="ac-editor-panel-section">
         <div className="ac-editor-panel-label">Estilo</div>
         <SubtitleStyleCards activePresetId={style.id} onApply={onApplyPreset} />
