@@ -235,15 +235,19 @@ async def start_clip_subtitle_sync(
             raise HTTPException(status_code=404, detail="片段不存在")
 
         clip_subtitles = _get_clip_subtitles_from_srt(project_id, clip, subtitle_processor)
-        original_words = [
-            {"id": w["id"], "text": w["text"]}
-            for seg in clip_subtitles for w in seg["words"]
+        original_segments = [
+            {
+                "startTime": seg["startTime"],
+                "endTime": seg["endTime"],
+                "words": [{"id": w["id"], "text": w["text"]} for w in seg["words"]],
+            }
+            for seg in clip_subtitles
         ]
-        if not original_words:
+        if not any(seg["words"] for seg in original_segments):
             raise HTTPException(status_code=400, detail="Este corte não possui legendas para sincronizar.")
 
         from ...services import subtitle_sync_service
-        job_id = subtitle_sync_service.start_sync(project_id, clip_id, original_words)
+        job_id = subtitle_sync_service.start_sync(project_id, clip_id, original_segments)
         job = subtitle_sync_service.get_job(job_id) or {}
         return SubtitleSyncStartResponse(job_id=job_id, status=job.get("status", "analyzing_audio"))
 
