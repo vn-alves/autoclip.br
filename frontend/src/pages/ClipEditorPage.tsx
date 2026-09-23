@@ -280,6 +280,23 @@ const ClipEditorPage: React.FC = () => {
     if (v) setCurrentTime(v.currentTime)
   }
 
+  // O evento nativo "timeupdate" do <video> dispara em intervalos grosseiros (~250ms,
+  // varia por navegador) — granularidade insuficiente pra o destaque de palavra do karaokê,
+  // que pode ficar visivelmente atrasado/adiantado em relação à fala mesmo com os
+  // timestamps do backend corretos. Enquanto o vídeo está tocando, faz o polling de
+  // currentTime a cada frame (rAF, ~60fps) em vez de depender só do timeupdate.
+  useEffect(() => {
+    if (!isPlaying) return
+    let rafId: number
+    const tick = () => {
+      const v = videoRef.current
+      if (v) setCurrentTime(v.currentTime)
+      rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafId)
+  }, [isPlaying])
+
   if (loading) {
     return (
       <div className="ac-editor-page" style={{ alignItems: 'center', justifyContent: 'center' }}>
