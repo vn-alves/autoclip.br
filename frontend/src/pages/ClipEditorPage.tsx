@@ -88,6 +88,10 @@ const ClipEditorPage: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
+  // Erro visível do upload de vídeo secundário (item 5/6 da estabilização) — antes uma falha
+  // aqui (arquivo inválido, createObjectURL indisponível etc.) não tinha nenhum retorno pro
+  // usuário, parecendo que o botão simplesmente não fazia nada.
+  const [layerUploadError, setLayerUploadError] = useState<string | null>(null)
 
   const [subtitleSegments, setSubtitleSegments] = useState<SubtitleSegment[]>([])
   const [subtitleLoading, setSubtitleLoading] = useState(true)
@@ -157,16 +161,21 @@ const ClipEditorPage: React.FC = () => {
     setEditorState((s) => ({ ...s, subtitle: { ...s.subtitle, wordsPerCaption: saved } }))
   }, [clipId])
 
-  // Blocos de legenda exibidos no Editor: se já houver sincronização precisa, reagrupa a
-  // lista de palavras (timestamps reais) conforme a config de "palavras por legenda" —
-  // operação local, instantânea, sem chamar IA. Sem sincronização, usa a estimativa linear
-  // que já vem pronta do backend (comportamento da Etapa 2 original).
+  // Blocos de legenda exibidos no Editor: reagrupa a lista de palavras — real (pós-sincronização
+  // com IA) ou a estimativa linear que já vem pronta do backend quando ainda não sincronizado —
+  // conforme a config de "palavras por legenda". Operação 100% local, sem chamar IA e sem tocar
+  // nos timestamps de cada palavra. Antes disso só funcionava com o clip já sincronizado; agora
+  // funciona sempre que houver QUALQUER dado em granularidade de palavra, sincronizado ou não —
+  // sem isso "palavras por legenda" parecia não fazer nada em cortes ainda não sincronizados.
+  const flatSubtitleWords = useMemo(() => {
+    if (syncStatus === 'synced' && subtitleWords.length > 0) return subtitleWords
+    return subtitleSegments.flatMap((seg) => seg.words)
+  }, [syncStatus, subtitleWords, subtitleSegments])
+
   const displaySegments = useMemo(() => {
-    if (syncStatus === 'synced' && subtitleWords.length > 0) {
-      return groupWordsIntoSegments(subtitleWords, editorState.subtitle.wordsPerCaption)
-    }
-    return subtitleSegments
-  }, [syncStatus, subtitleWords, subtitleSegments, editorState.subtitle.wordsPerCaption])
+    if (flatSubtitleWords.length === 0) return subtitleSegments
+    return groupWordsIntoSegments(flatSubtitleWords, editorState.subtitle.wordsPerCaption)
+  }, [flatSubtitleWords, subtitleSegments, editorState.subtitle.wordsPerCaption])
 
   const handleWordsPerCaptionChange = (value: SubtitleWordsPerCaption) => {
     setEditorState((s) => ({ ...s, subtitle: { ...s.subtitle, wordsPerCaption: value } }))
@@ -347,17 +356,39 @@ const ClipEditorPage: React.FC = () => {
 
   // "+ Adicionar vídeo" (item 4) — upload puramente local (object URL), sem tocar o backend;
   // a layer entra ativa no intervalo inteiro do corte por padrão, ajustável depois no painel.
+  // Qualquer falha (arquivo não é vídeo, createObjectURL indisponível etc.) fica visível em
+  // layerUploadError em vez de silenciosamente não fazer nada.
   const handleAddVideoFiles = (files: FileList) => {
-    setEditorState((s) => {
-      let nextLayers = s.layers
-      let lastId: string | null = null
-      for (const file of Array.from(files)) {
-        const layer = createVideoLayerFromFile(file, nextLayers, duration)
-        nextLayers = [...nextLayers, layer]
-        lastId = layer.id
+    setLayerUploadError(null)
+    const accepted: File[] = []
+    const rejected: string[] = []
+    for (const file of Array.from(files)) {
+      if (file.type && !file.type.startsWith('video/')) {
+        rejected.push(file.name)
+      } else {
+        accepted.push(file)
       }
-      return { ...s, layers: nextLayers, selectedLayerId: lastId ?? s.selectedLayerId }
-    })
+    }
+    if (rejected.length > 0) {
+      setLayerUploadError(`Arquivo não é um vídeo suportado (mp4/webm/mov): ${rejected.join(', ')}`)
+    }
+    if (accepted.length === 0) return
+
+    try {
+      setEditorState((s) => {
+        let nextLayers = s.layers
+        let lastId: string | null = null
+        for (const file of accepted) {
+          const layer = createVideoLayerFromFile(file, nextLayers, duration)
+          nextLayers = [...nextLayers, layer]
+          lastId = layer.id
+        }
+        return { ...s, layers: nextLayers, selectedLayerId: lastId ?? s.selectedLayerId }
+      })
+    } catch (err: any) {
+      console.error('Falha ao adicionar vídeo à layer:', err)
+      setLayerUploadError(err?.message || 'Não foi possível carregar esse vídeo.')
+    }
   }
 
   const handleBackgroundType = (type: BackgroundType) => {
@@ -574,6 +605,7 @@ const ClipEditorPage: React.FC = () => {
             onRemove={handleRemoveLayer}
             onTimeRangeChange={handleLayerTimeRangeChange}
             onAddFiles={handleAddVideoFiles}
+            uploadError={layerUploadError}
           />
           {displaySegments.length > 0 && (
             <div className="ac-editor-panel-section">

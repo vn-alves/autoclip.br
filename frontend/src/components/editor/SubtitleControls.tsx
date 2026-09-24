@@ -132,7 +132,6 @@ const SubtitleControls: React.FC<SubtitleControlsProps> = ({
         <select
           className="ac-input"
           value={String(wordsPerCaption)}
-          disabled={syncStatus !== 'synced'}
           onChange={(e) => onWordsPerCaptionChange((e.target.value === 'auto' ? 'auto' : Number(e.target.value)) as SubtitleWordsPerCaption)}
         >
           {WORDS_PER_CAPTION_OPTIONS.map((o) => (
@@ -140,7 +139,10 @@ const SubtitleControls: React.FC<SubtitleControlsProps> = ({
           ))}
         </select>
         {syncStatus !== 'synced' && (
-          <p className="ac-editor-hint">Sincronize com IA para poder ajustar o agrupamento de palavras.</p>
+          <p className="ac-editor-hint">
+            Funciona mesmo sem sincronizar, mas com tempos estimados por palavra. Sincronize com IA
+            para um agrupamento com timing real.
+          </p>
         )}
       </div>
 

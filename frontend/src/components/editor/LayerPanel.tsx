@@ -14,6 +14,7 @@ interface LayerPanelProps {
   onRemove: (id: string) => void
   onTimeRangeChange: (id: string, startTime: number, endTime: number) => void
   onAddFiles: (files: FileList) => void
+  uploadError: string | null
 }
 
 const ACCEPTED_VIDEO_TYPES = 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov'
@@ -31,6 +32,7 @@ const clampSeconds = (v: number, duration: number): number => {
 const LayerPanel: React.FC<LayerPanelProps> = ({
   layers, selectedLayerId, duration,
   onSelect, onToggleVisible, onRename, onMoveUp, onMoveDown, onRemove, onTimeRangeChange, onAddFiles,
+  uploadError,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -144,6 +146,9 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
       <Btn size="sm" onClick={() => fileInputRef.current?.click()} style={{ marginTop: 10, width: '100%' }}>
         <Icon.Plus size={13} /> Adicionar vídeo
       </Btn>
+      {uploadError && (
+        <p style={{ color: 'var(--ac-error)', fontSize: 12, marginTop: 8 }}>{uploadError}</p>
+      )}
     </div>
   )
 }
