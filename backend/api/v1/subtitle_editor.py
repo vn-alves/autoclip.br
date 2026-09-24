@@ -52,6 +52,8 @@ class SubtitleSyncStatusResponse(BaseModel):
     error: Optional[str] = None
     synced_at: Optional[str] = None
     word_count: Optional[int] = None
+    segments_done: Optional[int] = None
+    segments_total: Optional[int] = None
 
 class EditPreviewRequest(BaseModel):
     project_id: str
@@ -271,6 +273,8 @@ async def get_clip_subtitle_sync_status(project_id: str, clip_id: str, job_id: s
         error=job.get("error"),
         synced_at=job.get("synced_at"),
         word_count=job.get("word_count"),
+        segments_done=job.get("segments_done"),
+        segments_total=job.get("segments_total"),
     )
 
 @router.post("/{project_id}/clips/{clip_id}/edit")

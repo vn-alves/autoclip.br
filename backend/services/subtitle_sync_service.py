@@ -40,12 +40,14 @@ operação de playback, só dispara quando o usuário pede.
 """
 import difflib
 import logging
+import os
 import re
 import shutil
 import subprocess
 import tempfile
 import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -77,6 +79,14 @@ WINDOW_PADDING_SECONDS = 1.2
 # palavras por segmento), uma palavra a mais na borda já é o suficiente para o difflib nunca
 # mais recuperar o sincronismo pro resto da janela.
 CORE_MATCH_TOLERANCE_SECONDS = 0.5
+
+# Cada segmento é extraído/transcrito de forma independente (ver docstring do módulo) — isso
+# também os torna paralelizáveis. Processar um por vez (como antes) fazia um corte de alguns
+# minutos, com uma centena de segmentos, levar 20-30+ minutos de espera; CTranslate2 (motor do
+# faster-whisper) libera o GIL durante a inferência, então múltiplas threads Python chamando
+# transcribe() no MESMO modelo concorrentemente já é o jeito padrão de servir isso. Limitado a
+# poucos workers pra não saturar máquinas com poucos núcleos.
+MAX_SYNC_WORKERS = min(4, max(1, (os.cpu_count() or 2) - 1))
 
 
 def _normalize(word: str) -> str:
@@ -190,6 +200,57 @@ def _linear_fallback_for_segment(seg: dict, seg_words: List[dict]) -> List[dict]
     ]
 
 
+def _process_one_segment(
+    i: int, seg: dict, video_path: Path, ffmpeg_bin: str, model, tmp_dir: Path, clip_id: str,
+) -> List[dict]:
+    """Processa UM segmento de ponta a ponta (extrai áudio, transcreve, alinha) — roda em
+    paralelo com outros segmentos via ThreadPoolExecutor (ver MAX_SYNC_WORKERS)."""
+    seg_words = seg.get("words") or []
+    if not seg_words:
+        return []
+
+    window_start = max(0.0, seg["startTime"] - WINDOW_PADDING_SECONDS)
+    window_duration = (seg["endTime"] - seg["startTime"]) + 2 * WINDOW_PADDING_SECONDS
+    audio_path = tmp_dir / f"seg-{i}.wav"
+
+    try:
+        _extract_window_audio(ffmpeg_bin, video_path, window_start, window_duration, audio_path)
+        whisper_words = _transcribe_words(model, audio_path)
+    finally:
+        audio_path.unlink(missing_ok=True)
+
+    if not whisper_words:
+        # Nenhuma palavra reconhecida nesta janela (raro): recai na mesma divisão
+        # proporcional que a geração original do SRT já usava, mas só para ESTE segmento
+        # (poucos segundos), em vez de falhar a sincronização inteira por causa de um
+        # trecho isolado (ex.: ruído, risada, silêncio).
+        return _linear_fallback_for_segment(seg, seg_words)
+
+    # Os tempos vieram relativos ao INÍCIO DA JANELA extraída — soma de volta o offset da
+    # janela para ficarem relativos ao clip, como o resto do dado.
+    for w in whisper_words:
+        w["startTime"] += window_start
+        w["endTime"] += window_start
+    # Só o miolo do segmento entra no alinhamento — ver CORE_MATCH_TOLERANCE_SECONDS.
+    core_lo = seg["startTime"] - CORE_MATCH_TOLERANCE_SECONDS
+    core_hi = seg["endTime"] + CORE_MATCH_TOLERANCE_SECONDS
+    core_words = [w for w in whisper_words if core_lo <= (w["startTime"] + w["endTime"]) / 2 <= core_hi]
+    aligned, matched_any = _align_words(seg_words, core_words or whisper_words)
+    if matched_any:
+        return aligned
+
+    # Nada no áudio deste segmento bateu com o texto esperado (ver MIN_ALIGNMENT_SIMILARITY)
+    # — os limites do whisper_words não são confiáveis aqui (podem vir de conteúdo sem
+    # relação nenhuma com o segmento). Cai no mesmo fallback proporcional do caso "sem
+    # áudio" acima, em vez de usar um "resultado real" que na verdade é falso.
+    logger.warning(
+        f"Sincronização: segmento {i} do clip {clip_id} rejeitado por baixa similaridade "
+        f"(texto esperado não corresponde ao áudio reconhecido nesta janela) — usando "
+        f"estimativa proporcional só para este segmento."
+    )
+    return _linear_fallback_for_segment(seg, seg_words)
+
+
 def _run_sync(job_id: str, project_id: str, clip_id: str, original_segments: List[dict]) -> None:
     tmp_dir: Optional[Path] = None
     try:
@@ -226,65 +287,47 @@ def _run_sync(job_id: str, project_id: str, clip_id: str, original_segments: Lis
             from faster_whisper import WhisperModel
 
             models_dir = str(whisper_runtime.get_models_dir() / "hub")
-            model = WhisperModel(DEFAULT_MODEL, device="auto", compute_type="int8", download_root=models_dir)
+            # cpu_threads=0 (padrão) faz CADA chamada a transcribe() usar TODOS os núcleos
+            # disponíveis para si — rodar MAX_SYNC_WORKERS chamadas concorrentes sobre isso
+            # fazia elas brigarem pelos mesmos núcleos em vez de ganhar velocidade (medido:
+            # ficou tão lento quanto sequencial). num_workers dá pro CTranslate2 gerenciar a
+            # concorrência de verdade internamente; cpu_threads reparte os núcleos entre os
+            # workers em vez de cada um tentar usar todos.
+            cpu_threads = max(1, (os.cpu_count() or MAX_SYNC_WORKERS) // MAX_SYNC_WORKERS)
+            model = WhisperModel(
+                DEFAULT_MODEL, device="auto", compute_type="int8", download_root=models_dir,
+                cpu_threads=cpu_threads, num_workers=MAX_SYNC_WORKERS,
+            )
 
             tmp_dir = Path(tempfile.mkdtemp(prefix="autoclip-subsync-"))
-            aligned_segments: List[List[dict]] = []
+            aligned_segments: List[Optional[List[dict]]] = [None] * len(original_segments)
             total = len(original_segments)
+            done_count = 0
+            progress_lock = threading.Lock()
 
-            _set_job(job_id, status="aligning_words", progress=15)
+            _set_job(job_id, status="aligning_words", progress=15, segments_done=0, segments_total=total)
 
-            for i, seg in enumerate(original_segments):
-                seg_words = seg.get("words") or []
-                if not seg_words:
-                    aligned_segments.append([])
-                    continue
+            def _report_progress() -> None:
+                nonlocal done_count
+                with progress_lock:
+                    done_count += 1
+                    n = done_count
+                _set_job(
+                    job_id, status="aligning_words",
+                    progress=15 + int(70 * n / total), segments_done=n, segments_total=total,
+                )
 
-                window_start = max(0.0, seg["startTime"] - WINDOW_PADDING_SECONDS)
-                window_duration = (seg["endTime"] - seg["startTime"]) + 2 * WINDOW_PADDING_SECONDS
-                audio_path = tmp_dir / f"seg-{i}.wav"
+            with ThreadPoolExecutor(max_workers=MAX_SYNC_WORKERS) as pool:
+                futures = {
+                    pool.submit(_process_one_segment, i, seg, video_path, ffmpeg_bin, model, tmp_dir, clip_id): i
+                    for i, seg in enumerate(original_segments)
+                }
+                for future in as_completed(futures):
+                    i = futures[future]
+                    aligned_segments[i] = future.result()
+                    _report_progress()
 
-                try:
-                    _extract_window_audio(ffmpeg_bin, video_path, window_start, window_duration, audio_path)
-                    whisper_words = _transcribe_words(model, audio_path)
-                finally:
-                    audio_path.unlink(missing_ok=True)
-
-                if whisper_words:
-                    # Os tempos vieram relativos ao INÍCIO DA JANELA extraída — soma de volta
-                    # o offset da janela para ficarem relativos ao clip, como o resto do dado.
-                    for w in whisper_words:
-                        w["startTime"] += window_start
-                        w["endTime"] += window_start
-                    # Só o miolo do segmento entra no alinhamento — ver CORE_MATCH_TOLERANCE_SECONDS.
-                    core_lo = seg["startTime"] - CORE_MATCH_TOLERANCE_SECONDS
-                    core_hi = seg["endTime"] + CORE_MATCH_TOLERANCE_SECONDS
-                    core_words = [w for w in whisper_words if core_lo <= (w["startTime"] + w["endTime"]) / 2 <= core_hi]
-                    aligned, matched_any = _align_words(seg_words, core_words or whisper_words)
-                    if matched_any:
-                        aligned_segments.append(aligned)
-                    else:
-                        # Nada no áudio deste segmento bateu com o texto esperado (ver
-                        # MIN_ALIGNMENT_SIMILARITY) — os limites do whisper_words não são
-                        # confiáveis aqui (podem vir de conteúdo sem relação nenhuma com o
-                        # segmento). Cai no mesmo fallback linear do caso "sem áudio" abaixo,
-                        # em vez de usar um "resultado real" que na verdade é falso.
-                        logger.warning(
-                            f"Sincronização: segmento {i} do clip {clip_id} rejeitado por baixa "
-                            f"similaridade (texto esperado não corresponde ao áudio reconhecido "
-                            f"nesta janela) — usando estimativa linear só para este segmento."
-                        )
-                        aligned_segments.append(_linear_fallback_for_segment(seg, seg_words))
-                else:
-                    # Nenhuma palavra reconhecida nesta janela (raro): recai na mesma
-                    # divisão linear que a geração original do SRT já usava, mas só para
-                    # ESTE segmento (poucos segundos), em vez de falhar a sincronização
-                    # inteira por causa de um trecho isolado (ex.: ruído, risada, silêncio).
-                    aligned_segments.append(_linear_fallback_for_segment(seg, seg_words))
-
-                _set_job(job_id, status="aligning_words", progress=15 + int(70 * (i + 1) / total))
-
-            aligned = [w for seg in aligned_segments for w in seg]
+            aligned = [w for seg in aligned_segments for w in (seg or [])]
 
             _set_job(job_id, status="aligning_words", progress=90)
 
