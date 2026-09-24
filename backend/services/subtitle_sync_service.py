@@ -160,21 +160,33 @@ def _transcribe_words(model, audio_path: Path) -> List[dict]:
     return words
 
 
+def _distribute_proportionally(texts: List[str], start: float, end: float) -> List[Tuple[float, float]]:
+    """Divide o intervalo [start, end) entre as palavras de `texts` proporcionalmente ao
+    tamanho de cada uma (normalizada), em vez de partes iguais. Palavras curtas ("de", "e",
+    "um") duram bem menos que palavras longas ("acontecimento") na fala real — dividir tempo
+    igual entre elas é o que fazia o destaque do karaokê atrasar em trechos com várias
+    palavras curtas seguidas e "pular" pra frente quando uma palavra longa vinha em seguida.
+    Só entra em ação quando não há timestamp real do Whisper pra usar (fallback)."""
+    weights = [max(1, len(_normalize(t))) for t in texts]
+    total_weight = sum(weights)
+    span = max(0.0, end - start)
+    spans: List[Tuple[float, float]] = []
+    t = start
+    for w in weights:
+        dur = span * w / total_weight
+        spans.append((t, t + dur))
+        t += dur
+    return spans
+
+
 def _linear_fallback_for_segment(seg: dict, seg_words: List[dict]) -> List[dict]:
-    """Mesma divisão linear que a geração original do SRT já usava
-    (subtitle_processor._split_text_to_words), mas só para ESTE segmento — usada quando não
-    há áudio reconhecido na janela, ou quando o que foi reconhecido não corresponde ao texto
-    esperado (ver MIN_ALIGNMENT_SIMILARITY em _align_words). "Menos preciso" é preferível a
-    "precisamente errado"."""
-    seg_duration = seg["endTime"] - seg["startTime"]
-    each = seg_duration / len(seg_words)
+    """Usada quando não há áudio reconhecido na janela, ou quando o que foi reconhecido não
+    corresponde ao texto esperado (ver MIN_ALIGNMENT_SIMILARITY em _align_words). "Menos
+    preciso" é preferível a "precisamente errado"."""
+    spans = _distribute_proportionally([w["text"] for w in seg_words], seg["startTime"], seg["endTime"])
     return [
-        {
-            "id": w["id"], "text": w["text"],
-            "startTime": round(seg["startTime"] + k * each, 3),
-            "endTime": round(seg["startTime"] + (k + 1) * each, 3),
-        }
-        for k, w in enumerate(seg_words)
+        {"id": w["id"], "text": w["text"], "startTime": round(s, 3), "endTime": round(e, 3)}
+        for w, (s, e) in zip(seg_words, spans)
     ]
 
 
@@ -387,11 +399,11 @@ def _align_words(original_words: List[dict], whisper_words: List[dict]) -> Tuple
         count = gap_end - gap_start
         if next_start <= prev_end:
             next_start = prev_end + 0.05 * count
-        each = (next_start - prev_end) / count
-        for k in range(gap_start, gap_end):
-            w_start = prev_end + (k - gap_start) * each
+        gap_texts = [original_words[k]["text"] for k in range(gap_start, gap_end)]
+        spans = _distribute_proportionally(gap_texts, prev_end, next_start)
+        for k, (w_start, w_end) in zip(range(gap_start, gap_end), spans):
             orig = original_words[k]
-            result[k] = {"id": orig["id"], "text": orig["text"], "startTime": w_start, "endTime": w_start + each}
+            result[k] = {"id": orig["id"], "text": orig["text"], "startTime": w_start, "endTime": w_end}
 
     for r in result:
         r["startTime"] = round(r["startTime"], 3)
