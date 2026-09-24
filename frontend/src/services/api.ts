@@ -215,6 +215,8 @@ export interface SubtitleSyncStatusResponse {
   error: string | null
   synced_at: string | null
   word_count: number | null
+  segments_done: number | null
+  segments_total: number | null
 }
 
 // Tipos de interface relacionados ao Bilibili

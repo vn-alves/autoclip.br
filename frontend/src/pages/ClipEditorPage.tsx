@@ -25,6 +25,31 @@ const BACKGROUND_OPTIONS: { value: BackgroundType; label: string }[] = [
   { value: 'color', label: 'Cor sólida' },
 ]
 
+// Persistência local da preferência "palavras por legenda" — por clip, só no navegador (não
+// existe persistência de servidor pro Editor ainda, isso fica pra Etapa 4). Suficiente pra
+// reabrir o Editor do mesmo corte, na mesma máquina, e manter a config escolhida.
+const wordsPerCaptionStorageKey = (clipId: string) => `autoclip:editor:wordsPerCaption:${clipId}`
+
+const loadWordsPerCaption = (clipId: string): SubtitleWordsPerCaption | null => {
+  try {
+    const raw = localStorage.getItem(wordsPerCaptionStorageKey(clipId))
+    if (!raw) return null
+    if (raw === 'auto') return 'auto'
+    const n = Number(raw)
+    return ([5, 10, 15, 20, 25, 30] as const).includes(n as 5 | 10 | 15 | 20 | 25 | 30) ? (n as SubtitleWordsPerCaption) : null
+  } catch {
+    return null
+  }
+}
+
+const saveWordsPerCaption = (clipId: string, value: SubtitleWordsPerCaption): void => {
+  try {
+    localStorage.setItem(wordsPerCaptionStorageKey(clipId), String(value))
+  } catch {
+    // Sem storage disponível (ex.: navegação privada) — não é crítico, só perde a persistência.
+  }
+}
+
 const fmtTime = (sec: number): string => {
   if (!isFinite(sec) || sec < 0) sec = 0
   const m = Math.floor(sec / 60)
@@ -113,6 +138,16 @@ const ClipEditorPage: React.FC = () => {
     return () => { alive = false }
   }, [projectId, clipId])
 
+  // Carrega a preferência de "palavras por legenda" salva pra este corte (se houver),
+  // sempre que o clip muda — cobre tanto a primeira montagem quanto trocar de corte sem sair
+  // da página. Não sobrescreve se não houver nada salvo (mantém o default 'auto').
+  useEffect(() => {
+    if (!clipId) return
+    const saved = loadWordsPerCaption(clipId)
+    if (saved === null) return
+    setEditorState((s) => ({ ...s, subtitle: { ...s.subtitle, wordsPerCaption: saved } }))
+  }, [clipId])
+
   // Blocos de legenda exibidos no Editor: se já houver sincronização precisa, reagrupa a
   // lista de palavras (timestamps reais) conforme a config de "palavras por legenda" —
   // operação local, instantânea, sem chamar IA. Sem sincronização, usa a estimativa linear
@@ -126,6 +161,7 @@ const ClipEditorPage: React.FC = () => {
 
   const handleWordsPerCaptionChange = (value: SubtitleWordsPerCaption) => {
     setEditorState((s) => ({ ...s, subtitle: { ...s.subtitle, wordsPerCaption: value } }))
+    if (clipId) saveWordsPerCaption(clipId, value)
   }
 
   const handleStartSync = () => {
@@ -174,7 +210,11 @@ const ClipEditorPage: React.FC = () => {
             }).catch(() => { if (alive) setSyncStatus('synced') })
             return
           }
-          setSyncMessage(job.status === 'aligning_words' ? 'Sincronizando palavras...' : 'Analisando áudio...')
+          if (job.status === 'aligning_words' && job.segments_total) {
+            setSyncMessage(`Sincronizando... ${job.segments_done ?? 0}/${job.segments_total} trechos`)
+          } else {
+            setSyncMessage(job.status === 'aligning_words' ? 'Sincronizando palavras...' : 'Analisando áudio...')
+          }
           timeoutId = window.setTimeout(poll, 1500)
         })
         .catch((err: any) => {

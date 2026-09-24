@@ -174,25 +174,27 @@ export function findActiveWord(segment: SubtitleSegment, currentTime: number): S
 /* ------------------------------------------------------ Sincronização precisa (Etapa 2 — evolução) --- */
 
 /** 'auto' deixa o sistema escolher a quantidade por bloco (pausas/pontuação/tamanho); os demais valores
- * são uma contagem fixa de palavras por legenda. Reagrupar NUNCA chama IA — é só reparticionar a mesma
- * lista de palavras já sincronizada (ver groupWordsIntoSegments), por isso é instantâneo. */
-export type SubtitleWordsPerCaption = 'auto' | 1 | 2 | 3 | 4 | 5 | 6 | 8 | 10
+ * são um TETO aproximado de palavras por legenda — não uma regra cega: uma pausa natural clara entre
+ * palavras fecha o bloco mais cedo mesmo sem atingir o teto (ver groupWordsIntoSegments). Reagrupar
+ * NUNCA chama IA — é só reparticionar a mesma lista de palavras já sincronizada, por isso é instantâneo. */
+export type SubtitleWordsPerCaption = 'auto' | 5 | 10 | 15 | 20 | 25 | 30
 
 export const WORDS_PER_CAPTION_OPTIONS: { value: SubtitleWordsPerCaption; label: string }[] = [
   { value: 'auto', label: 'Automático' },
-  { value: 1, label: '1 palavra' },
-  { value: 2, label: '2 palavras' },
-  { value: 3, label: '3 palavras' },
-  { value: 4, label: '4 palavras' },
   { value: 5, label: '5 palavras' },
-  { value: 6, label: '6 palavras' },
-  { value: 8, label: '8 palavras' },
   { value: 10, label: '10 palavras' },
+  { value: 15, label: '15 palavras' },
+  { value: 20, label: '20 palavras' },
+  { value: 25, label: '25 palavras' },
+  { value: 30, label: '30 palavras' },
 ]
 
 const AUTO_MAX_WORDS = 8
 const AUTO_MAX_CHARS = 42
-const AUTO_PAUSE_GAP_SECONDS = 0.6
+// Pausa entre o fim de uma palavra e o início da próxima que conta como corte natural de frase —
+// vale pra TODOS os modos (auto e contagem fixa): o teto de palavras é só um limite superior,
+// uma pausa clara sempre fecha o bloco antes disso (item 4 do pedido de "palavras por legenda").
+const NATURAL_PAUSE_GAP_SECONDS = 0.6
 const SENTENCE_END_RE = /[.!?;]$/
 
 /**
@@ -203,6 +205,7 @@ const SENTENCE_END_RE = /[.!?;]$/
 export function groupWordsIntoSegments(words: SubtitleWord[], mode: SubtitleWordsPerCaption): SubtitleSegment[] {
   if (words.length === 0) return []
 
+  const maxWords = mode === 'auto' ? AUTO_MAX_WORDS : mode
   const groups: SubtitleWord[][] = []
   let current: SubtitleWord[] = []
   let currentChars = 0
@@ -218,14 +221,11 @@ export function groupWordsIntoSegments(words: SubtitleWord[], mode: SubtitleWord
   words.forEach((w, i) => {
     current.push(w)
     currentChars += w.text.length + 1
-    if (mode === 'auto') {
-      const next = words[i + 1]
-      const pause = next ? next.startTime - w.endTime : Infinity
-      const tooLong = current.length >= AUTO_MAX_WORDS || currentChars >= AUTO_MAX_CHARS
-      if (!next || SENTENCE_END_RE.test(w.text) || pause >= AUTO_PAUSE_GAP_SECONDS || tooLong) flush()
-    } else if (current.length >= mode) {
-      flush()
-    }
+    const next = words[i + 1]
+    const pause = next ? next.startTime - w.endTime : Infinity
+    const reachedLimit = current.length >= maxWords || (mode === 'auto' && currentChars >= AUTO_MAX_CHARS)
+    const sentenceEnd = mode === 'auto' && SENTENCE_END_RE.test(w.text)
+    if (!next || sentenceEnd || pause >= NATURAL_PAUSE_GAP_SECONDS || reachedLimit) flush()
   })
   flush()
 
