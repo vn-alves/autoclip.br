@@ -48,14 +48,65 @@ export interface BackgroundConfig {
 
 export const DEFAULT_BACKGROUND: BackgroundConfig = { type: 'blur', color: '#000000', blurAmount: 36 }
 
+/* ------------------------------------------------------------------ Layers de vídeo (Etapa 3) --- */
+
 /**
- * Camada única do vídeo principal nesta etapa. O nome "layers" (plural, no
- * estado do editor) já antecipa a Etapa 3 (múltiplas camadas de vídeo) —
- * aqui a lista sempre tem exatamente um item, o corte original.
+ * Uma camada de vídeo no Canvas. A layer principal (`isMain: true`) é sempre a primeira,
+ * corresponde ao corte original e não pode ser removida nem ter o `source` trocado — seu
+ * `startTime`/`endTime` cobrem o corte inteiro (Infinity = "sempre ativa", já que sua própria
+ * duração natural do arquivo já delimita quando ela para de tocar). Layers secundárias são
+ * vídeos adicionados localmente pelo usuário (upload), com uma janela de tempo própria dentro
+ * do currentTime global do Editor — ver findActiveLayers().
  */
-export interface VideoLayerState {
-  id: 'main'
+export interface VideoLayer {
+  id: string
+  type: 'video'
+  name: string
+  /** URL do vídeo (endpoint do clip para a layer principal; object URL de upload local para as demais). */
+  source: string
+  visible: boolean
   transform: NormalizedTransform
+  /** Maior = mais acima na composição visual. */
+  zIndex: number
+  /** Janela [startTime, endTime] no relógio global do Editor em que esta layer aparece. */
+  startTime: number
+  endTime: number
+  isMain: boolean
+}
+
+export const createMainVideoLayer = (source: string): VideoLayer => ({
+  id: 'main', type: 'video', name: 'Vídeo principal', source, visible: true,
+  transform: { x: 0, y: 0, width: 1, height: 1, rotation: 0 },
+  zIndex: 0, startTime: 0, endTime: Number.POSITIVE_INFINITY, isMain: true,
+})
+
+let secondaryLayerCounter = 0
+
+/** Nova layer secundária a partir de um arquivo local (item 4) — ainda sem `transform` ajustado
+ * ao aspect ratio real do vídeo (isso só é conhecido depois do onLoadedMetadata, ver
+ * EditorCanvas); usa um enquadramento central razoável como ponto de partida. */
+export function createVideoLayerFromFile(file: File, existingLayers: VideoLayer[], duration: number): VideoLayer {
+  secondaryLayerCounter += 1
+  const nextIndex = existingLayers.length + 1
+  const maxZ = existingLayers.reduce((m, l) => Math.max(m, l.zIndex), 0)
+  return {
+    id: `layer-${Date.now()}-${secondaryLayerCounter}`,
+    type: 'video',
+    name: `Vídeo ${nextIndex}`,
+    source: URL.createObjectURL(file),
+    visible: true,
+    transform: { x: 0.15, y: 0.15, width: 0.5, height: 0.5, rotation: 0 },
+    zIndex: maxZ + 1,
+    startTime: 0,
+    endTime: duration > 0 ? duration : Number.POSITIVE_INFINITY,
+    isMain: false,
+  }
+}
+
+/** Layers visíveis cujo intervalo [startTime, endTime] contém currentTime (item 13) — a
+ * principal, com endTime=Infinity, está sempre incluída enquanto visível. */
+export function findActiveLayers(layers: VideoLayer[], currentTime: number): VideoLayer[] {
+  return layers.filter((l) => l.visible && currentTime >= l.startTime && currentTime <= l.endTime)
 }
 
 /* ---------------------------------------------------------------- Legendas (Etapa 2) --- */
@@ -252,7 +303,9 @@ export interface EditorState {
     format: CanvasFormat
     background: BackgroundConfig
   }
-  videoLayer: VideoLayerState
+  /** layers[0] é sempre a layer principal (isMain=true) — ver createMainVideoLayer. */
+  layers: VideoLayer[]
+  selectedLayerId: string | null
   subtitle: SubtitleEditorState
 }
 
@@ -289,10 +342,12 @@ export function resizeTransformForFormat(
   return { ...transform, height }
 }
 
-export function createDefaultEditorState(): EditorState {
+export function createDefaultEditorState(mainVideoUrl: string): EditorState {
+  const mainLayer = createMainVideoLayer(mainVideoUrl)
   return {
     canvas: { format: '9:16', background: { ...DEFAULT_BACKGROUND } },
-    videoLayer: { id: 'main', transform: { x: 0, y: 0, width: 1, height: 1, rotation: 0 } },
+    layers: [mainLayer],
+    selectedLayerId: null,
     subtitle: {
       style: { ...DEFAULT_SUBTITLE_STYLE, outline: { ...DEFAULT_SUBTITLE_STYLE.outline } },
       position: { ...DEFAULT_SUBTITLE_POSITION },

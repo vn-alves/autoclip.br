@@ -6,10 +6,12 @@ import { Btn, Icon, Segmented } from '../ui'
 import EditorCanvas from '../components/editor/EditorCanvas'
 import EditorTimeline from '../components/editor/EditorTimeline'
 import SubtitleControls from '../components/editor/SubtitleControls'
+import LayerPanel from '../components/editor/LayerPanel'
+import LayersTimeline from '../components/editor/LayersTimeline'
 import {
   BackgroundType, CanvasFormat, EditorState, NormalizedTransform,
   SubtitlePosition, SubtitlePositionPreset, SubtitleStyle, SubtitleStylePreset, SubtitleWordsPerCaption,
-  createDefaultEditorState, fitTransform, resizeTransformForFormat, SUBTITLE_POSITION_PRESETS,
+  createDefaultEditorState, createVideoLayerFromFile, fitTransform, resizeTransformForFormat, SUBTITLE_POSITION_PRESETS,
   groupWordsIntoSegments,
 } from '../components/editor/types'
 import './ClipEditorPage.css'
@@ -66,15 +68,22 @@ const fmtTime = (sec: number): string => {
 const ClipEditorPage: React.FC = () => {
   const { id: projectId, clipId } = useParams<{ id: string; clipId: string }>()
   const navigate = useNavigate()
-  const videoRef = useRef<HTMLVideoElement>(null)
+  // A layer principal também é o "relógio" global do Editor (currentTime/duration/play) — as
+  // demais layers só seguem esse tempo, nunca têm player próprio (item 15).
+  const mainVideoRef = useRef<HTMLVideoElement>(null)
 
   const [clip, setClip] = useState<ClipDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  const [editorState, setEditorState] = useState<EditorState>(createDefaultEditorState())
-  const [videoRatio, setVideoRatio] = useState<number | null>(null)
-  const [hasCustomTransform, setHasCustomTransform] = useState(false)
+  const mainVideoUrl = projectId && clipId ? projectApi.getClipVideoUrl(projectId, clipId) : ''
+  const [editorState, setEditorState] = useState<EditorState>(() => createDefaultEditorState(mainVideoUrl))
+  // Aspect ratio real de cada layer (só disponível depois do onLoadedMetadata) e quais delas já
+  // tiveram o enquadramento ajustado manualmente pelo usuário — trocar o formato do Canvas só
+  // recalcula automaticamente o fit das layers que o usuário ainda não mexeu (mesmo espírito do
+  // hasCustomTransform da Etapa 1, agora por layer).
+  const videoRatiosRef = useRef<Record<string, number>>({})
+  const customizedLayersRef = useRef<Set<string>>(new Set())
 
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -229,30 +238,126 @@ const ClipEditorPage: React.FC = () => {
     return () => { alive = false; if (timeoutId) window.clearTimeout(timeoutId) }
   }, [syncJobId, projectId, clipId])
 
-  const videoUrl = projectId && clipId ? projectApi.getClipVideoUrl(projectId, clipId) : ''
+  // Enquadra a layer no formato atual do Canvas, preservando a proporção real do vídeo dela —
+  // layers secundárias começam num box menor (50%) centralizado, pra não cobrir o vídeo
+  // principal inteiro por padrão quando adicionadas.
+  const fitLayerTransform = (format: CanvasFormat, ratio: number, isMain: boolean): NormalizedTransform => {
+    const full = fitTransform(format, ratio)
+    if (isMain) return full
+    const scale = 0.5
+    const width = full.width * scale
+    const height = full.height * scale
+    return { x: (1 - width) / 2, y: (1 - height) / 2, width, height, rotation: 0 }
+  }
 
-  const handleLoadedMetadata = (videoWidth: number, videoHeight: number) => {
+  const handleLayerLoadedMetadata = (layerId: string, videoWidth: number, videoHeight: number) => {
     if (!videoWidth || !videoHeight) return
     const ratio = videoWidth / videoHeight
-    setVideoRatio(ratio)
-    if (!hasCustomTransform) {
-      setEditorState((s) => ({ ...s, videoLayer: { ...s.videoLayer, transform: fitTransform(s.canvas.format, ratio) } }))
-    }
+    videoRatiosRef.current[layerId] = ratio
+    if (customizedLayersRef.current.has(layerId)) return
+    setEditorState((s) => ({
+      ...s,
+      layers: s.layers.map((l) => (l.id === layerId
+        ? { ...l, transform: fitLayerTransform(s.canvas.format, ratio, l.isMain) }
+        : l)),
+    }))
   }
 
   const handleFormatChange = (format: CanvasFormat) => {
-    setEditorState((s) => {
-      if (!videoRatio) return { ...s, canvas: { ...s.canvas, format } }
-      const nextTransform = hasCustomTransform
-        ? resizeTransformForFormat(s.videoLayer.transform, s.canvas.format, format, videoRatio)
-        : fitTransform(format, videoRatio)
-      return { ...s, canvas: { ...s.canvas, format }, videoLayer: { ...s.videoLayer, transform: nextTransform } }
-    })
+    setEditorState((s) => ({
+      ...s,
+      canvas: { ...s.canvas, format },
+      layers: s.layers.map((l) => {
+        const ratio = videoRatiosRef.current[l.id]
+        if (!ratio) return l
+        const nextTransform = customizedLayersRef.current.has(l.id)
+          ? resizeTransformForFormat(l.transform, s.canvas.format, format, ratio)
+          : fitLayerTransform(format, ratio, l.isMain)
+        return { ...l, transform: nextTransform }
+      }),
+    }))
   }
 
-  const handleTransformChange = (t: NormalizedTransform) => {
-    setHasCustomTransform(true)
-    setEditorState((s) => ({ ...s, videoLayer: { ...s.videoLayer, transform: t } }))
+  const handleLayerTransformChange = (layerId: string, t: NormalizedTransform) => {
+    customizedLayersRef.current.add(layerId)
+    setEditorState((s) => ({ ...s, layers: s.layers.map((l) => (l.id === layerId ? { ...l, transform: t } : l)) }))
+  }
+
+  const handleSelectLayer = (layerId: string | null) => {
+    setEditorState((s) => ({ ...s, selectedLayerId: layerId }))
+  }
+
+  const handleToggleLayerVisible = (layerId: string) => {
+    setEditorState((s) => ({
+      ...s,
+      layers: s.layers.map((l) => (l.id === layerId ? { ...l, visible: !l.visible } : l)),
+    }))
+  }
+
+  const handleRenameLayer = (layerId: string, name: string) => {
+    setEditorState((s) => ({ ...s, layers: s.layers.map((l) => (l.id === layerId ? { ...l, name } : l)) }))
+  }
+
+  // Troca o zIndex com o vizinho imediatamente acima/abaixo (ordenados por zIndex) — reordenar
+  // nunca remonta os elementos <video>, só muda um número (ver EditorCanvas).
+  const swapZIndexWithNeighbor = (layerId: string, direction: 'up' | 'down') => {
+    setEditorState((s) => {
+      const ordered = [...s.layers].sort((a, b) => b.zIndex - a.zIndex) // topo primeiro
+      const idx = ordered.findIndex((l) => l.id === layerId)
+      const neighborIdx = direction === 'up' ? idx - 1 : idx + 1
+      if (idx < 0 || neighborIdx < 0 || neighborIdx >= ordered.length) return s
+      const a = ordered[idx]
+      const b = ordered[neighborIdx]
+      const zA = a.zIndex
+      const zB = b.zIndex
+      return {
+        ...s,
+        layers: s.layers.map((l) => {
+          if (l.id === a.id) return { ...l, zIndex: zB }
+          if (l.id === b.id) return { ...l, zIndex: zA }
+          return l
+        }),
+      }
+    })
+  }
+  const handleMoveLayerUp = (layerId: string) => swapZIndexWithNeighbor(layerId, 'up')
+  const handleMoveLayerDown = (layerId: string) => swapZIndexWithNeighbor(layerId, 'down')
+
+  const handleRemoveLayer = (layerId: string) => {
+    setEditorState((s) => {
+      const layer = s.layers.find((l) => l.id === layerId)
+      if (!layer || layer.isMain) return s
+      URL.revokeObjectURL(layer.source)
+      return {
+        ...s,
+        layers: s.layers.filter((l) => l.id !== layerId),
+        selectedLayerId: s.selectedLayerId === layerId ? null : s.selectedLayerId,
+      }
+    })
+    delete videoRatiosRef.current[layerId]
+    customizedLayersRef.current.delete(layerId)
+  }
+
+  const handleLayerTimeRangeChange = (layerId: string, startTime: number, endTime: number) => {
+    setEditorState((s) => ({
+      ...s,
+      layers: s.layers.map((l) => (l.id === layerId ? { ...l, startTime, endTime: Math.max(endTime, startTime + 0.1) } : l)),
+    }))
+  }
+
+  // "+ Adicionar vídeo" (item 4) — upload puramente local (object URL), sem tocar o backend;
+  // a layer entra ativa no intervalo inteiro do corte por padrão, ajustável depois no painel.
+  const handleAddVideoFiles = (files: FileList) => {
+    setEditorState((s) => {
+      let nextLayers = s.layers
+      let lastId: string | null = null
+      for (const file of Array.from(files)) {
+        const layer = createVideoLayerFromFile(file, nextLayers, duration)
+        nextLayers = [...nextLayers, layer]
+        lastId = layer.id
+      }
+      return { ...s, layers: nextLayers, selectedLayerId: lastId ?? s.selectedLayerId }
+    })
   }
 
   const handleBackgroundType = (type: BackgroundType) => {
@@ -302,21 +407,24 @@ const ClipEditorPage: React.FC = () => {
     handleSeek(segment.startTime)
   }
 
+  // Único player "de verdade" é a layer principal (item 15) — play/pause/seek/currentTime
+  // sempre agem nela; as layers secundárias só seguem esse relógio (ver useEffect em
+  // EditorCanvas que sincroniza currentTime/isPlaying com cada <video> secundário).
   const togglePlay = () => {
-    const v = videoRef.current
+    const v = mainVideoRef.current
     if (!v) return
     if (v.paused) void v.play()
     else v.pause()
   }
 
   const handleSeek = (t: number) => {
-    const v = videoRef.current
+    const v = mainVideoRef.current
     setCurrentTime(t)
     if (v) v.currentTime = Math.min(Math.max(0, t), v.duration || t)
   }
 
   const handleTimeUpdate = () => {
-    const v = videoRef.current
+    const v = mainVideoRef.current
     if (v) setCurrentTime(v.currentTime)
   }
 
@@ -329,7 +437,7 @@ const ClipEditorPage: React.FC = () => {
     if (!isPlaying) return
     let rafId: number
     const tick = () => {
-      const v = videoRef.current
+      const v = mainVideoRef.current
       if (v) setCurrentTime(v.currentTime)
       rafId = requestAnimationFrame(tick)
     }
@@ -409,22 +517,24 @@ const ClipEditorPage: React.FC = () => {
 
         <main className="ac-editor-main">
           <EditorCanvas
-            videoUrl={videoUrl}
             format={editorState.canvas.format}
             background={editorState.canvas.background}
-            transform={editorState.videoLayer.transform}
+            layers={editorState.layers}
+            selectedLayerId={editorState.selectedLayerId}
+            onSelectLayer={handleSelectLayer}
+            onLayerTransformChange={handleLayerTransformChange}
+            onLayerLoadedMetadata={handleLayerLoadedMetadata}
+            mainVideoRef={mainVideoRef}
+            onMainTimeUpdate={handleTimeUpdate}
+            onMainDurationChange={setDuration}
+            onMainEnded={() => setIsPlaying(false)}
+            onMainPlayStateChange={setIsPlaying}
             currentTime={currentTime}
+            isPlaying={isPlaying}
             subtitleSegments={displaySegments}
             subtitleStyle={editorState.subtitle.style}
             subtitlePosition={editorState.subtitle.position}
             onSubtitlePositionChange={handleSubtitlePositionChange}
-            onTransformChange={handleTransformChange}
-            onLoadedMetadata={handleLoadedMetadata}
-            videoRef={videoRef}
-            onTimeUpdate={handleTimeUpdate}
-            onDurationChange={setDuration}
-            onEnded={() => setIsPlaying(false)}
-            onPlayStateChange={setIsPlaying}
           />
 
           <div className="ac-editor-controls">
@@ -442,14 +552,35 @@ const ClipEditorPage: React.FC = () => {
             selectedSubtitleId={editorState.subtitle.selectedSegmentId}
             onSelectSubtitle={handleSelectSubtitleSegment}
           />
+
+          <LayersTimeline
+            layers={editorState.layers}
+            duration={duration}
+            selectedLayerId={editorState.selectedLayerId}
+            onSelect={handleSelectLayer}
+          />
         </main>
 
         <aside className="ac-editor-panel ac-editor-panel--right">
-          <div className="ac-editor-panel-section">
-            <div className="ac-editor-panel-label">Camadas</div>
-            <div className="ac-editor-layer-item">🎥 Vídeo original</div>
-            {displaySegments.length > 0 && <div className="ac-editor-layer-item">💬 Legenda</div>}
-          </div>
+          <LayerPanel
+            layers={editorState.layers}
+            selectedLayerId={editorState.selectedLayerId}
+            duration={duration}
+            onSelect={handleSelectLayer}
+            onToggleVisible={handleToggleLayerVisible}
+            onRename={handleRenameLayer}
+            onMoveUp={handleMoveLayerUp}
+            onMoveDown={handleMoveLayerDown}
+            onRemove={handleRemoveLayer}
+            onTimeRangeChange={handleLayerTimeRangeChange}
+            onAddFiles={handleAddVideoFiles}
+          />
+          {displaySegments.length > 0 && (
+            <div className="ac-editor-panel-section">
+              <div className="ac-editor-panel-label">Legenda</div>
+              <div className="ac-editor-layer-item">💬 Legenda</div>
+            </div>
+          )}
         </aside>
       </div>
     </div>

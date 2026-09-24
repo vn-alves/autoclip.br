@@ -1,0 +1,151 @@
+import React, { useRef, useState } from 'react'
+import { Btn, Icon } from '../../ui'
+import { VideoLayer } from './types'
+
+interface LayerPanelProps {
+  layers: VideoLayer[]
+  selectedLayerId: string | null
+  duration: number
+  onSelect: (id: string) => void
+  onToggleVisible: (id: string) => void
+  onRename: (id: string, name: string) => void
+  onMoveUp: (id: string) => void
+  onMoveDown: (id: string) => void
+  onRemove: (id: string) => void
+  onTimeRangeChange: (id: string, startTime: number, endTime: number) => void
+  onAddFiles: (files: FileList) => void
+}
+
+const ACCEPTED_VIDEO_TYPES = 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov'
+
+const clampSeconds = (v: number, duration: number): number => {
+  if (!isFinite(v) || v < 0) return 0
+  return duration > 0 ? Math.min(v, duration) : v
+}
+
+/**
+ * Painel de Layers — Etapa 3. Lista as layers de vídeo (a principal sempre primeiro),
+ * ordenadas visualmente da mais acima (zIndex maior) pra mais abaixo. Seleção, visibilidade,
+ * renomear, reordenar e a janela de tempo de cada layer secundária ficam todos aqui — item 3.
+ */
+const LayerPanel: React.FC<LayerPanelProps> = ({
+  layers, selectedLayerId, duration,
+  onSelect, onToggleVisible, onRename, onMoveUp, onMoveDown, onRemove, onTimeRangeChange, onAddFiles,
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+
+  const ordered = [...layers].sort((a, b) => b.zIndex - a.zIndex)
+
+  const startRename = (layer: VideoLayer) => {
+    setRenamingId(layer.id)
+    setRenameDraft(layer.name)
+  }
+  const commitRename = (id: string) => {
+    const name = renameDraft.trim()
+    if (name) onRename(id, name)
+    setRenamingId(null)
+  }
+
+  return (
+    <div className="ac-editor-panel-section">
+      <div className="ac-editor-panel-label">Camadas</div>
+      <div className="ac-layer-list">
+        {ordered.map((layer, idx) => {
+          const isSelected = layer.id === selectedLayerId
+          const isTop = idx === 0
+          const isBottom = idx === ordered.length - 1
+          return (
+            <div key={layer.id} className={`ac-layer-row${isSelected ? ' ac-layer-row--selected' : ''}`}>
+              <div className="ac-layer-row-main" onClick={() => onSelect(layer.id)}>
+                <button
+                  type="button"
+                  className="ac-layer-visibility"
+                  aria-label={layer.visible ? 'Ocultar camada' : 'Mostrar camada'}
+                  onClick={(e) => { e.stopPropagation(); onToggleVisible(layer.id) }}
+                >
+                  {layer.visible ? '👁' : '🚫'}
+                </button>
+                <span className="ac-layer-icon">🎬</span>
+                {renamingId === layer.id ? (
+                  <input
+                    autoFocus
+                    className="ac-layer-name-input"
+                    value={renameDraft}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setRenameDraft(e.target.value)}
+                    onBlur={() => commitRename(layer.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') commitRename(layer.id); if (e.key === 'Escape') setRenamingId(null) }}
+                  />
+                ) : (
+                  <span
+                    className="ac-layer-name"
+                    onDoubleClick={(e) => { e.stopPropagation(); startRename(layer) }}
+                    title="Duplo clique para renomear"
+                  >
+                    {layer.name}
+                  </span>
+                )}
+              </div>
+              <div className="ac-layer-row-actions">
+                <button type="button" disabled={isTop} onClick={() => onMoveUp(layer.id)} aria-label="Mover para cima" title="Mover para cima">
+                  <span style={{ display: 'inline-flex', transform: 'rotate(180deg)' }}><Icon.Down size={12} /></span>
+                </button>
+                <button type="button" disabled={isBottom} onClick={() => onMoveDown(layer.id)} aria-label="Mover para baixo" title="Mover para baixo">
+                  <Icon.Down size={12} />
+                </button>
+                {!layer.isMain && (
+                  <button type="button" onClick={() => onRemove(layer.id)} aria-label="Remover camada" title="Remover camada">
+                    <Icon.Close size={12} />
+                  </button>
+                )}
+              </div>
+              {isSelected && !layer.isMain && (
+                <div className="ac-layer-time-range" onClick={(e) => e.stopPropagation()}>
+                  <label>
+                    <span>Início (s)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      value={layer.startTime}
+                      onChange={(e) => onTimeRangeChange(layer.id, clampSeconds(Number(e.target.value), duration), layer.endTime)}
+                    />
+                  </label>
+                  <label>
+                    <span>Fim (s)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      value={layer.endTime}
+                      onChange={(e) => onTimeRangeChange(layer.id, layer.startTime, clampSeconds(Number(e.target.value), duration))}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_VIDEO_TYPES}
+        multiple
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) onAddFiles(e.target.files)
+          e.target.value = ''
+        }}
+      />
+      <Btn size="sm" onClick={() => fileInputRef.current?.click()} style={{ marginTop: 10, width: '100%' }}>
+        <Icon.Plus size={13} /> Adicionar vídeo
+      </Btn>
+    </div>
+  )
+}
+
+export default LayerPanel
