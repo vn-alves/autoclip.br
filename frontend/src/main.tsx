@@ -31,9 +31,12 @@ dayjs.locale('pt-br')
 dayjs.tz.setDefault('America/Sao_Paulo')
 
 function Root() {
-  // Conecta limites de erro no nó raiz para evitar tela branca devido a exceções em tempo de execução
+  // Conecta limites de erro no nó raiz para evitar tela branca devido a exceções em tempo de execução.
+  // showDetails sempre true (não só em DEV) enquanto o Editor de Corte está em desenvolvimento ativo —
+  // sem isso, um erro no build de produção só mostra a mensagem genérica, sem stack trace, e não há
+  // como diagnosticar sem acesso ao DevTools do usuário. Reavaliar quando o Editor estabilizar.
   return (
-    <ErrorBoundary showDetails={import.meta.env.DEV}>
+    <ErrorBoundary showDetails>
       <App />
     </ErrorBoundary>
   )

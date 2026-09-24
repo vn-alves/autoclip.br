@@ -52,6 +52,24 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   // Registro dos elementos <video> de cada layer — precisa ser estado (não só ref) pra o
   // Moveable perceber quando o elemento da layer selecionada já existe no DOM.
   const [videoEls, setVideoEls] = useState<Record<string, HTMLVideoElement | null>>({})
+  // Um callback de ref ESTÁVEL por layer (memoizado aqui, não recriado a cada render) — um
+  // `ref={(el) => ...}` inline faz o React desanexar+reanexar a ref (null, depois o elemento
+  // de novo) a cada commit, porque a identidade da função muda a cada render; cada uma dessas
+  // chamadas disparava setVideoEls, gerando outro render, recriando a função de novo — um loop
+  // infinito ("Maximum update depth exceeded"). Com a mesma função reutilizada por layer.id,
+  // o React só desanexa/reanexa quando o elemento de verdade muda (montar/desmontar).
+  const refCallbacksRef = useRef<Map<string, (el: HTMLVideoElement | null) => void>>(new Map())
+  const getVideoRefCallback = (layerId: string, isMain: boolean) => {
+    let cb = refCallbacksRef.current.get(layerId)
+    if (!cb) {
+      cb = (el: HTMLVideoElement | null) => {
+        if (isMain) (mainVideoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el
+        setVideoEls((prev) => (prev[layerId] === el ? prev : { ...prev, [layerId]: el }))
+      }
+      refCallbacksRef.current.set(layerId, cb)
+    }
+    return cb
+  }
 
   const dims = CANVAS_DIMENSIONS[format]
   const canvasAspect = dims.width / dims.height
@@ -203,10 +221,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
           return (
             <video
               key={layer.id}
-              ref={(el) => {
-                if (layer.isMain) (mainVideoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el
-                setVideoEls((prev) => (prev[layer.id] === el ? prev : { ...prev, [layer.id]: el }))
-              }}
+              ref={getVideoRefCallback(layer.id, layer.isMain)}
               src={layer.source}
               className="ac-editor-video"
               playsInline
