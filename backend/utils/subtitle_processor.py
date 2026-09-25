@@ -33,36 +33,59 @@ class SubtitleProcessor:
         
         try:
             subs = pysrt.open(str(srt_path), encoding='utf-8')
+
+            # Muitos SRTs auto-gerados (ex.: legendas automáticas de YouTube) usam um formato
+            # "rolling": o endTime de um cue é propositalmente generoso pra manter o texto
+            # legível na tela, e frequentemente ultrapassa o startTime do PRÓXIMO cue em 1-2s —
+            # mesmo quando o TEXTO de cada cue é sequencial (nunca duplicado). Sem correção,
+            # dois cues vizinhos descrevem janelas de tempo que se sobrepõem de verdade, e tudo
+            # que é derivado dessas janelas (estimativa linear por palavra E a janela de áudio
+            # usada pela sincronização com IA em subtitle_sync_service.py, que extrai áudio de
+            # [cue.startTime, cue.endTime] com margem) herda essa sobreposição — foi rastreado
+            # como a causa raiz de blocos de legenda aparecendo sobrepostos no Editor (Stage 4).
+            # Correção na ORIGEM: o fim real de um cue nunca pode passar do início do próximo —
+            # ajusta aqui, uma vez, antes de qualquer estimativa de palavra ser calculada, em vez
+            # de tentar consertar sintomas depois (agrupamento, render). Preserva o texto e a
+            # ORDEM originais; só reduz o endTime quando ele de fato invade o cue seguinte.
+            raw_bounds = [
+                (self._srt_time_to_seconds(sub.start), self._srt_time_to_seconds(sub.end))
+                for sub in subs
+            ]
+            clamped_ends: List[float] = []
+            for i, (start, end) in enumerate(raw_bounds):
+                next_start = raw_bounds[i + 1][0] if i + 1 < len(raw_bounds) else None
+                if next_start is not None and next_start > start and end > next_start:
+                    end = next_start
+                clamped_ends.append(end)
+
             word_level_data = []
-            
-            for sub in subs:
-                segment_data = self._process_subtitle_segment(sub)
+            for sub, (start_seconds, _raw_end), clamped_end in zip(subs, raw_bounds, clamped_ends):
+                segment_data = self._process_subtitle_segment(sub, start_seconds, clamped_end)
                 word_level_data.append(segment_data)
-            
+
             logger.info(f"成功解析SRT文件，共 {len(word_level_data)} 个字幕段")
             return word_level_data
-            
+
         except Exception as e:
             logger.error(f"解析SRT文件失败: {e}")
             return []
-    
-    def _process_subtitle_segment(self, sub: SubRipItem) -> Dict:
+
+    def _process_subtitle_segment(self, sub: SubRipItem, start_seconds: float, end_seconds: float) -> Dict:
         """
         处理单个字幕段，将其分解为字粒度数据
-        
+
         Args:
             sub: pysrt字幕项
-            
+            start_seconds: início do cue em segundos (já sem offset a aplicar)
+            end_seconds: fim do cue em segundos, já ajustado para nunca invadir o próximo cue
+                (ver parse_srt_to_word_level) — não usar sub.end diretamente aqui.
+
         Returns:
             字粒度字幕数据
         """
-        # 转换时间格式
-        start_seconds = self._srt_time_to_seconds(sub.start)
-        end_seconds = self._srt_time_to_seconds(sub.end)
-        
         # 分解文本为单词
         words = self._split_text_to_words(sub.text, start_seconds, end_seconds)
-        
+
         return {
             'id': str(uuid.uuid4()),
             'startTime': start_seconds,

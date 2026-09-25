@@ -72,6 +72,14 @@ export interface VideoLayer {
   startTime: number
   endTime: number
   isMain: boolean
+  /**
+   * Referência do backend para o arquivo desta layer secundária (Stage 4) — preenchida só
+   * depois do upload real do vídeo (ver ClipEditorPage.handleSaveEditorConfig). `source`
+   * continua sendo um object URL válido só NESTA sessão do navegador; `assetId` é o que
+   * sobrevive a salvar/recarregar/renderizar. undefined na layer principal (ela nunca é um
+   * asset do Editor, é o próprio vídeo do corte) e em layers ainda não enviadas ao backend.
+   */
+  assetId?: string
 }
 
 export const createMainVideoLayer = (source: string): VideoLayer => ({
@@ -340,6 +348,109 @@ export function resizeTransformForFormat(
   const nextCanvasRatio = canvasRatio(nextFormat)
   const height = (transform.width * nextCanvasRatio) / videoRatio
   return { ...transform, height }
+}
+
+/* -------------------------------------------------------- Persistência / Render (Etapa 4) --- */
+
+/**
+ * Forma serializável de EditorState, salva em clip.clip_metadata["edit_config"] (backend,
+ * ver editor_render_service.py). Deliberadamente NÃO inclui `syncedWords`: os timestamps por
+ * palavra já são persistidos de forma durável em clip_metadata.subtitle_sync.words (ver
+ * subtitle_sync_service.py) — duplicá-los aqui criaria duas fontes de verdade para o mesmo
+ * dado. O backend, ao renderizar, lê subtitle_sync.words direto (mesma função usada por
+ * GET /subtitle-editor/.../subtitles) e reagrupa com groupWordsIntoSegments — a MESMA lógica
+ * deste arquivo, portada para Python em editor_render_service.group_words_into_segments
+ * (qualquer mudança nas constantes/regras precisa ser replicada nos dois lados).
+ */
+export const EDIT_CONFIG_VERSION = 1
+
+export interface EditConfigLayer {
+  id: string
+  name: string
+  visible: boolean
+  transform: NormalizedTransform
+  zIndex: number
+  startTime: number
+  /** Infinity (layer principal) não sobrevive a JSON.stringify — vira null; o backend trata
+   * null como "até o fim do vídeo principal" (ver editor_render_service.build_render_spec). */
+  endTime: number | null
+  isMain: boolean
+  assetId?: string
+}
+
+export interface EditConfig {
+  version: typeof EDIT_CONFIG_VERSION
+  canvas: EditorState['canvas']
+  layers: EditConfigLayer[]
+  subtitle: {
+    wordsPerCaption: SubtitleWordsPerCaption
+    style: SubtitleStyle
+    position: SubtitlePosition
+  }
+}
+
+/** true se alguma layer secundária ainda não tem assetId (upload pendente) — usado para
+ * bloquear Salvar/Exportar até o upload terminar (ver ClipEditorPage). */
+export function hasUnuploadedLayers(layers: VideoLayer[]): boolean {
+  return layers.some((l) => !l.isMain && !l.assetId)
+}
+
+export function toEditConfig(state: EditorState): EditConfig {
+  return {
+    version: EDIT_CONFIG_VERSION,
+    canvas: state.canvas,
+    layers: state.layers.map((l) => ({
+      id: l.id,
+      name: l.name,
+      visible: l.visible,
+      transform: l.transform,
+      zIndex: l.zIndex,
+      startTime: l.startTime,
+      endTime: Number.isFinite(l.endTime) ? l.endTime : null,
+      isMain: l.isMain,
+      assetId: l.assetId,
+    })),
+    subtitle: {
+      wordsPerCaption: state.subtitle.wordsPerCaption,
+      style: state.subtitle.style,
+      position: state.subtitle.position,
+    },
+  }
+}
+
+/**
+ * Reconstrói o EditorState a partir de um EditConfig salvo. `resolveAssetSource` traduz o
+ * assetId de cada layer secundária numa URL tocável (endpoint do backend que serve o asset —
+ * o object URL original da sessão de upload não existe mais depois de um reload).
+ */
+export function applyEditConfig(
+  config: EditConfig,
+  mainVideoUrl: string,
+  resolveAssetSource: (assetId: string) => string,
+): EditorState {
+  return {
+    canvas: config.canvas,
+    selectedLayerId: null,
+    layers: config.layers.map((l) => ({
+      id: l.id,
+      type: 'video',
+      name: l.name,
+      source: l.isMain ? mainVideoUrl : (l.assetId ? resolveAssetSource(l.assetId) : ''),
+      visible: l.visible,
+      transform: l.transform,
+      zIndex: l.zIndex,
+      startTime: l.startTime,
+      endTime: l.endTime === null ? Number.POSITIVE_INFINITY : l.endTime,
+      isMain: l.isMain,
+      assetId: l.assetId,
+    })),
+    subtitle: {
+      style: config.subtitle.style,
+      position: config.subtitle.position,
+      selectedSegmentId: null,
+      wordsPerCaption: config.subtitle.wordsPerCaption,
+    },
+  }
 }
 
 export function createDefaultEditorState(mainVideoUrl: string): EditorState {

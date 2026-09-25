@@ -200,6 +200,24 @@ def _linear_fallback_for_segment(seg: dict, seg_words: List[dict]) -> List[dict]
     ]
 
 
+def compute_segment_window(seg: dict) -> Tuple[float, float]:
+    """(window_start, window_duration) do trecho de áudio a extrair para este segmento —
+    tempo do CLIP (não do vídeo original), com a margem de folga de cada lado (ver
+    WINDOW_PADDING_SECONDS). Função pura só pra ser testável isoladamente (ver Stage 4.1:
+    testes de conversão de offset) — o comportamento é o mesmo que já existia inline."""
+    window_start = max(0.0, seg["startTime"] - WINDOW_PADDING_SECONDS)
+    window_duration = (seg["endTime"] - seg["startTime"]) + 2 * WINDOW_PADDING_SECONDS
+    return window_start, window_duration
+
+
+def apply_window_offset(words: List[dict], window_start: float) -> List[dict]:
+    """Soma de volta o offset da janela nos timestamps que o Whisper devolveu (relativos ao
+    INÍCIO DO ARQUIVO DE ÁUDIO EXTRAÍDO, não ao clip) — para ficarem relativos ao clip, como o
+    resto do dado. Aplicado exatamente uma vez, aqui, nunca de novo depois (ver
+    Stage 4.1: teste de offset aplicado duas vezes)."""
+    return [{**w, "startTime": w["startTime"] + window_start, "endTime": w["endTime"] + window_start} for w in words]
+
+
 def _process_one_segment(
     i: int, seg: dict, video_path: Path, ffmpeg_bin: str, model, tmp_dir: Path, clip_id: str,
 ) -> List[dict]:
@@ -209,8 +227,7 @@ def _process_one_segment(
     if not seg_words:
         return []
 
-    window_start = max(0.0, seg["startTime"] - WINDOW_PADDING_SECONDS)
-    window_duration = (seg["endTime"] - seg["startTime"]) + 2 * WINDOW_PADDING_SECONDS
+    window_start, window_duration = compute_segment_window(seg)
     audio_path = tmp_dir / f"seg-{i}.wav"
 
     try:
@@ -226,11 +243,7 @@ def _process_one_segment(
         # trecho isolado (ex.: ruído, risada, silêncio).
         return _linear_fallback_for_segment(seg, seg_words)
 
-    # Os tempos vieram relativos ao INÍCIO DA JANELA extraída — soma de volta o offset da
-    # janela para ficarem relativos ao clip, como o resto do dado.
-    for w in whisper_words:
-        w["startTime"] += window_start
-        w["endTime"] += window_start
+    whisper_words = apply_window_offset(whisper_words, window_start)
     # Só o miolo do segmento entra no alinhamento — ver CORE_MATCH_TOLERANCE_SECONDS.
     core_lo = seg["startTime"] - CORE_MATCH_TOLERANCE_SECONDS
     core_hi = seg["endTime"] + CORE_MATCH_TOLERANCE_SECONDS

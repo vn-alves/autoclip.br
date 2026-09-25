@@ -693,6 +693,66 @@ export const projectApi = {
     document.body.removeChild(a)
     window.URL.revokeObjectURL(url)
   },
+
+  // ---------------------------------------------------- Editor de Corte — Stage 4 ---
+  // Persistência (edit_config) + render/export final. Pipeline SEPARADO do
+  // startClipExport/getExportJob/downloadExport acima (aquele é o "publicar rápido" com
+  // preset fixo, sem layers) — ver backend/services/editor_render_service.py.
+
+  getClipEditorConfig: (clipId: string): Promise<{ edit_config: any | null }> => {
+    return api.get(`/clips/${clipId}/editor-config`)
+  },
+
+  saveClipEditorConfig: (clipId: string, editConfig: any): Promise<{ ok: boolean }> => {
+    return api.put(`/clips/${clipId}/editor-config`, editConfig)
+  },
+
+  uploadEditorAsset: async (clipId: string, file: File): Promise<{ asset_id: string; duration: number }> => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post(`/clips/${clipId}/editor/assets`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  getEditorAssetUrl: (clipId: string, assetId: string): string => {
+    return resolveApiUrl(`/api/v1/clips/${clipId}/editor/assets/${assetId}`)
+  },
+
+  startClipEditorRender: (clipId: string): Promise<{ ok: boolean; job_id: string; status: string; reused?: boolean }> => {
+    return api.post(`/clips/${clipId}/editor/render`)
+  },
+
+  getClipEditorRenderJob: (clipId: string, jobId: string): Promise<{
+    job_id: string
+    status: 'queued' | 'processing' | 'completed' | 'failed'
+    progress?: number
+    error?: string
+    result?: { path: string; width?: number; height?: number; duration_sec?: number }
+  }> => {
+    return api.get(`/clips/${clipId}/editor/render/${jobId}`)
+  },
+
+  downloadClipEditorRender: async (clipId: string, jobId: string) => {
+    const response = await axios.get(resolveApiUrl(`/api/v1/clips/${clipId}/editor/render/${jobId}/download`), {
+      responseType: 'blob',
+      headers: { Accept: 'application/octet-stream' },
+    })
+    const cd = response.headers['content-disposition'] || ''
+    let filename = `corte_editado_${jobId.slice(0, 8)}.mp4`
+    const star = cd.match(/filename\*=UTF-8''([^;]+)/)
+    const plain = cd.match(/filename="([^"]+)"/)
+    if (star) filename = decodeURIComponent(star[1])
+    else if (plain) filename = plain[1]
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'video/mp4' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  },
 }
 
 // APIs relacionadas ao download de vídeo

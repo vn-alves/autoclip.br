@@ -12,7 +12,7 @@ import {
   BackgroundType, CanvasFormat, EditorState, NormalizedTransform,
   SubtitlePosition, SubtitlePositionPreset, SubtitleStyle, SubtitleStylePreset, SubtitleWordsPerCaption,
   createDefaultEditorState, createVideoLayerFromFile, fitTransform, resizeTransformForFormat, SUBTITLE_POSITION_PRESETS,
-  groupWordsIntoSegments,
+  groupWordsIntoSegments, toEditConfig, applyEditConfig, hasUnuploadedLayers,
 } from '../components/editor/types'
 import './ClipEditorPage.css'
 
@@ -84,6 +84,21 @@ const ClipEditorPage: React.FC = () => {
   // hasCustomTransform da Etapa 1, agora por layer).
   const videoRatiosRef = useRef<Record<string, number>>({})
   const customizedLayersRef = useRef<Set<string>>(new Set())
+  // Arquivo original de cada layer secundária (item 8 da Stage 4) — só existe em memória
+  // nesta aba/sessão; é o que handleSaveEditorConfig envia ao backend no upload real. Se a
+  // página for recarregada antes de salvar, a layer perde o arquivo e precisa ser re-adicionada
+  // (o object URL sozinho não é suficiente para o backend renderizar).
+  const pendingFilesRef = useRef<Record<string, File>>({})
+
+  // Persistência real da edição (Stage 4) — separada do rascunho "palavras por legenda" em
+  // localStorage (que continua existindo só como fallback antes da primeira config salva).
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [exportState, setExportState] = useState<'idle' | 'saving' | 'queued' | 'processing' | 'completed' | 'failed'>('idle')
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [exportProgress, setExportProgress] = useState(0)
+  const [exportJobId, setExportJobId] = useState<string | null>(null)
+  const [exportResult, setExportResult] = useState<{ width?: number; height?: number; duration_sec?: number } | null>(null)
 
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -160,6 +175,29 @@ const ClipEditorPage: React.FC = () => {
     if (saved === null) return
     setEditorState((s) => ({ ...s, subtitle: { ...s.subtitle, wordsPerCaption: saved } }))
   }, [clipId])
+
+  // Carrega a edição salva no backend (Stage 4), se houver — sobrescreve o default local E a
+  // preferência de localStorage acima (o backend é a fonte de verdade a partir de agora; o
+  // localStorage só existia como rascunho antes de existir persistência real). Layers
+  // secundárias restauradas apontam para o endpoint que serve o asset já enviado (o object URL
+  // da sessão de upload original não sobrevive a um reload) e são marcadas como "customizadas"
+  // para não serem re-enquadradas automaticamente ao trocar de formato.
+  useEffect(() => {
+    if (!clipId || !mainVideoUrl) return
+    let alive = true
+    projectApi.getClipEditorConfig(clipId)
+      .then(({ edit_config }) => {
+        if (!alive || !edit_config) return
+        const state = applyEditConfig(edit_config, mainVideoUrl, (assetId) => projectApi.getEditorAssetUrl(clipId, assetId))
+        setEditorState(state)
+        state.layers.forEach((l) => customizedLayersRef.current.add(l.id))
+        setSaveState('saved')
+      })
+      .catch(() => {
+        // Sem edição salva ainda (404/erro) — não é fatal, segue com o estado local padrão.
+      })
+    return () => { alive = false }
+  }, [clipId, mainVideoUrl])
 
   // Blocos de legenda exibidos no Editor: reagrupa a lista de palavras — real (pós-sincronização
   // com IA) ou a estimativa linear que já vem pronta do backend quando ainda não sincronizado —
@@ -345,6 +383,7 @@ const ClipEditorPage: React.FC = () => {
     })
     delete videoRatiosRef.current[layerId]
     customizedLayersRef.current.delete(layerId)
+    delete pendingFilesRef.current[layerId]
   }
 
   const handleLayerTimeRangeChange = (layerId: string, startTime: number, endTime: number) => {
@@ -380,9 +419,11 @@ const ClipEditorPage: React.FC = () => {
         let lastId: string | null = null
         for (const file of accepted) {
           const layer = createVideoLayerFromFile(file, nextLayers, duration)
+          pendingFilesRef.current[layer.id] = file
           nextLayers = [...nextLayers, layer]
           lastId = layer.id
         }
+        setSaveState('idle')
         return { ...s, layers: nextLayers, selectedLayerId: lastId ?? s.selectedLayerId }
       })
     } catch (err: any) {
@@ -476,6 +517,104 @@ const ClipEditorPage: React.FC = () => {
     return () => cancelAnimationFrame(rafId)
   }, [isPlaying])
 
+  // Salva a edição no backend (seção 7): faz upload de qualquer layer secundária ainda sem
+  // assetId (item 8) antes de gravar o edit_config — nunca salva um assetId inexistente.
+  // Retorna false em caso de erro (uso interno de handleExport, que precisa saber se pode
+  // seguir para o render ou deve parar ali).
+  const handleSaveEditorConfig = async (): Promise<boolean> => {
+    if (!clipId) return false
+    setSaveState('saving')
+    setSaveError(null)
+    try {
+      let state = editorState
+      for (const layer of state.layers) {
+        if (layer.isMain || layer.assetId) continue
+        const file = pendingFilesRef.current[layer.id]
+        if (!file) {
+          throw new Error(`O vídeo "${layer.name}" não pode ser salvo: o arquivo original não está mais disponível nesta sessão (recarregou a página?). Remova essa layer e adicione o vídeo de novo.`)
+        }
+        const { asset_id } = await projectApi.uploadEditorAsset(clipId, file)
+        state = { ...state, layers: state.layers.map((l) => (l.id === layer.id ? { ...l, assetId: asset_id } : l)) }
+      }
+      if (state !== editorState) setEditorState(state)
+      await projectApi.saveClipEditorConfig(clipId, toEditConfig(state))
+      setSaveState('saved')
+      return true
+    } catch (err: any) {
+      setSaveState('error')
+      setSaveError(err?.response?.data?.detail || err?.message || 'Não foi possível salvar a edição')
+      return false
+    }
+  }
+
+  // "Exportar vídeo" (seção 25): 1) valida, 2) salva a edição, 3) inicia o render, 4) mostra
+  // o estado de processamento — o polling do job abaixo assume o resto.
+  const handleExport = async () => {
+    if (!clipId) return
+    if (exportState === 'saving' || exportState === 'queued' || exportState === 'processing') return
+    setExportError(null)
+    setExportResult(null)
+    setExportProgress(0)
+    setExportState('saving')
+    const saved = await handleSaveEditorConfig()
+    if (!saved) {
+      setExportState('failed')
+      setExportError(saveError || 'Não foi possível salvar a edição antes de exportar')
+      return
+    }
+    setExportState('queued')
+    try {
+      const res = await projectApi.startClipEditorRender(clipId)
+      setExportJobId(res.job_id)
+    } catch (err: any) {
+      setExportState('failed')
+      setExportError(err?.response?.data?.detail || err?.message || 'Não foi possível iniciar a exportação')
+    }
+  }
+
+  const handleDownloadExport = () => {
+    if (!clipId || !exportJobId) return
+    projectApi.downloadClipEditorRender(clipId, exportJobId).catch((err: any) => {
+      setExportError(err?.response?.data?.detail || err?.message || 'Falha ao baixar o vídeo exportado')
+    })
+  }
+
+  // Polling do job de render — só existe enquanto exportJobId estiver setado (disparado só
+  // por handleExport, nunca automático). Não zera exportJobId ao concluir/falhar: é o que
+  // handleDownloadExport usa para montar a URL de download.
+  useEffect(() => {
+    if (!exportJobId || !clipId) return
+    let alive = true
+    let timeoutId: number | undefined
+
+    const poll = () => {
+      projectApi.getClipEditorRenderJob(clipId, exportJobId)
+        .then((job) => {
+          if (!alive) return
+          setExportProgress(job.progress ?? 0)
+          if (job.status === 'failed') {
+            setExportState('failed')
+            setExportError(job.error || 'Falha ao exportar o vídeo')
+            return
+          }
+          if (job.status === 'completed') {
+            setExportState('completed')
+            setExportResult(job.result || null)
+            return
+          }
+          setExportState(job.status)
+          timeoutId = window.setTimeout(poll, 1500)
+        })
+        .catch((err: any) => {
+          if (!alive) return
+          setExportState('failed')
+          setExportError(err?.response?.data?.detail || err?.message || 'Falha ao consultar a exportação')
+        })
+    }
+    timeoutId = window.setTimeout(poll, 800)
+    return () => { alive = false; if (timeoutId) window.clearTimeout(timeoutId) }
+  }, [exportJobId, clipId])
+
   if (loading) {
     return (
       <div className="ac-editor-page" style={{ alignItems: 'center', justifyContent: 'center' }}>
@@ -502,7 +641,39 @@ const ClipEditorPage: React.FC = () => {
           </Btn>
           <h1>{clip.title || 'Editar corte'}</h1>
         </div>
-        <span className="ac-editor-badge">Edição local · ainda não é salva</span>
+        <div className="ac-editor-header-actions">
+          {hasUnuploadedLayers(editorState.layers) && (
+            <span className="ac-editor-save-error">Há vídeo(s) ainda não enviado(s) — será enviado ao salvar/exportar.</span>
+          )}
+          {saveError && exportState === 'idle' && <span className="ac-editor-save-error">{saveError}</span>}
+          <span className="ac-editor-badge">
+            {saveState === 'saving' && 'Salvando...'}
+            {saveState === 'saved' && 'Edição salva'}
+            {saveState === 'error' && 'Erro ao salvar'}
+            {saveState === 'idle' && 'Alterações não salvas'}
+          </span>
+          <Btn variant="text" onClick={handleSaveEditorConfig} disabled={saveState === 'saving'}>
+            Salvar
+          </Btn>
+          {exportState === 'idle' || exportState === 'failed' ? (
+            <Btn onClick={handleExport}>Exportar vídeo</Btn>
+          ) : exportState === 'completed' ? (
+            <>
+              <span className="ac-editor-export-progress">
+                Exportação concluída{exportResult ? ` · ${exportResult.width}x${exportResult.height}` : ''}
+              </span>
+              <Btn onClick={handleDownloadExport}>Baixar vídeo</Btn>
+              <Btn variant="text" onClick={() => setExportState('idle')}>Exportar de novo</Btn>
+            </>
+          ) : (
+            <span className="ac-editor-export-progress">
+              {exportState === 'saving' && 'Salvando edição...'}
+              {exportState === 'queued' && 'Na fila para renderizar...'}
+              {exportState === 'processing' && `Renderizando... ${exportProgress}%`}
+            </span>
+          )}
+          {exportState === 'failed' && exportError && <span className="ac-editor-save-error">{exportError}</span>}
+        </div>
       </header>
 
       <div className="ac-editor-body">

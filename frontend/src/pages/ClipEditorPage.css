@@ -45,6 +45,26 @@
   white-space: nowrap;
 }
 
+.ac-editor-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.ac-editor-save-error {
+  font-size: 11.5px;
+  color: var(--ac-error);
+  max-width: 32ch;
+  text-align: right;
+}
+
+.ac-editor-export-progress {
+  font-size: 12px;
+  color: var(--ac-sub);
+  white-space: nowrap;
+}
+
 .ac-editor-body {
   flex: 1 1 auto;
   display: grid;

@@ -3,10 +3,13 @@
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File as UploadFileParam
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from ...core.database import get_db
 from ...services.clip_service import ClipService
+from ...services import editor_render_service
 from ...schemas.clip import ClipCreate, ClipUpdate, ClipResponse, ClipListResponse, ClipStatus, ClipFilter
 from ...schemas.base import PaginationParams
 from ...models.clip import Clip
@@ -238,6 +241,97 @@ async def delete_clip(
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ------------------------------------------------------------ Editor de Corte (Stage 4) ---
+# Config/render são operações do Editor, não do fluxo de corte "clássico" acima — ficam
+# separadas aqui só por já existir /{clip_id} disponível (o clip já tem project_id, então
+# não precisamos do project_id na URL como o publish_export.py precisa).
+
+@router.get("/{clip_id}/editor-config")
+async def get_clip_editor_config(clip_id: str, db: Session = Depends(get_db)):
+    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Corte não encontrado")
+    return {"edit_config": (clip.clip_metadata or {}).get("edit_config")}
+
+
+@router.put("/{clip_id}/editor-config")
+async def save_clip_editor_config(clip_id: str, edit_config: dict, db: Session = Depends(get_db)):
+    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Corte não encontrado")
+    errors = editor_render_service.validate_edit_config(edit_config)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    clip.clip_metadata = editor_render_service.merge_edit_config(clip.clip_metadata, edit_config)
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/{clip_id}/editor/assets")
+async def upload_editor_asset(clip_id: str, file: UploadFile = UploadFileParam(...), db: Session = Depends(get_db)):
+    """Upload real de um vídeo secundário adicionado no Editor — necessário porque o preview
+    usa URL.createObjectURL() (só existe no navegador); o ffmpeg no backend precisa de um
+    arquivo real. Ver editor_render_service.save_editor_asset."""
+    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Corte não encontrado")
+    try:
+        content = await file.read()
+        return editor_render_service.save_editor_asset(str(clip.project_id), file.filename or "", content)
+    except editor_render_service.EditorRenderError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{clip_id}/editor/assets/{asset_id}")
+async def get_editor_asset(clip_id: str, asset_id: str, db: Session = Depends(get_db)):
+    """Serve o asset já salvo — usado para reconstruir o preview de layers secundárias
+    depois de recarregar uma edição salva (o object URL original não sobrevive a um reload)."""
+    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Corte não encontrado")
+    try:
+        path = editor_render_service.resolve_editor_asset_path(str(clip.project_id), asset_id)
+    except editor_render_service.EditorRenderError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return FileResponse(path=str(path), media_type="video/mp4", filename=path.name,
+                         headers={"Accept-Ranges": "bytes"})
+
+
+@router.post("/{clip_id}/editor/render")
+async def start_clip_editor_render(clip_id: str, db: Session = Depends(get_db)):
+    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Corte não encontrado")
+    edit_config = (clip.clip_metadata or {}).get("edit_config")
+    if not edit_config:
+        raise HTTPException(status_code=400, detail="Salve a edição antes de exportar")
+    errors = editor_render_service.validate_edit_config(edit_config)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    return editor_render_service.start_render(str(clip.project_id), clip_id)
+
+
+@router.get("/{clip_id}/editor/render/{job_id}")
+async def get_clip_editor_render_job(clip_id: str, job_id: str):
+    job = editor_render_service.get_render_job(job_id)
+    if not job or job.get("clip_id") != clip_id:
+        raise HTTPException(status_code=404, detail="Job de render não encontrado")
+    return job
+
+
+@router.get("/{clip_id}/editor/render/{job_id}/download")
+async def download_clip_editor_render(clip_id: str, job_id: str):
+    job = editor_render_service.get_render_job(job_id)
+    if not job or job.get("clip_id") != clip_id:
+        raise HTTPException(status_code=404, detail="Job de render não encontrado")
+    if job.get("status") != "completed" or not (job.get("result") or {}).get("path"):
+        raise HTTPException(status_code=409, detail="Render ainda não concluído")
+    path = Path(job["result"]["path"])
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Arquivo do render não existe")
+    return FileResponse(path=str(path), media_type="video/mp4", filename=path.name)
 
 
 @router.post("/cleanup-duplicates")
