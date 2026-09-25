@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react'
-import { Btn, Icon } from '../../ui'
+import { Btn, Icon, Segmented } from '../../ui'
 import { VideoLayer } from './types'
 
 interface LayerPanelProps {
@@ -14,8 +14,17 @@ interface LayerPanelProps {
   onRemove: (id: string) => void
   onTimeRangeChange: (id: string, startTime: number, endTime: number) => void
   onAddFiles: (files: FileList) => void
+  onSetFitMode: (id: string, mode: 'contain' | 'cover') => void
   uploadError: string | null
 }
+
+// Rótulos em português (o valor interno continua 'contain'/'cover', só o texto muda) —
+// 'contain' é o comportamento que já existia antes desta funcionalidade (resize livre pelos
+// handles, sem recorte automático); 'cover' é o modo novo.
+const FIT_MODE_OPTIONS: { value: 'cover' | 'contain'; label: string }[] = [
+  { value: 'contain', label: 'Normal' },
+  { value: 'cover', label: 'Preencher proporcionalmente' },
+]
 
 const ACCEPTED_VIDEO_TYPES = 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov'
 
@@ -32,7 +41,7 @@ const clampSeconds = (v: number, duration: number): number => {
 const LayerPanel: React.FC<LayerPanelProps> = ({
   layers, selectedLayerId, duration,
   onSelect, onToggleVisible, onRename, onMoveUp, onMoveDown, onRemove, onTimeRangeChange, onAddFiles,
-  uploadError,
+  onSetFitMode, uploadError,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -67,9 +76,9 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
                   aria-label={layer.visible ? 'Ocultar camada' : 'Mostrar camada'}
                   onClick={(e) => { e.stopPropagation(); onToggleVisible(layer.id) }}
                 >
-                  {layer.visible ? '👁' : '🚫'}
+                  {layer.visible ? <Icon.Eye size={13} /> : <Icon.EyeOff size={13} />}
                 </button>
-                <span className="ac-layer-icon">🎬</span>
+                <span className="ac-layer-icon"><Icon.Video size={13} /></span>
                 {renamingId === layer.id ? (
                   <input
                     autoFocus
@@ -103,6 +112,22 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
                   </button>
                 )}
               </div>
+              {isSelected && (
+                <div className="ac-layer-fill-screen" onClick={(e) => e.stopPropagation()}>
+                  <Segmented
+                    size="sm"
+                    ariaLabel="Enquadramento do vídeo"
+                    value={layer.fitMode}
+                    onChange={(v) => onSetFitMode(layer.id, v)}
+                    options={FIT_MODE_OPTIONS}
+                  />
+                  <p className="ac-layer-fit-hint">
+                    {layer.fitMode === 'cover'
+                      ? 'Preenche a tela toda, sem bordas — o excesso é cortado. Arraste o vídeo pra escolher a parte visível.'
+                      : 'Mostra o vídeo inteiro — pode sobrar espaço se a proporção não bater.'}
+                  </p>
+                </div>
+              )}
               {isSelected && !layer.isMain && (
                 <div className="ac-layer-time-range" onClick={(e) => e.stopPropagation()}>
                   <label>

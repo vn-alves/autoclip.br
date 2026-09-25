@@ -129,7 +129,62 @@ class TestAssColorAndEven:
         # #2D6BFF -> BGR invertido, prefixo alpha 00.
         assert svc._ass_color("#2D6BFF") == "&H00FF6B2D"
 
-    def test_even_rounds_up_odd_dimensions(self):
-        assert svc._even(101) == 102
-        assert svc._even(100) == 100
-        assert svc._even(1) == 2
+    def test_even_size_rounds_up_odd_dimensions(self):
+        assert svc._even_size(101) == 102
+        assert svc._even_size(100) == 100
+        assert svc._even_size(1) == 2
+
+    def test_px_pos_allows_negative_for_cover_boxes_wider_than_canvas(self):
+        # Bug real: usar _even_size (mínimo 2) pra x/y grudava qualquer posição negativa em 2,
+        # jogando o recorte de um box "cover" maior que o canvas pro canto errado.
+        assert svc._px_pos(-1166.6) == -1167
+        assert svc._px_pos(0) == 0
+        assert svc._px_pos(4.6) == 5
+
+
+class TestFfmpegScaleFilterPerFitMode:
+    """A proteção contra deformação em fitMode='cover' precisa vir do PRÓPRIO filtro ffmpeg
+    (force_original_aspect_ratio=increase + crop, equivalente a object-fit:cover), não do
+    formato da caixa — o usuário pode redimensionar a caixa livremente em qualquer direção
+    (ver EditorCanvas.handleResize) e o conteúdo não pode deformar mesmo assim."""
+
+    def _spec(self, fit_mode):
+        layer = svc.RenderLayerSpec(
+            input_path=__import__("pathlib").Path("x.mp4"), x=0, y=0, width=1080, height=1920,
+            z_index=0, start_time=0.0, end_time=10.0, has_audio=True, fit_mode=fit_mode,
+        )
+        return svc.RenderSpec(canvas_width=1080, canvas_height=1920, fps=30, duration=10.0,
+                               background_color="#000000", layers=[layer])
+
+    def test_cover_uses_increase_and_crop(self):
+        cmd = svc._build_ffmpeg_command(self._spec("cover"), __import__("pathlib").Path("out.mp4"))
+        filter_complex = cmd[cmd.index("-filter_complex") + 1]
+        assert "force_original_aspect_ratio=increase" in filter_complex
+        assert "crop=1080:1920" in filter_complex
+
+    def test_contain_uses_plain_scale_no_crop(self):
+        cmd = svc._build_ffmpeg_command(self._spec("contain"), __import__("pathlib").Path("out.mp4"))
+        filter_complex = cmd[cmd.index("-filter_complex") + 1]
+        assert "scale=1080:1920" in filter_complex
+        assert "force_original_aspect_ratio" not in filter_complex
+        assert "crop=" not in filter_complex
+
+    def test_build_render_spec_reads_fitmode_from_layer_dict(self, monkeypatch, tmp_path):
+        # build_render_spec precisa ler edit_config.layers[i].fitMode == 'cover' e refletir em
+        # RenderLayerSpec.fit_mode — sem exigir banco/vídeo real, usa monkeypatch nas duas
+        # únicas dependências externas (resolução do vídeo principal e o ffprobe).
+        monkeypatch.setattr(svc, "resolve_main_clip_video_path", lambda db, pid, cid: __import__("pathlib").Path("main.mp4"))
+        monkeypatch.setattr(svc, "_probe", lambda path: {"duration": 12.0})
+        monkeypatch.setattr(svc, "_build_subtitle_ass", lambda **kw: None)
+        edit_config = {
+            "version": 1,
+            "canvas": {"format": "9:16", "background": {"color": "#000000"}},
+            "layers": [{
+                "id": "main", "isMain": True, "visible": True, "zIndex": 0,
+                "startTime": 0, "endTime": None, "fitMode": "cover",
+                "transform": {"x": -1.08, "y": 0, "width": 3.16, "height": 1, "rotation": 0},
+            }],
+            "subtitle": {},
+        }
+        spec = svc.build_render_spec(db=None, project_id="p", clip_id="c", edit_config=edit_config, tmp_dir=tmp_path)
+        assert spec.layers[0].fit_mode == "cover"

@@ -11,6 +11,7 @@ import LayersTimeline from '../components/editor/LayersTimeline'
 import {
   BackgroundType, CanvasFormat, EditorState, NormalizedTransform,
   SubtitlePosition, SubtitlePositionPreset, SubtitleStyle, SubtitleStylePreset, SubtitleWordsPerCaption,
+  SubtitleTransition, WordHighlight,
   createDefaultEditorState, createVideoLayerFromFile, fitTransform, resizeTransformForFormat, SUBTITLE_POSITION_PRESETS,
   groupWordsIntoSegments, toEditConfig, applyEditConfig, hasUnuploadedLayers,
 } from '../components/editor/types'
@@ -83,7 +84,12 @@ const ClipEditorPage: React.FC = () => {
   // recalcula automaticamente o fit das layers que o usuário ainda não mexeu (mesmo espírito do
   // hasCustomTransform da Etapa 1, agora por layer).
   const videoRatiosRef = useRef<Record<string, number>>({})
-  const customizedLayersRef = useRef<Set<string>>(new Set())
+  // "Customizada" (usuário arrastou/redimensionou manualmente) agora é um campo PERSISTIDO em
+  // VideoLayer.customized, não um Set em memória à parte — era exatamente essa separação que
+  // causava o bug de "reabrir a edição salva trava pra sempre no enquadramento antigo": o
+  // efeito de carregar do backend marcava TODA layer restaurada como customizada, então o
+  // fitMode='cover' novo nunca tinha chance de recalcular o transform salvo (contain antigo,
+  // com borda preta). Ver types.ts VideoLayer.customized/applyEditConfig.
   // Arquivo original de cada layer secundária (item 8 da Stage 4) — só existe em memória
   // nesta aba/sessão; é o que handleSaveEditorConfig envia ao backend no upload real. Se a
   // página for recarregada antes de salvar, a layer perde o arquivo e precisa ser re-adicionada
@@ -180,8 +186,9 @@ const ClipEditorPage: React.FC = () => {
   // preferência de localStorage acima (o backend é a fonte de verdade a partir de agora; o
   // localStorage só existia como rascunho antes de existir persistência real). Layers
   // secundárias restauradas apontam para o endpoint que serve o asset já enviado (o object URL
-  // da sessão de upload original não sobrevive a um reload) e são marcadas como "customizadas"
-  // para não serem re-enquadradas automaticamente ao trocar de formato.
+  // da sessão de upload original não sobrevive a um reload). `customized` de cada layer vem do
+  // que foi de fato persistido (applyEditConfig) — NÃO forçamos mais todo mundo pra `true` aqui
+  // (isso travava pra sempre o enquadramento salvo, ignorando fitMode/cover daí em diante).
   useEffect(() => {
     if (!clipId || !mainVideoUrl) return
     let alive = true
@@ -190,7 +197,6 @@ const ClipEditorPage: React.FC = () => {
         if (!alive || !edit_config) return
         const state = applyEditConfig(edit_config, mainVideoUrl, (assetId) => projectApi.getEditorAssetUrl(clipId, assetId))
         setEditorState(state)
-        state.layers.forEach((l) => customizedLayersRef.current.add(l.id))
         setSaveState('saved')
       })
       .catch(() => {
@@ -285,11 +291,13 @@ const ClipEditorPage: React.FC = () => {
     return () => { alive = false; if (timeoutId) window.clearTimeout(timeoutId) }
   }, [syncJobId, projectId, clipId])
 
-  // Enquadra a layer no formato atual do Canvas, preservando a proporção real do vídeo dela —
-  // layers secundárias começam num box menor (50%) centralizado, pra não cobrir o vídeo
-  // principal inteiro por padrão quando adicionadas.
-  const fitLayerTransform = (format: CanvasFormat, ratio: number, isMain: boolean): NormalizedTransform => {
-    const full = fitTransform(format, ratio)
+  // Enquadra a layer no formato atual do Canvas, preservando a proporção real do vídeo dela
+  // (nunca deforma — ver fitTransform) segundo o fitMode da própria layer ('cover' por
+  // padrão, nunca deixa borda preta). Layers secundárias começam num box menor (50%)
+  // centralizado, pra não cobrir o vídeo principal inteiro por padrão quando adicionadas — o
+  // corte de "cover" acontece DENTRO desse box menor, não no Canvas inteiro.
+  const fitLayerTransform = (format: CanvasFormat, ratio: number, isMain: boolean, fitMode: 'contain' | 'cover'): NormalizedTransform => {
+    const full = fitTransform(format, ratio, fitMode)
     if (isMain) return full
     const scale = 0.5
     const width = full.width * scale
@@ -301,11 +309,10 @@ const ClipEditorPage: React.FC = () => {
     if (!videoWidth || !videoHeight) return
     const ratio = videoWidth / videoHeight
     videoRatiosRef.current[layerId] = ratio
-    if (customizedLayersRef.current.has(layerId)) return
     setEditorState((s) => ({
       ...s,
-      layers: s.layers.map((l) => (l.id === layerId
-        ? { ...l, transform: fitLayerTransform(s.canvas.format, ratio, l.isMain) }
+      layers: s.layers.map((l) => (l.id === layerId && !l.customized
+        ? { ...l, transform: fitLayerTransform(s.canvas.format, ratio, l.isMain, l.fitMode) }
         : l)),
     }))
   }
@@ -317,17 +324,34 @@ const ClipEditorPage: React.FC = () => {
       layers: s.layers.map((l) => {
         const ratio = videoRatiosRef.current[l.id]
         if (!ratio) return l
-        const nextTransform = customizedLayersRef.current.has(l.id)
+        const nextTransform = l.customized
           ? resizeTransformForFormat(l.transform, s.canvas.format, format, ratio)
-          : fitLayerTransform(format, ratio, l.isMain)
+          : fitLayerTransform(format, ratio, l.isMain, l.fitMode)
         return { ...l, transform: nextTransform }
       }),
     }))
   }
 
   const handleLayerTransformChange = (layerId: string, t: NormalizedTransform) => {
-    customizedLayersRef.current.add(layerId)
-    setEditorState((s) => ({ ...s, layers: s.layers.map((l) => (l.id === layerId ? { ...l, transform: t } : l)) }))
+    setEditorState((s) => ({ ...s, layers: s.layers.map((l) => (l.id === layerId ? { ...l, transform: t, customized: true } : l)) }))
+  }
+
+  // Alterna Cover/Contain (item 2) — recalcula o transform NA HORA a partir da proporção real
+  // do vídeo (nunca estica: ver fitTransform). Deliberadamente NÃO marca como customizada:
+  // trocar o modo é uma preferência persistente da layer, não um ajuste manual pontual — trocar
+  // o formato do Canvas depois continua respeitando o modo escolhido (ver handleFormatChange).
+  // Um drag/resize manual posterior (handleLayerTransformChange) continua marcando customizada
+  // normalmente, sem relação com isto.
+  const handleSetFitMode = (layerId: string, fitMode: 'contain' | 'cover') => {
+    setEditorState((s) => ({
+      ...s,
+      layers: s.layers.map((l) => {
+        if (l.id !== layerId) return l
+        const ratio = videoRatiosRef.current[l.id]
+        const transform = ratio ? fitLayerTransform(s.canvas.format, ratio, l.isMain, fitMode) : l.transform
+        return { ...l, fitMode, transform }
+      }),
+    }))
   }
 
   const handleSelectLayer = (layerId: string | null) => {
@@ -382,7 +406,6 @@ const ClipEditorPage: React.FC = () => {
       }
     })
     delete videoRatiosRef.current[layerId]
-    customizedLayersRef.current.delete(layerId)
     delete pendingFilesRef.current[layerId]
   }
 
@@ -440,10 +463,18 @@ const ClipEditorPage: React.FC = () => {
     setEditorState((s) => ({ ...s, canvas: { ...s.canvas, background: { ...s.canvas.background, color } } }))
   }
 
+  // Etapa 4.2: cada preset é um COMBO (estilo + transição + destaque, item 3/12) — aplica os
+  // três de uma vez. `id: preset.id` marca o preset como "aplicado"; qualquer edição manual
+  // depois disso (handleSubtitleStyleChange etc.) marca como 'custom' sem desfazer o resto.
   const handleApplySubtitlePreset = (preset: SubtitleStylePreset) => {
     setEditorState((s) => ({
       ...s,
-      subtitle: { ...s.subtitle, style: { ...s.subtitle.style, ...preset.style, id: preset.id } },
+      subtitle: {
+        ...s.subtitle,
+        style: { ...s.subtitle.style, ...preset.style, id: preset.id },
+        transition: { ...s.subtitle.transition, ...preset.transition },
+        wordHighlight: { ...s.subtitle.wordHighlight, ...preset.wordHighlight },
+      },
     }))
   }
 
@@ -458,6 +489,20 @@ const ClipEditorPage: React.FC = () => {
     setEditorState((s) => ({
       ...s,
       subtitle: { ...s.subtitle, style: { ...s.subtitle.style, outline: { ...s.subtitle.style.outline, ...patch }, id: 'custom' } },
+    }))
+  }
+
+  const handleSubtitleTransitionChange = (patch: Partial<SubtitleTransition>) => {
+    setEditorState((s) => ({
+      ...s,
+      subtitle: { ...s.subtitle, transition: { ...s.subtitle.transition, ...patch }, style: { ...s.subtitle.style, id: 'custom' } },
+    }))
+  }
+
+  const handleWordHighlightChange = (patch: Partial<WordHighlight>) => {
+    setEditorState((s) => ({
+      ...s,
+      subtitle: { ...s.subtitle, wordHighlight: { ...s.subtitle.wordHighlight, ...patch }, style: { ...s.subtitle.style, id: 'custom' } },
     }))
   }
 
@@ -707,6 +752,10 @@ const ClipEditorPage: React.FC = () => {
             onStyleChange={handleSubtitleStyleChange}
             onOutlineChange={handleSubtitleOutlineChange}
             onPositionPreset={handleSubtitlePositionPreset}
+            transition={editorState.subtitle.transition}
+            onTransitionChange={handleSubtitleTransitionChange}
+            wordHighlight={editorState.subtitle.wordHighlight}
+            onWordHighlightChange={handleWordHighlightChange}
             syncStatus={syncStatus}
             syncMessage={syncMessage}
             syncError={syncError}
@@ -736,6 +785,8 @@ const ClipEditorPage: React.FC = () => {
             subtitleSegments={displaySegments}
             subtitleStyle={editorState.subtitle.style}
             subtitlePosition={editorState.subtitle.position}
+            subtitleTransition={editorState.subtitle.transition}
+            wordHighlight={editorState.subtitle.wordHighlight}
             onSubtitlePositionChange={handleSubtitlePositionChange}
           />
 
@@ -776,12 +827,13 @@ const ClipEditorPage: React.FC = () => {
             onRemove={handleRemoveLayer}
             onTimeRangeChange={handleLayerTimeRangeChange}
             onAddFiles={handleAddVideoFiles}
+            onSetFitMode={handleSetFitMode}
             uploadError={layerUploadError}
           />
           {displaySegments.length > 0 && (
             <div className="ac-editor-panel-section">
               <div className="ac-editor-panel-label">Legenda</div>
-              <div className="ac-editor-layer-item">💬 Legenda</div>
+              <div className="ac-editor-layer-item"><Icon.Chat size={13} /> Legenda</div>
             </div>
           )}
         </aside>

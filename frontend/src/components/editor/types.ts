@@ -80,12 +80,33 @@ export interface VideoLayer {
    * asset do Editor, é o próprio vídeo do corte) e em layers ainda não enviadas ao backend.
    */
   assetId?: string
+  /**
+   * Como a layer é reenquadrada automaticamente (onLoadedMetadata / troca de formato do
+   * Canvas, ver ClipEditorPage.fitLayerTransform) enquanto o usuário não arrasta/redimensiona
+   * manualmente (customizedLayersRef). 'cover' preenche o Canvas inteiro cortando o excesso
+   * (padrão — nunca deixa borda preta); 'contain' mostra o vídeo inteiro, com espaço sobrando
+   * quando a proporção não bate. Não afeta o render: o FFmpeg só lê `transform`, calculado a
+   * partir deste modo.
+   */
+  fitMode: 'contain' | 'cover'
+  /**
+   * true depois que o usuário arrasta/redimensiona esta layer manualmente — só então trocar
+   * fitMode/formato do Canvas para de recalcular automaticamente (ver ClipEditorPage
+   * handleLayerLoadedMetadata/handleFormatChange). PRECISA ser persistido (não um Set em
+   * memória à parte): sem isso, reabrir uma edição salva não tinha como saber que uma layer
+   * NUNCA foi customizada de verdade, e a Etapa anterior marcava TODAS como customizadas ao
+   * carregar — travando pra sempre o enquadramento antigo (contain, com borda preta) mesmo
+   * depois do fitMode virar 'cover' por padrão. Configs salvas antes deste campo existir
+   * (undefined) tratam como false — é exatamente o caso que precisava ser corrigido.
+   */
+  customized: boolean
 }
 
 export const createMainVideoLayer = (source: string): VideoLayer => ({
   id: 'main', type: 'video', name: 'Vídeo principal', source, visible: true,
   transform: { x: 0, y: 0, width: 1, height: 1, rotation: 0 },
-  zIndex: 0, startTime: 0, endTime: Number.POSITIVE_INFINITY, isMain: true,
+  zIndex: 0, startTime: 0, endTime: Number.POSITIVE_INFINITY, isMain: true, fitMode: 'cover',
+  customized: false,
 })
 
 let secondaryLayerCounter = 0
@@ -108,6 +129,8 @@ export function createVideoLayerFromFile(file: File, existingLayers: VideoLayer[
     startTime: 0,
     endTime: duration > 0 ? duration : Number.POSITIVE_INFINITY,
     isMain: false,
+    fitMode: 'cover',
+    customized: false,
   }
 }
 
@@ -154,7 +177,18 @@ export interface SubtitleStyle {
   color: string
   highlightColor: string
   outline: SubtitleOutline
+  /** @deprecated Etapa 4.2: karaoke/pop_in agora vivem em WordHighlight/SubtitleTransition —
+   * mantido só para configs salvas antes desta etapa continuarem carregando sem erro (ver
+   * migrateLegacyAnimation). Novo código não deve escrever neste campo. */
   animation: SubtitleAnimation
+  /** Cor de fundo da caixa da legenda (estilos tipo "Simple Boxy") — 'transparent' ou
+   * backgroundOpacity=0 desliga a caixa inteiramente. */
+  backgroundColor: string
+  /** 0..1 */
+  backgroundOpacity: number
+  /** px, mesma escala lógica do canvas que fontSize. */
+  borderRadius: number
+  shadow: boolean
 }
 
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
@@ -166,6 +200,132 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
   highlightColor: '#2D6BFF',
   outline: { enabled: true, color: '#000000', width: 2 },
   animation: 'none',
+  backgroundColor: '#000000',
+  backgroundOpacity: 0,
+  borderRadius: 8,
+  shadow: false,
+}
+
+/* ---------------------------------------------------- Transição/destaque de palavra (Etapa 4.2) --- */
+
+/** Animação de ENTRADA — do bloco inteiro (a maioria dos tipos) ou de cada palavra
+ * individualmente quando o tipo é 'word_by_word'/'word_follow' (ver item 4 da Etapa 4.2:
+ * nesses dois modos a animação NUNCA é aplicada ao bloco todo de uma vez). */
+export type SubtitleTransitionType =
+  | 'none' | 'fade' | 'pop' | 'slide_up' | 'slide_down' | 'slide_left' | 'slide_right'
+  | 'zoom' | 'bounce' | 'word_by_word' | 'word_follow'
+
+export interface SubtitleTransition {
+  type: SubtitleTransitionType
+  /** segundos */
+  duration: number
+  easing: 'linear' | 'easeOut' | 'easeInOut'
+}
+
+export const DEFAULT_SUBTITLE_TRANSITION: SubtitleTransition = { type: 'fade', duration: 0.18, easing: 'easeOut' }
+
+export const SUBTITLE_TRANSITION_OPTIONS: { value: SubtitleTransitionType; label: string }[] = [
+  { value: 'none', label: 'Nenhuma' },
+  { value: 'fade', label: 'Fade' },
+  { value: 'pop', label: 'Pop' },
+  { value: 'slide_up', label: 'Deslizar ↑' },
+  { value: 'slide_down', label: 'Deslizar ↓' },
+  { value: 'slide_left', label: 'Deslizar ←' },
+  { value: 'slide_right', label: 'Deslizar →' },
+  { value: 'zoom', label: 'Zoom' },
+  { value: 'bounce', label: 'Bounce' },
+  { value: 'word_by_word', label: 'Palavra por palavra' },
+  { value: 'word_follow', label: 'Palavra seguindo a fala' },
+]
+
+/** Destaque da PALAVRA ATIVA — determinado por subtitle_sync.words (findActiveWord), nunca
+ * pelo índice visual do bloco (item 5 da Etapa 4.2). */
+export type WordHighlightType =
+  | 'none' | 'color' | 'background' | 'bold' | 'scale' | 'color_background' | 'pop' | 'karaoke'
+
+export interface WordHighlight {
+  type: WordHighlightType
+  color: string
+  backgroundColor: string
+  /** fator de escala aplicado quando type inclui escala (ou quando animation='pop'). */
+  scale: number
+  /** flourish extra combinável com qualquer type acima — "palavra ativa + animação" (item 9/10). */
+  animation: 'none' | 'pop'
+}
+
+export const DEFAULT_WORD_HIGHLIGHT: WordHighlight = {
+  type: 'color', color: '#2D6BFF', backgroundColor: '#2D6BFF', scale: 1.14, animation: 'none',
+}
+
+export const WORD_HIGHLIGHT_OPTIONS: { value: WordHighlightType; label: string }[] = [
+  { value: 'none', label: 'Nenhum' },
+  { value: 'color', label: 'Mudar cor' },
+  { value: 'background', label: 'Fundo' },
+  { value: 'bold', label: 'Negrito' },
+  { value: 'scale', label: 'Escala' },
+  { value: 'color_background', label: 'Cor + fundo' },
+  { value: 'pop', label: 'Pop' },
+  { value: 'karaoke', label: 'Karaokê' },
+]
+
+/** Migra um SubtitleStyle salvo ANTES da Etapa 4.2 (só tinha `animation`) para
+ * transition/wordHighlight equivalentes — nunca perde o comportamento que o usuário já tinha
+ * configurado. Só roda quando a config carregada não tem transition/wordHighlight (configs
+ * novas sempre têm ambos, ver toEditConfig). */
+export function migrateLegacyAnimation(legacy: SubtitleAnimation): { transition: SubtitleTransition; wordHighlight: WordHighlight } {
+  if (legacy === 'karaoke') {
+    return { transition: { ...DEFAULT_SUBTITLE_TRANSITION, type: 'none' }, wordHighlight: { ...DEFAULT_WORD_HIGHLIGHT, type: 'karaoke' } }
+  }
+  if (legacy === 'pop_in') {
+    return { transition: { ...DEFAULT_SUBTITLE_TRANSITION, type: 'pop' }, wordHighlight: { ...DEFAULT_WORD_HIGHLIGHT, type: 'none' } }
+  }
+  return { transition: { ...DEFAULT_SUBTITLE_TRANSITION, type: 'none' }, wordHighlight: { ...DEFAULT_WORD_HIGHLIGHT, type: 'none' } }
+}
+
+/**
+ * Função central de animação por palavra (item 7 da Etapa 4.2) — TODO componente de preview
+ * usa esta função, nunca recalcula progresso/estado por conta própria, pra garantir que
+ * preview e (futuramente) qualquer outra visualização fiquem sempre de acordo.
+ */
+export interface WordAnimationState {
+  /** false = a palavra não deve ser desenhada ainda (gating de 'word_by_word'/'word_follow'). */
+  visible: boolean
+  /** 0..1 — progresso da animação de ENTRADA da palavra desde word.startTime. */
+  enterProgress: number
+  /** word.startTime <= currentTime <= word.endTime */
+  isActive: boolean
+  /** 0..1 — progresso DENTRO da duração da própria palavra (sweep do karaokê). */
+  activeProgress: number
+}
+
+const EASINGS: Record<SubtitleTransition['easing'], (t: number) => number> = {
+  linear: (t) => t,
+  easeOut: (t) => 1 - (1 - t) ** 3,
+  easeInOut: (t) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2),
+}
+
+export function getWordAnimationProgress(
+  currentTime: number,
+  word: SubtitleWord,
+  transition: SubtitleTransition,
+): WordAnimationState {
+  const isActive = currentTime >= word.startTime && currentTime <= word.endTime
+  const activeProgress = isActive && word.endTime > word.startTime
+    ? clamp01((currentTime - word.startTime) / (word.endTime - word.startTime))
+    : (currentTime > word.endTime ? 1 : 0)
+
+  const gatesByOwnTimestamp = transition.type === 'word_by_word' || transition.type === 'word_follow'
+  const visible = !gatesByOwnTimestamp || currentTime >= word.startTime
+
+  const dur = Math.max(0.01, transition.duration)
+  const raw = clamp01((currentTime - word.startTime) / dur)
+  const enterProgress = currentTime < word.startTime ? 0 : EASINGS[transition.easing](raw)
+
+  return { visible, enterProgress, isActive, activeProgress }
+}
+
+function clamp01(n: number): number {
+  return Math.min(1, Math.max(0, n))
 }
 
 export const DEFAULT_SUBTITLE_POSITION: SubtitlePosition = { preset: 'bottom', ...SUBTITLE_POSITION_PRESETS.bottom }
@@ -175,34 +335,76 @@ export interface SubtitleStylePreset {
   label: string
   /** aplicado por cima de DEFAULT_SUBTITLE_STYLE (merge raso; outline é substituído por inteiro quando presente). */
   style: Partial<Omit<SubtitleStyle, 'id'>>
+  /** Etapa 4.2 — cada preset agora é um COMBO: estilo + transição + destaque (item 3/12: "o
+   * resultado deve ser uma legenda visualmente igual ao estilo, entrando com a animação
+   * escolhida, com a palavra falada recebendo o destaque escolhido"). */
+  transition: Partial<SubtitleTransition>
+  wordHighlight: Partial<WordHighlight>
 }
 
-/** Base pequena e fácil de expandir — cada card é só um objeto novo nesta lista. */
+/** Os 6 presets pedidos na Etapa 4.2 — cada um é só uma combinação de configuração
+ * (style+transition+wordHighlight), reaproveitando o MESMO modelo/renderer para todos
+ * (item 3: "não criar componentes separados para cada estilo"). */
 export const SUBTITLE_STYLE_PRESETS: SubtitleStylePreset[] = [
   {
-    id: 'white-outline',
-    label: 'Branco + contorno',
-    style: { color: '#FFFFFF', outline: { enabled: true, color: '#000000', width: 2 }, fontWeight: 700, animation: 'none' },
+    id: 'super_simple',
+    label: 'Super Simple',
+    style: {
+      color: '#FFFFFF', fontWeight: 700, outline: { enabled: true, color: '#000000', width: 2 },
+      backgroundOpacity: 0, shadow: false,
+    },
+    transition: { type: 'fade', duration: 0.15 },
+    wordHighlight: { type: 'color', color: '#2D6BFF' },
   },
   {
-    id: 'yellow-black',
-    label: 'Amarelo + preto',
-    style: { color: '#FFE14D', outline: { enabled: true, color: '#000000', width: 3 }, fontWeight: 700, animation: 'none' },
+    id: 'simple_boxy',
+    label: 'Simple Boxy',
+    style: {
+      color: '#FFFFFF', fontWeight: 700, outline: { enabled: false, color: '#000000', width: 0 },
+      backgroundColor: '#000000', backgroundOpacity: 0.78, borderRadius: 10, shadow: false,
+    },
+    transition: { type: 'slide_up', duration: 0.2 },
+    wordHighlight: { type: 'background', backgroundColor: '#FFE14D', color: '#111111' },
   },
   {
-    id: 'big-text',
-    label: 'Texto grande',
-    style: { fontSize: 64, color: '#FFFFFF', outline: { enabled: true, color: '#000000', width: 2 }, fontWeight: 700, animation: 'none' },
+    id: 'word_focus',
+    label: 'Word Focus',
+    style: {
+      color: '#9AA0A6', fontWeight: 700, outline: { enabled: true, color: '#000000', width: 2 },
+      backgroundOpacity: 0,
+    },
+    transition: { type: 'fade', duration: 0.15 },
+    wordHighlight: { type: 'color_background', color: '#FFFFFF', backgroundColor: '#2D6BFF', scale: 1.1 },
   },
   {
-    id: 'bold',
-    label: 'Texto bold',
-    style: { color: '#FFFFFF', fontWeight: 800, outline: { enabled: false, color: '#000000', width: 2 }, animation: 'none' },
+    id: 'pop_words',
+    label: 'Pop Words',
+    style: {
+      color: '#FFFFFF', fontWeight: 800, outline: { enabled: true, color: '#000000', width: 2 },
+      backgroundOpacity: 0,
+    },
+    transition: { type: 'word_by_word', duration: 0.16, easing: 'easeOut' },
+    wordHighlight: { type: 'pop', color: '#FFFFFF', scale: 1.22 },
   },
   {
-    id: 'karaoke',
-    label: 'Karaokê',
-    style: { color: '#FFFFFF', highlightColor: '#2D6BFF', outline: { enabled: true, color: '#000000', width: 2 }, fontWeight: 700, animation: 'karaoke' },
+    id: 'spoken_words',
+    label: 'Spoken Words',
+    style: {
+      color: '#FFFFFF', fontWeight: 700, outline: { enabled: true, color: '#000000', width: 2 },
+      backgroundOpacity: 0,
+    },
+    transition: { type: 'word_follow', duration: 0.1 },
+    wordHighlight: { type: 'background', backgroundColor: '#2D6BFF', color: '#FFFFFF' },
+  },
+  {
+    id: 'highlight',
+    label: 'Highlight',
+    style: {
+      color: '#FFFFFF', fontWeight: 700, outline: { enabled: true, color: '#000000', width: 2 },
+      backgroundOpacity: 0,
+    },
+    transition: { type: 'none' },
+    wordHighlight: { type: 'color_background', color: '#111111', backgroundColor: '#FFE14D' },
   },
 ]
 
@@ -304,6 +506,8 @@ export interface SubtitleEditorState {
   /** Só para destacar o bloco na timeline de legendas; não controla o que aparece no canvas (isso é sempre derivado de currentTime). */
   selectedSegmentId: string | null
   wordsPerCaption: SubtitleWordsPerCaption
+  transition: SubtitleTransition
+  wordHighlight: WordHighlight
 }
 
 export interface EditorState {
@@ -318,16 +522,29 @@ export interface EditorState {
 }
 
 /** Enquadra o vídeo dentro do canvas preservando a proporção original (contain-fit), centralizado. */
-export function fitTransform(format: CanvasFormat, videoRatio: number): NormalizedTransform {
+/**
+ * Enquadra o vídeo no Canvas preservando a proporção original (nunca deforma/estica —
+ * `width`/`height` sempre guardam a proporção real do vídeo entre si).
+ *
+ * 'cover' (padrão): preenche o Canvas inteiro, cortando o excesso via overflow:hidden do
+ * frame — nunca aparece borda preta. 'contain': o vídeo inteiro fica visível, sobrando área
+ * (fundo do Canvas) nos lados que não combinam com o formato.
+ */
+export function fitTransform(format: CanvasFormat, videoRatio: number, mode: 'contain' | 'cover' = 'cover'): NormalizedTransform {
   const cRatio = canvasRatio(format)
   let width: number
   let height: number
-  if (videoRatio > cRatio) {
-    width = 1
-    height = cRatio / videoRatio
-  } else {
+  // cover: escala = max(canvasW/videoW, canvasH/videoH) — equivalente a object-fit:cover.
+  // contain: escala = min(...) — equivalente a object-fit:contain (comportamento antigo).
+  const widerThanCanvas = mode === 'cover' ? videoRatio > cRatio : videoRatio <= cRatio
+  if (widerThanCanvas) {
+    // vídeo mais "largo" que o canvas: a ALTURA cobre 100%, a largura sobra (cover: recortada
+    // nas laterais; contain: nunca acontece — aqui vira o ramo de altura sobrando embaixo/cima).
     height = 1
     width = videoRatio / cRatio
+  } else {
+    width = 1
+    height = cRatio / videoRatio
   }
   return { x: (1 - width) / 2, y: (1 - height) / 2, width, height, rotation: 0 }
 }
@@ -376,6 +593,8 @@ export interface EditConfigLayer {
   endTime: number | null
   isMain: boolean
   assetId?: string
+  fitMode?: 'contain' | 'cover'
+  customized?: boolean
 }
 
 export interface EditConfig {
@@ -386,6 +605,8 @@ export interface EditConfig {
     wordsPerCaption: SubtitleWordsPerCaption
     style: SubtitleStyle
     position: SubtitlePosition
+    transition: SubtitleTransition
+    wordHighlight: WordHighlight
   }
 }
 
@@ -409,11 +630,15 @@ export function toEditConfig(state: EditorState): EditConfig {
       endTime: Number.isFinite(l.endTime) ? l.endTime : null,
       isMain: l.isMain,
       assetId: l.assetId,
+      fitMode: l.fitMode,
+      customized: l.customized,
     })),
     subtitle: {
       wordsPerCaption: state.subtitle.wordsPerCaption,
       style: state.subtitle.style,
       position: state.subtitle.position,
+      transition: state.subtitle.transition,
+      wordHighlight: state.subtitle.wordHighlight,
     },
   }
 }
@@ -428,6 +653,12 @@ export function applyEditConfig(
   mainVideoUrl: string,
   resolveAssetSource: (assetId: string) => string,
 ): EditorState {
+  // Configs salvas antes da Etapa 4.2 não têm transition/wordHighlight — migra a partir do
+  // `animation` antigo em vez de simplesmente cair no default (preserva o comportamento que
+  // o usuário já tinha configurado; nunca perde uma sincronização/config existente).
+  const legacy = !config.subtitle.transition || !config.subtitle.wordHighlight
+    ? migrateLegacyAnimation(config.subtitle.style.animation)
+    : null
   return {
     canvas: config.canvas,
     selectedLayerId: null,
@@ -443,12 +674,22 @@ export function applyEditConfig(
       endTime: l.endTime === null ? Number.POSITIVE_INFINITY : l.endTime,
       isMain: l.isMain,
       assetId: l.assetId,
+      // Configs salvas antes desta correção não têm fitMode — 'cover' é o padrão atual (nunca
+      // borda preta), preserva o comportamento que o usuário já via antes de existir o campo.
+      fitMode: l.fitMode ?? 'cover',
+      // idem pra customized: configs antigas nunca tiveram esse campo — default false é
+      // exatamente o que corrige o bug relatado (layer nunca foi customizada de verdade,
+      // deixa o auto-fit por fitMode assumir o controle de novo em vez de travar pra sempre
+      // no transform antigo, com borda preta).
+      customized: l.customized ?? false,
     })),
     subtitle: {
-      style: config.subtitle.style,
+      style: { ...DEFAULT_SUBTITLE_STYLE, ...config.subtitle.style },
       position: config.subtitle.position,
       selectedSegmentId: null,
       wordsPerCaption: config.subtitle.wordsPerCaption,
+      transition: config.subtitle.transition ?? legacy!.transition,
+      wordHighlight: config.subtitle.wordHighlight ?? legacy!.wordHighlight,
     },
   }
 }
@@ -464,6 +705,8 @@ export function createDefaultEditorState(mainVideoUrl: string): EditorState {
       position: { ...DEFAULT_SUBTITLE_POSITION },
       selectedSegmentId: null,
       wordsPerCaption: 'auto',
+      transition: { ...DEFAULT_SUBTITLE_TRANSITION },
+      wordHighlight: { ...DEFAULT_WORD_HIGHLIGHT },
     },
   }
 }

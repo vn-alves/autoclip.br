@@ -1,10 +1,12 @@
 import React from 'react'
 import { Spin } from 'antd'
-import { Btn, Segmented } from '../../ui'
+import { Btn, Icon, Segmented } from '../../ui'
 import SubtitleStyleCards from './SubtitleStyleCards'
 import {
-  SubtitleAnimation, SubtitlePosition, SubtitlePositionPreset, SubtitleStyle, SubtitleStylePreset,
+  SubtitlePosition, SubtitlePositionPreset, SubtitleStyle, SubtitleStylePreset,
   SubtitleSyncStatus, SubtitleWordsPerCaption, WORDS_PER_CAPTION_OPTIONS,
+  SubtitleTransition, SubtitleTransitionType, SUBTITLE_TRANSITION_OPTIONS,
+  WordHighlight, WordHighlightType, WORD_HIGHLIGHT_OPTIONS,
 } from './types'
 
 interface SubtitleControlsProps {
@@ -18,6 +20,11 @@ interface SubtitleControlsProps {
   onStyleChange: (patch: Partial<Omit<SubtitleStyle, 'id' | 'outline'>>) => void
   onOutlineChange: (patch: Partial<SubtitleStyle['outline']>) => void
   onPositionPreset: (preset: Exclude<SubtitlePositionPreset, 'custom'>) => void
+  /** Etapa 4.2 — transição de entrada da legenda e destaque da palavra ativa. */
+  transition: SubtitleTransition
+  onTransitionChange: (patch: Partial<SubtitleTransition>) => void
+  wordHighlight: WordHighlight
+  onWordHighlightChange: (patch: Partial<WordHighlight>) => void
   /** Sincronização precisa (Whisper + alinhamento) — ver subtitle_sync_service.py. */
   syncStatus: SubtitleSyncStatus
   syncMessage: string | null
@@ -43,17 +50,35 @@ const WEIGHT_OPTIONS: { value: string; label: string }[] = [
   { value: '800', label: 'Extra' },
 ]
 
-const ANIMATION_OPTIONS: { value: SubtitleAnimation; label: string }[] = [
-  { value: 'none', label: 'Nenhuma' },
-  { value: 'karaoke', label: 'Karaokê' },
-  { value: 'pop_in', label: 'Pop-in' },
-]
-
 const POSITION_OPTIONS: { value: Exclude<SubtitlePositionPreset, 'custom'>; label: string }[] = [
   { value: 'top', label: 'Topo' },
   { value: 'center', label: 'Centro' },
   { value: 'bottom', label: 'Inferior' },
 ]
+
+/** Grade de chips — usado pra Transição/Destaque (mais opções do que o Segmented pill
+ * comporta numa coluna estreita; mesmo visual "calmo" do resto do editor, ver DESIGN.md). */
+function ChipGroup<T extends string>({ value, onChange, options, ariaLabel }: {
+  value: T
+  onChange: (v: T) => void
+  options: { value: T; label: string }[]
+  ariaLabel: string
+}) {
+  return (
+    <div className="ac-editor-chip-group" role="group" aria-label={ariaLabel}>
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          className={`ac-editor-chip${o.value === value ? ' ac-editor-chip--active' : ''}`}
+          onClick={() => onChange(o.value)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 const formatSyncedAt = (iso: string): string => {
   try {
@@ -67,6 +92,7 @@ const formatSyncedAt = (iso: string): string => {
 const SubtitleControls: React.FC<SubtitleControlsProps> = ({
   loading, error, available, hasSegments, style, position,
   onApplyPreset, onStyleChange, onOutlineChange, onPositionPreset,
+  transition, onTransitionChange, wordHighlight, onWordHighlightChange,
   syncStatus, syncMessage, syncError, syncedAt, onStartSync,
   wordsPerCaption, onWordsPerCaptionChange,
 }) => {
@@ -109,8 +135,8 @@ const SubtitleControls: React.FC<SubtitleControlsProps> = ({
           <Btn size="sm" loading disabled>{syncMessage || 'Sincronizando…'}</Btn>
         ) : syncStatus === 'synced' ? (
           <>
-            <p className="ac-editor-hint" style={{ color: 'var(--ac-accent)', marginTop: 0 }}>
-              ✓ Sincronizado{syncedAt ? ` · ${formatSyncedAt(syncedAt)}` : ''}
+            <p className="ac-editor-hint" style={{ color: 'var(--ac-accent)', marginTop: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Icon.Check size={12} /> Sincronizado{syncedAt ? ` · ${formatSyncedAt(syncedAt)}` : ''}
             </p>
             <Btn size="sm" onClick={onStartSync}>Sincronizar novamente</Btn>
           </>
@@ -196,6 +222,40 @@ const SubtitleControls: React.FC<SubtitleControlsProps> = ({
       </div>
 
       <div className="ac-editor-panel-section">
+        <div className="ac-editor-panel-label">Fundo da caixa</div>
+        <Segmented
+          size="sm"
+          ariaLabel="Fundo da caixa"
+          value={style.backgroundOpacity > 0 ? 'on' : 'off'}
+          onChange={(v) => onStyleChange({ backgroundOpacity: v === 'on' ? (style.backgroundOpacity > 0 ? style.backgroundOpacity : 0.75) : 0 })}
+          options={[{ value: 'on', label: 'Ativo' }, { value: 'off', label: 'Desativado' }]}
+        />
+        {style.backgroundOpacity > 0 && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+              <input type="color" className="ac-editor-color-input" style={{ width: 44 }} value={style.backgroundColor} onChange={(e) => onStyleChange({ backgroundColor: e.target.value })} />
+              <input
+                type="range" min={0.1} max={1} step={0.05}
+                value={style.backgroundOpacity}
+                onChange={(e) => onStyleChange({ backgroundOpacity: Number(e.target.value) })}
+                style={{ flex: 1 }}
+              />
+              <span className="ac-editor-value-label">{Math.round(style.backgroundOpacity * 100)}%</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+              <input
+                type="range" min={0} max={24}
+                value={style.borderRadius}
+                onChange={(e) => onStyleChange({ borderRadius: Number(e.target.value) })}
+                style={{ flex: 1 }}
+              />
+              <span className="ac-editor-value-label">raio {style.borderRadius}px</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="ac-editor-panel-section">
         <div className="ac-editor-panel-label">Contorno</div>
         <Segmented
           size="sm"
@@ -233,8 +293,80 @@ const SubtitleControls: React.FC<SubtitleControlsProps> = ({
       </div>
 
       <div className="ac-editor-panel-section">
-        <div className="ac-editor-panel-label">Animação</div>
-        <Segmented size="sm" ariaLabel="Animação da legenda" value={style.animation} onChange={(v) => onStyleChange({ animation: v })} options={ANIMATION_OPTIONS} />
+        <div className="ac-editor-panel-label">Transição da legenda</div>
+        <ChipGroup<SubtitleTransitionType>
+          ariaLabel="Transição da legenda"
+          value={transition.type}
+          onChange={(v) => onTransitionChange({ type: v })}
+          options={SUBTITLE_TRANSITION_OPTIONS}
+        />
+        {(transition.type === 'word_by_word' || transition.type === 'word_follow') && (
+          <p className="ac-editor-hint">
+            {transition.type === 'word_by_word'
+              ? 'Cada palavra nasce um pouco abaixo e desliza pra posição final, no timestamp exato dela — não é o bloco inteiro que entra de uma vez.'
+              : 'Cada palavra aparece exatamente no timestamp dela, sem o bloco inteiro aparecer de uma vez.'}
+          </p>
+        )}
+        {transition.type !== 'none' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+            <input
+              type="range" min={0.08} max={0.6} step={0.02}
+              value={transition.duration}
+              onChange={(e) => onTransitionChange({ duration: Number(e.target.value) })}
+              style={{ flex: 1 }}
+            />
+            <span className="ac-editor-value-label">{Math.round(transition.duration * 1000)}ms</span>
+          </div>
+        )}
+      </div>
+
+      <div className="ac-editor-panel-section">
+        <div className="ac-editor-panel-label">Destaque de palavras</div>
+        <ChipGroup<WordHighlightType>
+          ariaLabel="Destaque de palavras"
+          value={wordHighlight.type}
+          onChange={(v) => onWordHighlightChange({ type: v })}
+          options={WORD_HIGHLIGHT_OPTIONS}
+        />
+        {wordHighlight.type !== 'none' && (
+          <>
+            <div className="ac-editor-color-row" style={{ marginTop: 10 }}>
+              {(wordHighlight.type === 'color' || wordHighlight.type === 'color_background' || wordHighlight.type === 'pop' || wordHighlight.type === 'karaoke') && (
+                <label>
+                  <span>Cor</span>
+                  <input type="color" className="ac-editor-color-input" value={wordHighlight.color} onChange={(e) => onWordHighlightChange({ color: e.target.value })} />
+                </label>
+              )}
+              {(wordHighlight.type === 'background' || wordHighlight.type === 'color_background') && (
+                <label>
+                  <span>Fundo</span>
+                  <input type="color" className="ac-editor-color-input" value={wordHighlight.backgroundColor} onChange={(e) => onWordHighlightChange({ backgroundColor: e.target.value })} />
+                </label>
+              )}
+            </div>
+            {(wordHighlight.type === 'scale' || wordHighlight.type === 'pop') && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                <input
+                  type="range" min={1} max={1.5} step={0.02}
+                  value={wordHighlight.scale}
+                  onChange={(e) => onWordHighlightChange({ scale: Number(e.target.value) })}
+                  style={{ flex: 1 }}
+                />
+                <span className="ac-editor-value-label">{Math.round(wordHighlight.scale * 100)}%</span>
+              </div>
+            )}
+            {wordHighlight.type !== 'pop' && (
+              <Segmented
+                size="sm"
+                ariaLabel="Palavra ativa + animação"
+                value={wordHighlight.animation}
+                onChange={(v) => onWordHighlightChange({ animation: v })}
+                options={[{ value: 'none', label: 'Sem animação extra' }, { value: 'pop', label: '+ Pop' }]}
+
+              />
+            )}
+          </>
+        )}
       </div>
     </>
   )

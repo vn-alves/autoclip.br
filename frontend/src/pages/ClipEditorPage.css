@@ -14,7 +14,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 24px;
+  padding: 16px 24px;
   border-bottom: 1px solid var(--ac-line);
 }
 
@@ -68,13 +68,13 @@
 .ac-editor-body {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 240px 1fr 220px;
+  grid-template-columns: 260px 1fr 240px;
   min-height: 0;
 }
 
 .ac-editor-panel {
   border-right: 1px solid var(--ac-line);
-  padding: 20px 16px;
+  padding: 24px 20px;
   overflow-y: auto;
 }
 
@@ -93,7 +93,7 @@
   color: var(--ac-sub);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .ac-editor-layer-item {
@@ -139,7 +139,7 @@
 .ac-editor-frame {
   position: relative;
   background: #000;
-  border-radius: 6px;
+  border-radius: 12px;
   overflow: hidden;
   box-shadow: var(--ac-shadow);
 }
@@ -160,7 +160,13 @@
 
 .ac-editor-video {
   position: absolute;
-  object-fit: contain;
+  /* NUNCA contain/cover aqui: o box (width/height inline, ver EditorCanvas) já É o retângulo
+     final calculado por fitTransform (cover/contain) OU o resultado de um resize manual —
+     `fill` faz o elemento <video> ocupar exatamente esse box, sem re-letterboxar por dentro.
+     Com object-fit:contain (bug anterior), um box "cover" (ex.: 316% de largura pra cobrir um
+     canvas 9:16 com vídeo 16:9) ficava re-contido DENTRO de si mesmo pelo navegador — anulava
+     o cálculo de cover inteiro e também o resize livre nas bordas. */
+  object-fit: fill;
   background: #000;
   cursor: move;
 }
@@ -169,8 +175,8 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 10px 24px;
+  gap: 16px;
+  padding: 12px 24px;
   border-top: 1px solid var(--ac-line);
 }
 
@@ -199,7 +205,7 @@
 
 .ac-editor-timeline {
   flex: 0 0 auto;
-  padding: 10px 24px 18px;
+  padding: 12px 24px 16px;
 }
 
 .ac-editor-timeline-times {
@@ -261,7 +267,6 @@
 .ac-editor-subtitle-box {
   position: absolute;
   box-sizing: border-box;
-  padding: 4px 8px;
   text-align: center;
   line-height: 1.25;
   cursor: move;
@@ -269,13 +274,63 @@
   word-break: break-word;
 }
 
-@keyframes ac-editor-subtitle-pop {
-  0% { transform: translateY(6px) scale(0.94); opacity: 0; }
-  100% { transform: translateY(0) scale(1); opacity: 1; }
+.ac-editor-subtitle-box span {
+  display: inline-block;
+  transition: color 80ms linear, background-color 80ms linear, transform 80ms linear;
 }
 
-.ac-editor-subtitle-box--pop {
-  animation: ac-editor-subtitle-pop 220ms ease-out;
+/* Transições de ENTRADA do bloco (Etapa 4.2, item 4) — duração real vem de
+   animation-duration inline (transition.duration); easing de animation-timing-function. */
+@keyframes ac-sub-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ac-sub-pop { 0% { opacity: 0; transform: scale(0.8); } 60% { opacity: 1; transform: scale(1.06); } 100% { transform: scale(1); } }
+@keyframes ac-sub-slide_up { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ac-sub-slide_down { from { opacity: 0; transform: translateY(-22px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ac-sub-slide_left { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes ac-sub-slide_right { from { opacity: 0; transform: translateX(-26px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes ac-sub-zoom { from { opacity: 0; transform: scale(0.55); } to { opacity: 1; transform: scale(1); } }
+@keyframes ac-sub-bounce { 0% { opacity: 0; transform: scale(0.35); } 55% { opacity: 1; transform: scale(1.12); } 78% { transform: scale(0.96); } 100% { transform: scale(1); } }
+@keyframes ac-word-pop { 0% { transform: scale(1); } 45% { transform: scale(var(--ac-word-pop-scale, 1.2)); } 100% { transform: scale(1); } }
+
+.ac-editor-subtitle-box--anim { animation-fill-mode: both; }
+.ac-editor-subtitle-box--anim-fade { animation-name: ac-sub-fade; }
+.ac-editor-subtitle-box--anim-pop { animation-name: ac-sub-pop; }
+.ac-editor-subtitle-box--anim-slide_up { animation-name: ac-sub-slide_up; }
+.ac-editor-subtitle-box--anim-slide_down { animation-name: ac-sub-slide_down; }
+.ac-editor-subtitle-box--anim-slide_left { animation-name: ac-sub-slide_left; }
+.ac-editor-subtitle-box--anim-slide_right { animation-name: ac-sub-slide_right; }
+.ac-editor-subtitle-box--anim-zoom { animation-name: ac-sub-zoom; }
+.ac-editor-subtitle-box--anim-bounce { animation-name: ac-sub-bounce; }
+
+.ac-editor-subtitle-word--pop { animation: ac-word-pop 260ms ease-out; }
+
+.ac-editor-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ac-editor-chip {
+  appearance: none;
+  border: 1px solid var(--ac-line);
+  background: var(--ac-line-2);
+  color: var(--ac-sub);
+  border-radius: 999px;
+  height: 26px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out;
+}
+
+.ac-editor-chip:hover { color: var(--ac-ink); border-color: var(--ac-muted); }
+
+.ac-editor-chip--active {
+  background: var(--ac-card);
+  color: var(--ac-ink);
+  border-color: var(--ac-accent);
+  box-shadow: 0 0 0 1px var(--ac-accent);
 }
 
 .ac-editor-hint {
@@ -498,6 +553,17 @@
   border: 1px solid var(--ac-line);
   border-radius: 5px;
   padding: 3px 6px;
+}
+
+.ac-layer-fill-screen {
+  padding: 0 8px 8px;
+}
+
+.ac-layer-fit-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ac-sub);
 }
 
 /* Timeline de layers (só leitura/seleção — editar é no painel) */

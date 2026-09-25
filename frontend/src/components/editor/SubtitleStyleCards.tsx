@@ -15,6 +15,8 @@ const SubtitleStyleCards: React.FC<SubtitleStyleCardsProps> = ({ activePresetId,
   <div className="ac-editor-style-cards">
     {SUBTITLE_STYLE_PRESETS.map((preset) => {
       const outline = preset.style.outline ?? { enabled: false, color: '#000000', width: 0 }
+      const hasBox = (preset.style.backgroundOpacity ?? 0) > 0
+      const highlightColor = preset.wordHighlight.color || preset.wordHighlight.backgroundColor
       return (
         <button
           key={preset.id}
@@ -28,9 +30,12 @@ const SubtitleStyleCards: React.FC<SubtitleStyleCardsProps> = ({ activePresetId,
               color: preset.style.color || '#FFFFFF',
               fontWeight: preset.style.fontWeight || 700,
               textShadow: subtitleOutlineShadow(outline),
+              background: hasBox ? preset.style.backgroundColor : 'transparent',
+              borderRadius: hasBox ? 6 : 0,
+              padding: hasBox ? '2px 8px' : 0,
             }}
           >
-            Aa
+            A<span style={{ color: highlightColor }}>a</span>
           </span>
           <span className="ac-editor-style-card-label">{preset.label}</span>
         </button>

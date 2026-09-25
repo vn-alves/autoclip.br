@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import Moveable, { type OnDrag, type OnResize } from 'react-moveable'
-import { BackgroundConfig, CANVAS_DIMENSIONS, CanvasFormat, NormalizedTransform, SubtitlePosition, SubtitleSegment, SubtitleStyle, VideoLayer, findActiveLayers } from './types'
+import Moveable, { type OnDrag, type OnResize, type OnResizeStart } from 'react-moveable'
+import { BackgroundConfig, CANVAS_DIMENSIONS, CanvasFormat, NormalizedTransform, SubtitlePosition, SubtitleSegment, SubtitleStyle, SubtitleTransition, WordHighlight, VideoLayer, findActiveLayers } from './types'
 import SubtitleLayer from './SubtitleLayer'
 
 interface EditorCanvasProps {
@@ -26,6 +26,9 @@ interface EditorCanvasProps {
   subtitleSegments: SubtitleSegment[]
   subtitleStyle: SubtitleStyle
   subtitlePosition: SubtitlePosition
+  /** Etapa 4.2 — transição de entrada e destaque da palavra ativa. */
+  subtitleTransition: SubtitleTransition
+  wordHighlight: WordHighlight
   onSubtitlePositionChange: (p: Partial<SubtitlePosition>) => void
 }
 
@@ -42,7 +45,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   format, background, layers, selectedLayerId, onSelectLayer, onLayerTransformChange, onLayerLoadedMetadata,
   mainVideoRef, onMainTimeUpdate, onMainDurationChange, onMainEnded, onMainPlayStateChange,
   currentTime, isPlaying,
-  subtitleSegments, subtitleStyle, subtitlePosition, onSubtitlePositionChange,
+  subtitleSegments, subtitleStyle, subtitlePosition, subtitleTransition, wordHighlight, onSubtitlePositionChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const frameRef = useRef<HTMLDivElement>(null)
@@ -181,11 +184,49 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
     target.style.top = `${top}px`
   }
 
-  const handleResize = ({ target, width, height, drag }: OnResize) => {
+  // Dois comportamentos de resize, escolhidos pelo fitMode da layer selecionada (item pedido:
+  // "Normal" continua exatamente como estava; "Preencher proporcionalmente" nunca estica):
+  //
+  // fitMode 'contain' (Normal): só os handles de CANTO preservam proporção (ancorado no canto
+  // OPOSTO); os de BORDA (n/s/e/w) esticam livremente — comportamento antigo, intacto.
+  //
+  // fitMode 'cover': TODOS os handles redimensionam livremente (largura e altura
+  // independentes, como as bordas do modo Normal) — quem impede a deformação do CONTEÚDO não
+  // é travar o formato da caixa, é o object-fit:cover no <video> (ver JSX). É exatamente o
+  // padrão do vídeo de referência: só a altura muda ao arrastar os handles de cima/baixo, a
+  // largura fica onde estava, e o vídeo nunca parece "esticar" porque quem está sempre
+  // recortando/cobrindo a caixa é o navegador, não uma trava de proporção no drag.
+  const resizeStartRef = useRef({ left: 0, top: 0, width: 0, height: 0, ratio: 1 })
+
+  const handleResizeStart = ({ target }: OnResizeStart) => {
+    const el = target as HTMLElement
+    const left = parseFloat(el.style.left || '0')
+    const top = parseFloat(el.style.top || '0')
+    const width = parseFloat(el.style.width || '0')
+    const height = parseFloat(el.style.height || '0')
+    resizeStartRef.current = { left, top, width, height, ratio: height > 0 ? width / height : 1 }
+  }
+
+  const handleResize = ({ target, width, height, drag, direction }: OnResize) => {
+    const [dx, dy] = direction
+    const isCorner = dx !== 0 && dy !== 0
+    const s = resizeStartRef.current
+    let newLeft = drag.left
+    let newTop = drag.top
+
+    if (selectedLayer?.fitMode !== 'cover' && isCorner) {
+      height = width / s.ratio
+      // dx/dy === 1 -> a borda direita/inferior é a que está sendo arrastada, então a
+      // esquerda/topo fica ancorada (e vice-versa) — mesma convenção de direção do Moveable.
+      const anchorX = dx === 1 ? s.left : s.left + s.width
+      const anchorY = dy === 1 ? s.top : s.top + s.height
+      newLeft = dx === 1 ? anchorX : anchorX - width
+      newTop = dy === 1 ? anchorY : anchorY - height
+    }
     target.style.width = `${width}px`
     target.style.height = `${height}px`
-    target.style.left = `${drag.left}px`
-    target.style.top = `${drag.top}px`
+    target.style.left = `${newLeft}px`
+    target.style.top = `${newTop}px`
   }
 
   // Layers renderizadas em ordem de zIndex crescente (a última no DOM fica visualmente acima
@@ -226,7 +267,12 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
               className="ac-editor-video"
               playsInline
               muted={!layer.isMain}
-              style={{ zIndex: layer.zIndex, display: isActive ? undefined : 'none' }}
+              // 'cover': o conteúdo NUNCA deforma não importa o formato da caixa (o usuário
+              // pode redimensionar livremente pra escolher o crop) — quem garante isso é o
+              // object-fit, não uma trava no resize. 'contain'/Normal continua 'fill' (a caixa
+              // já É o retângulo final calculado por fitTransform ou por um resize manual
+              // travado em proporção nos cantos, ver handleResize).
+              style={{ zIndex: layer.zIndex, display: isActive ? undefined : 'none', objectFit: layer.fitMode === 'cover' ? 'cover' : 'fill' }}
               onClick={(e) => { e.stopPropagation(); setSubtitleSelected(false); onSelectLayer(layer.id) }}
               onLoadedMetadata={(e) => onLayerLoadedMetadata(layer.id, e.currentTarget.videoWidth, e.currentTarget.videoHeight)}
               onTimeUpdate={layer.isMain ? onMainTimeUpdate : undefined}
@@ -245,21 +291,22 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
             origin={false}
             draggable
             resizable
-            keepRatio
             throttleDrag={0}
             throttleResize={0}
             snappable
             snapCenter
             snapThreshold={6}
-            // 8 handles (cantos + centros de cada borda). keepRatio preserva o aspect ratio do
-            // vídeo em qualquer um deles — o Canvas tem overflow:hidden (ac.editor-frame), então
-            // ampliar o vídeo além do frame e arrastar funciona como janela de recorte, sem
-            // precisar de uma segunda lógica de transformação. Vale pra qualquer layer selecionada.
+            // 8 handles (cantos + centros de cada borda). Cantos preservam o aspect ratio do
+            // vídeo (zoom); bordas (n/s/e/w) esticam livremente — ver handleResize. O Canvas
+            // tem overflow:hidden (ac.editor-frame), então ampliar o vídeo além do frame e
+            // arrastar funciona como janela de recorte, sem precisar de uma segunda lógica de
+            // transformação. Vale pra qualquer layer selecionada.
             renderDirections={['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se']}
             verticalGuidelines={[0, frameSize.width / 2, frameSize.width]}
             horizontalGuidelines={[0, frameSize.height / 2, frameSize.height]}
             onDrag={handleDrag}
             onDragEnd={({ target }) => commitFromTarget(selectedLayer.id, target)}
+            onResizeStart={handleResizeStart}
             onResize={handleResize}
             onResizeEnd={({ target }) => commitFromTarget(selectedLayer.id, target)}
           />
@@ -270,6 +317,8 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
           currentTime={currentTime}
           style={subtitleStyle}
           position={subtitlePosition}
+          transition={subtitleTransition}
+          wordHighlight={wordHighlight}
           frameSize={frameSize}
           frameEl={frameRef.current}
           logicalWidth={dims.width}
