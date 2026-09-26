@@ -13,7 +13,7 @@ import {
   SubtitlePosition, SubtitlePositionPreset, SubtitleStyle, SubtitleStylePreset, SubtitleWordsPerCaption,
   SubtitleTransition, WordHighlight,
   createDefaultEditorState, createVideoLayerFromFile, fitTransform, resizeTransformForFormat, SUBTITLE_POSITION_PRESETS,
-  groupWordsIntoSegments, toEditConfig, applyEditConfig, hasUnuploadedLayers,
+  groupWordsIntoSegments, toEditConfig, applyEditConfig, hasUnuploadedLayers, isDegenerateTransform,
 } from '../components/editor/types'
 import './ClipEditorPage.css'
 
@@ -195,7 +195,23 @@ const ClipEditorPage: React.FC = () => {
     projectApi.getClipEditorConfig(clipId)
       .then(({ edit_config }) => {
         if (!alive || !edit_config) return
-        const state = applyEditConfig(edit_config, mainVideoUrl, (assetId) => projectApi.getEditorAssetUrl(clipId, assetId))
+        const restored = applyEditConfig(edit_config, mainVideoUrl, (assetId) => projectApi.getEditorAssetUrl(clipId, assetId))
+        // Bug real: transform salvo antes do sistema fitMode existir podia ficar totalmente fora
+        // do canvas (ex.: vídeo principal invisível em 9:16 até o usuário mexer manualmente no
+        // enquadramento) — customized:true travava esse valor ruim pra sempre, já que só um
+        // toggle manual de fitMode (handleSetFitMode) recalcula sem checar customized. Aqui
+        // saneia qualquer layer com transform degenerado, ignorando customized: nunca é uma
+        // customização real (o usuário via o preview enquanto ajustava), só dado corrompido.
+        const state = {
+          ...restored,
+          layers: restored.layers.map((l) => {
+            if (!isDegenerateTransform(l.transform)) return l
+            const ratio = videoRatiosRef.current[l.id]
+            return ratio
+              ? { ...l, customized: false, transform: fitLayerTransform(restored.canvas.format, ratio, l.isMain, l.fitMode) }
+              : { ...l, customized: false }
+          }),
+        }
         setEditorState(state)
         setSaveState('saved')
       })
@@ -517,6 +533,10 @@ const ClipEditorPage: React.FC = () => {
     setEditorState((s) => ({ ...s, subtitle: { ...s.subtitle, position: { ...s.subtitle.position, ...patch } } }))
   }
 
+  const handleToggleSubtitleVisible = () => {
+    setEditorState((s) => ({ ...s, subtitle: { ...s.subtitle, visible: !s.subtitle.visible } }))
+  }
+
   // Clicar num bloco da timeline de legendas: seleciona (destaque visual) e move o playhead
   // para o início do segmento, como pedido no item 2 da Etapa 2.
   const handleSelectSubtitleSegment = (segment: SubtitleSegment) => {
@@ -763,6 +783,8 @@ const ClipEditorPage: React.FC = () => {
             onStartSync={handleStartSync}
             wordsPerCaption={editorState.subtitle.wordsPerCaption}
             onWordsPerCaptionChange={handleWordsPerCaptionChange}
+            visible={editorState.subtitle.visible}
+            onToggleVisible={handleToggleSubtitleVisible}
           />
         </aside>
 
@@ -787,6 +809,7 @@ const ClipEditorPage: React.FC = () => {
             subtitlePosition={editorState.subtitle.position}
             subtitleTransition={editorState.subtitle.transition}
             wordHighlight={editorState.subtitle.wordHighlight}
+            subtitleVisible={editorState.subtitle.visible}
             onSubtitlePositionChange={handleSubtitlePositionChange}
           />
 

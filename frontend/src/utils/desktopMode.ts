@@ -1,12 +1,9 @@
 import { buildApiUrl } from './apiConfig'
+import { isTauri } from './isTauri'
 
 // Tauri = sempre modo desktop. Fora do Tauri (preview no navegador) perguntamos ao
 // backend local: se ele roda em modo desktop, salvar configurações funciona igual.
 let cached: Promise<boolean> | null = null
-
-function isTauri(): boolean {
-  return typeof window !== 'undefined' && Boolean((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__)
-}
 
 async function detect(): Promise<boolean> {
   if (isTauri()) return true

@@ -68,7 +68,7 @@
 .ac-editor-body {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 260px 1fr 240px;
+  grid-template-columns: 300px 1fr 240px;
   min-height: 0;
 }
 
@@ -76,6 +76,7 @@
   border-right: 1px solid var(--ac-line);
   padding: 24px 20px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .ac-editor-panel--right {

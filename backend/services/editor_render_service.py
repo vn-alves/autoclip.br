@@ -265,10 +265,14 @@ def build_render_spec(
         raise EditorRenderError("Nenhuma layer visível para renderizar")
 
     subtitle_cfg = edit_config.get("subtitle") or {}
-    ass_path = _build_subtitle_ass(
-        db=db, project_id=project_id, clip_id=clip_id,
-        subtitle_cfg=subtitle_cfg, canvas_w=cw, canvas_h=ch, tmp_dir=tmp_dir,
-    )
+    # visible=False (item novo: ocultar legenda) — nem gera o .ass, o vídeo exportado sai sem
+    # nenhuma legenda queimada, sem precisar apagar sync/estilo salvos (ver types.ts SubtitleEditorState.visible).
+    ass_path = None
+    if subtitle_cfg.get("visible", True):
+        ass_path = _build_subtitle_ass(
+            db=db, project_id=project_id, clip_id=clip_id,
+            subtitle_cfg=subtitle_cfg, canvas_w=cw, canvas_h=ch, tmp_dir=tmp_dir,
+        )
 
     bg_color = ((canvas.get("background") or {}).get("color")) or "#000000"
     return RenderSpec(

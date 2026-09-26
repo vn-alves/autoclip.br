@@ -30,7 +30,7 @@
 .ac-eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ac-muted); font-weight: 500; }
 
 /* ---- segmented (pill container, --line-2 base, selected = card + light shadow) ---- */
-.ac-seg { display: inline-flex; align-self: flex-start; padding: 3px; gap: 2px; background: var(--ac-line-2); border-radius: 999px; }
+.ac-seg { display: inline-flex; flex-wrap: wrap; row-gap: 4px; max-width: 100%; align-self: flex-start; padding: 3px; gap: 2px; background: var(--ac-line-2); border-radius: 999px; }
 .ac-unit { display: inline-block; min-width: 28px; font-size: 12.5px; color: var(--ac-muted); }
 .ac-seg button {
   appearance: none; border: 0; background: transparent; cursor: pointer; font-family: inherit;
@@ -146,9 +146,9 @@
 .ac-card-desc { font-size: 13px; line-height: 1.5; color: var(--ac-sub); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: calc(13px * 1.5 * 2); }
 .ac-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--ac-line-2); }
 .ac-card-foot .meta { font-family: var(--ac-font-mono); font-size: 12px; color: var(--ac-muted); }
-.ac-card-actions { display: flex; gap: 2px; opacity: .55; transition: opacity var(--ac-t-short, 200ms) ease-out; }
+.ac-card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; opacity: .55; transition: opacity var(--ac-t-short, 200ms) ease-out; }
 .ac-card:hover .ac-card-actions { opacity: 1; }
-.ac-card-actions .ac-btn--text { height: 26px; padding: 0 8px; font-size: 12.5px; }
+.ac-card-actions .ac-btn--text { height: 26px; padding: 0 6px; font-size: 12px; white-space: nowrap; }
 
 .ac-editable:hover .ac-editable-pen { opacity: 1 !important; }
 

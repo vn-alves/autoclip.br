@@ -188,3 +188,25 @@ class TestFfmpegScaleFilterPerFitMode:
         }
         spec = svc.build_render_spec(db=None, project_id="p", clip_id="c", edit_config=edit_config, tmp_dir=tmp_path)
         assert spec.layers[0].fit_mode == "cover"
+
+    def test_build_render_spec_skips_subtitle_ass_when_hidden(self, monkeypatch, tmp_path):
+        # subtitle.visible == False (funcionalidade de ocultar legenda) precisa nem chamar
+        # _build_subtitle_ass — RenderSpec.subtitle_ass_path fica None e o filtro ffmpeg (ver
+        # _build_ffmpeg_command) não desenha nenhuma legenda, sem apagar sync/estilo salvos.
+        monkeypatch.setattr(svc, "resolve_main_clip_video_path", lambda db, pid, cid: __import__("pathlib").Path("main.mp4"))
+        monkeypatch.setattr(svc, "_probe", lambda path: {"duration": 12.0})
+        called = []
+        monkeypatch.setattr(svc, "_build_subtitle_ass", lambda **kw: called.append(1) or __import__("pathlib").Path("x.ass"))
+        edit_config = {
+            "version": 1,
+            "canvas": {"format": "9:16", "background": {"color": "#000000"}},
+            "layers": [{
+                "id": "main", "isMain": True, "visible": True, "zIndex": 0,
+                "startTime": 0, "endTime": None, "fitMode": "cover",
+                "transform": {"x": 0, "y": 0, "width": 1, "height": 1, "rotation": 0},
+            }],
+            "subtitle": {"visible": False},
+        }
+        spec = svc.build_render_spec(db=None, project_id="p", clip_id="c", edit_config=edit_config, tmp_dir=tmp_path)
+        assert spec.subtitle_ass_path is None
+        assert called == []

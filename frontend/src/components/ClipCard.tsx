@@ -147,7 +147,7 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
               <Btn variant="text" onClick={() => setShowPlayer(true)}>Reproduzir</Btn>
               <Btn variant="text" onClick={handleDownload}>Baixar</Btn>
               {projectId && <Btn variant="text" onClick={() => { setShowExport(true); setExportDone(null); setExportError(null) }}>Exportar</Btn>}
-              {projectId && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/editor/${clip.id}`)}>Editar corte</Btn>}
+              {projectId && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/editor/${clip.id}`)}>Editar</Btn>}
             </div>
           </div>
         </div>

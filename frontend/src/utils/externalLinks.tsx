@@ -1,14 +1,10 @@
 import React from 'react'
+import { isTauri } from './isTauri'
 
 /**
  * Ferramenta de tratamento de links externos
  * Abrir links externos com segurança no ambiente Tauri
  */
-
-// Detectar se está em ambiente Tauri
-const isTauri = () => {
-  return typeof window !== 'undefined' && Boolean((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__)
-}
 
 /**
  * Abrir link externo

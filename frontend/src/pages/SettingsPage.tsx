@@ -14,6 +14,7 @@ import { useTheme } from '../context/ThemeContext'
 import { Btn, Icon, Row, Section, Segmented, StatusDot } from '../ui'
 import { loadBrowserSettings, saveBrowserSettings } from '../utils/browserSettings'
 import AccountSection from '../components/AccountSection'
+import { RELEASES_URL } from '../config/downloads'
 import { getCloudUser, onCloudAuthChange, loadCloudSettings, saveCloudSettings, type CloudUser } from '../utils/cloudSettings'
 
 const normalizeBaseUrl = (value: unknown): string =>
@@ -672,7 +673,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
             label="Aplicativo desktop"
             hint="A importação de vídeo (YouTube, Bilibili, corte por IA) roda no aplicativo instalado no seu computador — este site é só para conta e configurações. Baixe o instalador para Windows ou macOS."
           >
-            <Btn variant="cta" size="sm" onClick={() => openExternalLink('https://github.com/vn-alves/autoclip.br/releases/latest')}>
+            <Btn variant="cta" size="sm" onClick={() => openExternalLink(RELEASES_URL)}>
               Baixar o app <Icon.External size={12} />
             </Btn>
           </Row>

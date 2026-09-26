@@ -38,6 +38,20 @@ export interface NormalizedTransform {
   rotation: number
 }
 
+/** true se o transform é inválido (NaN/<=0) ou não tem NENHUMA sobreposição com o canvas
+ * [0,1]x[0,1] — ou seja, a layer nunca aparece na tela com esse valor. Usado ao carregar um
+ * edit_config salvo (ver ClipEditorPage): um transform assim só pode ser dado corrompido de
+ * antes do sistema fitMode existir, nunca uma customização real — o usuário via o preview
+ * enquanto arrastava/redimensionava, então uma customização de verdade é sempre pelo menos
+ * parcialmente visível. Corrigir isso automaticamente nunca desfaz um ajuste manual legítimo. */
+export function isDegenerateTransform(t: NormalizedTransform): boolean {
+  if (![t.x, t.y, t.width, t.height].every((n) => Number.isFinite(n))) return true
+  if (t.width <= 0 || t.height <= 0) return true
+  if (t.x + t.width <= 0 || t.x >= 1) return true
+  if (t.y + t.height <= 0 || t.y >= 1) return true
+  return false
+}
+
 export type BackgroundType = 'blur' | 'color'
 
 export interface BackgroundConfig {
@@ -508,6 +522,9 @@ export interface SubtitleEditorState {
   wordsPerCaption: SubtitleWordsPerCaption
   transition: SubtitleTransition
   wordHighlight: WordHighlight
+  /** Oculta a legenda inteira (preview e render) sem perder nenhuma config de estilo/sync —
+   * útil pra exportar um corte "limpo" sem precisar apagar a sincronização. */
+  visible: boolean
 }
 
 export interface EditorState {
@@ -607,6 +624,7 @@ export interface EditConfig {
     position: SubtitlePosition
     transition: SubtitleTransition
     wordHighlight: WordHighlight
+    visible?: boolean
   }
 }
 
@@ -639,6 +657,7 @@ export function toEditConfig(state: EditorState): EditConfig {
       position: state.subtitle.position,
       transition: state.subtitle.transition,
       wordHighlight: state.subtitle.wordHighlight,
+      visible: state.subtitle.visible,
     },
   }
 }
@@ -690,6 +709,9 @@ export function applyEditConfig(
       wordsPerCaption: config.subtitle.wordsPerCaption,
       transition: config.subtitle.transition ?? legacy!.transition,
       wordHighlight: config.subtitle.wordHighlight ?? legacy!.wordHighlight,
+      // Configs salvas antes desta funcionalidade não têm o campo — default visível preserva
+      // o comportamento que o usuário já via antes de existir a opção de ocultar.
+      visible: config.subtitle.visible ?? true,
     },
   }
 }
@@ -707,6 +729,7 @@ export function createDefaultEditorState(mainVideoUrl: string): EditorState {
       wordsPerCaption: 'auto',
       transition: { ...DEFAULT_SUBTITLE_TRANSITION },
       wordHighlight: { ...DEFAULT_WORD_HIGHLIGHT },
+      visible: true,
     },
   }
 }

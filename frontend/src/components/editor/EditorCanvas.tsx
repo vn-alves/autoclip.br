@@ -29,6 +29,8 @@ interface EditorCanvasProps {
   /** Etapa 4.2 — transição de entrada e destaque da palavra ativa. */
   subtitleTransition: SubtitleTransition
   wordHighlight: WordHighlight
+  /** Oculta a legenda do preview inteiro (mesma flag usada no render — ver types.ts). */
+  subtitleVisible: boolean
   onSubtitlePositionChange: (p: Partial<SubtitlePosition>) => void
 }
 
@@ -45,7 +47,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   format, background, layers, selectedLayerId, onSelectLayer, onLayerTransformChange, onLayerLoadedMetadata,
   mainVideoRef, onMainTimeUpdate, onMainDurationChange, onMainEnded, onMainPlayStateChange,
   currentTime, isPlaying,
-  subtitleSegments, subtitleStyle, subtitlePosition, subtitleTransition, wordHighlight, onSubtitlePositionChange,
+  subtitleSegments, subtitleStyle, subtitlePosition, subtitleTransition, wordHighlight, subtitleVisible, onSubtitlePositionChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const frameRef = useRef<HTMLDivElement>(null)
@@ -107,11 +109,29 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
     for (const layer of layers) {
       const el = videoEls[layer.id]
       if (!el) continue
-      el.style.left = `${layer.transform.x * frameSize.width}px`
-      el.style.top = `${layer.transform.y * frameSize.height}px`
-      el.style.width = `${layer.transform.width * frameSize.width}px`
-      el.style.height = `${layer.transform.height * frameSize.height}px`
+      const left = layer.transform.x * frameSize.width
+      const top = layer.transform.y * frameSize.height
+      const width = layer.transform.width * frameSize.width
+      const height = layer.transform.height * frameSize.height
+      el.style.left = `${left}px`
+      el.style.top = `${top}px`
+      el.style.width = `${width}px`
+      el.style.height = `${height}px`
       el.style.transform = layer.transform.rotation ? `rotate(${layer.transform.rotation}deg)` : ''
+      // Bug real: um <video> bem maior que o frame (modo "cover" pode passar de 300%,
+      // ex.: vídeo 16:9 cobrindo um canvas 9:16) e majoritariamente recortado pelo
+      // overflow:hidden do frame às vezes nunca chega a pintar NENHUM frame no Chromium — o
+      // elemento existe no tamanho/posição certos, mas fica 100% transparente (confirmado
+      // isolando: o mesmo vídeo pinta normalmente com overflow:visible no frame). clip-path
+      // no PRÓPRIO vídeo, recortando-o pra exatamente a região visível, evita o overflow:hidden
+      // do ancestral precisar recortar esse elemento e o Chromium volta a pintar normalmente.
+      const insetLeft = Math.max(0, -left)
+      const insetTop = Math.max(0, -top)
+      const insetRight = Math.max(0, left + width - frameSize.width)
+      const insetBottom = Math.max(0, top + height - frameSize.height)
+      el.style.clipPath = (insetLeft || insetTop || insetRight || insetBottom)
+        ? `inset(${insetTop}px ${insetRight}px ${insetBottom}px ${insetLeft}px)`
+        : ''
     }
   }, [layers, frameSize, videoEls])
 
@@ -274,7 +294,17 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
               // travado em proporção nos cantos, ver handleResize).
               style={{ zIndex: layer.zIndex, display: isActive ? undefined : 'none', objectFit: layer.fitMode === 'cover' ? 'cover' : 'fill' }}
               onClick={(e) => { e.stopPropagation(); setSubtitleSelected(false); onSelectLayer(layer.id) }}
-              onLoadedMetadata={(e) => onLayerLoadedMetadata(layer.id, e.currentTarget.videoWidth, e.currentTarget.videoHeight)}
+              onLoadedMetadata={(e) => {
+                onLayerLoadedMetadata(layer.id, e.currentTarget.videoWidth, e.currentTarget.videoHeight)
+                // Bug real: um vídeo "cover" pode nascer com até ~300%+ do tamanho do frame e a
+                // maior parte fora da área visível (recortada pelo overflow:hidden do frame) —
+                // nesse caso o Chromium às vezes nunca decodifica/pinta nenhum frame sozinho
+                // (elemento correto em tamanho/posição, porém completamente em branco) até um
+                // seek ou play explícito acontecer. Mesmo motivo do ClipCard.tsx forçar
+                // `video.currentTime` pra gerar a miniatura: um nudge mínimo força a decodificação
+                // do frame atual. Sem custo perceptível (não altera o tempo de reprodução real).
+                if (e.currentTarget.currentTime === 0) e.currentTarget.currentTime = 0.01
+              }}
               onTimeUpdate={layer.isMain ? onMainTimeUpdate : undefined}
               onDurationChange={layer.isMain ? (e) => onMainDurationChange(e.currentTarget.duration || 0) : undefined}
               onEnded={layer.isMain ? onMainEnded : undefined}
@@ -312,20 +342,22 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
           />
         )}
 
-        <SubtitleLayer
-          segments={subtitleSegments}
-          currentTime={currentTime}
-          style={subtitleStyle}
-          position={subtitlePosition}
-          transition={subtitleTransition}
-          wordHighlight={wordHighlight}
-          frameSize={frameSize}
-          frameEl={frameRef.current}
-          logicalWidth={dims.width}
-          selected={subtitleSelected}
-          onSelect={() => { onSelectLayer(null); setSubtitleSelected(true) }}
-          onPositionChange={onSubtitlePositionChange}
-        />
+        {subtitleVisible && (
+          <SubtitleLayer
+            segments={subtitleSegments}
+            currentTime={currentTime}
+            style={subtitleStyle}
+            position={subtitlePosition}
+            transition={subtitleTransition}
+            wordHighlight={wordHighlight}
+            frameSize={frameSize}
+            frameEl={frameRef.current}
+            logicalWidth={dims.width}
+            selected={subtitleSelected}
+            onSelect={() => { onSelectLayer(null); setSubtitleSelected(true) }}
+            onPositionChange={onSubtitlePositionChange}
+          />
+        )}
       </div>
     </div>
   )
