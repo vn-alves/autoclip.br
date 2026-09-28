@@ -124,6 +124,28 @@ class DesktopAwareTask(celery_app.Task):
 
         return super().apply_async(args=args, kwargs=kwargs, task_id=task_id, **options)
 
+    def update_state(self, task_id=None, state=None, meta=None, **kwargs):
+        """Bug real (upload de arquivo local sempre falhava): apply_async() já foi corrigido
+        pra rodar em thread local no modo desktop, mas update_state() é OUTRO caminho —
+        ele grava no result_backend do Celery (celery_app.py: hardcoded redis://localhost),
+        sem checar modo desktop nenhum. Qualquer task que chama self.update_state(...) (ex.:
+        process_import_task, usado só pelo upload de arquivo — o import de YouTube nunca
+        chama isso, por isso só o upload local quebrava) tentava conectar no Redis
+        inexistente e abortava a task inteira com ConnectionError, sempre, sem exceção.
+        Sem Redis rodando (nenhuma instalação desktop tem), esse estado nunca é lido por
+        ninguém mesmo — o app usa o simple_progress/Task no SQLite pra progresso real —
+        então em modo desktop isso vira só um log, nunca derruba a task."""
+        if _is_desktop_mode():
+            import logging
+            try:
+                return super().update_state(task_id=task_id, state=state, meta=meta, **kwargs)
+            except Exception as exc:  # noqa: BLE001
+                logging.getLogger(__name__).debug(
+                    f"update_state ignorado no modo desktop (sem Redis) {self.name}: {exc}"
+                )
+                return None
+        return super().update_state(task_id=task_id, state=state, meta=meta, **kwargs)
+
 
 # 桌面模式下让所有 @celery_app.task 使用上面的本地执行基类
 celery_app.Task = DesktopAwareTask

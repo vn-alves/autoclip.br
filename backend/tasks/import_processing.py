@@ -94,25 +94,20 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
                 
                 # 根据配置选择参数
                 if speech_config.method == "whisper_local":
-                    # 使用用户配置的Whisper参数
+                    # Bug real (upload de arquivo local sempre falhava aqui): generate_subtitle_for_video()
+                    # só aceita video_path/output_path/method/language/model/enable_fallback — os kwargs
+                    # abaixo (enable_timestamps etc.) nunca existiram na assinatura dela, então TODA
+                    # transcrição local derrubava com TypeError antes mesmo de gerar a legenda.
                     model = speech_config.whisper_config.model_name
                     language = speech_config.whisper_config.language
-                    enable_timestamps = speech_config.whisper_config.enable_timestamps
-                    enable_punctuation = speech_config.whisper_config.enable_punctuation
-                    enable_speaker_diarization = speech_config.whisper_config.enable_speaker_diarization
-                    timeout = speech_config.whisper_config.timeout
-                    
-                    logger.info(f"Whisper配置 - 模型: {model}, 语言: {language}, 时间戳: {enable_timestamps}")
-                    
+
+                    logger.info(f"Whisper配置 - 模型: {model}, 语言: {language}")
+
                     generated_subtitle = generate_subtitle_for_video(
                         Path(video_path),
                         language=language,
                         model=model,
                         method=speech_config.method,
-                        enable_timestamps=enable_timestamps,
-                        enable_punctuation=enable_punctuation,
-                        enable_speaker_diarization=enable_speaker_diarization,
-                        timeout=timeout
                     )
                 else:
                     # 使用API服务
@@ -132,13 +127,14 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
                     else:
                         raise ValueError(f"不支持的语音识别方法: {speech_config.method}")
                     
+                    # Mesmo motivo do ramo whisper_local acima: só os kwargs que a função
+                    # realmente aceita (api_key/enable_timestamps/enable_punctuation não existem
+                    # na assinatura dela — a própria implementação de cada provider de API é quem
+                    # decide esses detalhes internamente, a partir do method).
                     generated_subtitle = generate_subtitle_for_video(
                         Path(video_path),
                         method=speech_config.method,
                         language=api_config.language,
-                        api_key=api_config.api_key,
-                        enable_timestamps=api_config.enable_timestamps,
-                        enable_punctuation=api_config.enable_punctuation
                     )
                 
                 srt_path = str(generated_subtitle)

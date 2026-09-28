@@ -5,6 +5,15 @@ import { useDropzone } from 'react-dropzone'
 import { projectApi, VideoCategory } from '../services/api'
 import { useProjectStore } from '../store/useProjectStore'
 import { validateApiConfigBeforeProjectCreation } from '../utils/apiConfigCheck'
+import { isTauri } from '../utils/isTauri'
+import { createWebProjectFromFile } from '../webstore/projects'
+
+// Web (sem servidor): não há endpoint /video-categories pra consultar, então usa essa
+// lista fixa mínima — só "Padrão" mesmo, já que a Fase 2 (corte por IA) ainda não roda
+// sem servidor e a categoria só é usada pra escolher o prompt do LLM no backend.
+const WEB_DEFAULT_CATEGORIES: VideoCategory[] = [
+  { value: 'default', name: 'Padrão', description: '', icon: '🎬', color: '#4facfe' },
+]
 
 const { Text } = Typography
 
@@ -26,8 +35,14 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
   
   const { addProject } = useProjectStore()
 
-  // Carregar configuração de categoria de vídeo
+  // Carregar configuração de categoria de vídeo — na Web (sem servidor) não existe esse
+  // endpoint, usa a lista fixa mínima (ver WEB_DEFAULT_CATEGORIES).
   useEffect(() => {
+    if (!isTauri()) {
+      setCategories(WEB_DEFAULT_CATEGORIES)
+      setSelectedCategory(WEB_DEFAULT_CATEGORIES[0].value)
+      return
+    }
     const loadCategories = async () => {
       setLoadingCategories(true)
       try {
@@ -89,15 +104,40 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
       return
     }
 
-    // Verificar configuração da API
-    const hasValidApiConfig = await validateApiConfigBeforeProjectCreation()
-    if (!hasValidApiConfig) {
-      return
+    // Verificar configuração da API — só existe no desktop (backend real). Na Web ainda
+    // não há corte por IA rodando (ver webstore/projects.ts), então não há chave pra checar.
+    if (isTauri()) {
+      const hasValidApiConfig = await validateApiConfigBeforeProjectCreation()
+      if (!hasValidApiConfig) {
+        return
+      }
     }
 
     setUploading(true)
     setUploadProgress(0)
-    
+
+    // Web (sem servidor): salva o vídeo no navegador (IndexedDB) e para por aqui — ainda
+    // não há corte automático por IA rodando sem servidor (isso é a próxima etapa do
+    // plano). Fluxo totalmente separado do upload por API do desktop, abaixo.
+    if (!isTauri()) {
+      try {
+        const newProject = await createWebProjectFromFile(files.video, projectName.trim())
+        addProject(newProject)
+        message.success('Vídeo salvo no navegador. Corte automático por IA ainda não está disponível na versão Web.')
+        setFiles({})
+        setProjectName('')
+        setUploadProgress(0)
+        if (categories.length > 0) setSelectedCategory(categories[0].value)
+        if (onUploadSuccess) onUploadSuccess(newProject.id)
+      } catch (err: any) {
+        console.error('Falha ao salvar vídeo local:', err)
+        message.error('Não foi possível salvar esse vídeo (o navegador pode estar sem espaço de armazenamento).')
+      } finally {
+        setUploading(false)
+      }
+      return
+    }
+
     try {
       // Simular o progresso do upload, exibição de progresso mais realista
       const progressInterval = setInterval(() => {

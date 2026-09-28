@@ -16,6 +16,8 @@ import { projectApi } from '../services/api'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Project, useProjectStore } from '../store/useProjectStore'
 import { useProjectPolling } from '../hooks/useProjectPolling'
+import { isTauri } from '../utils/isTauri'
+import { listWebProjects, deleteWebProject } from '../webstore/projects'
 
 const { Content } = Layout
 const { Title, Text } = Typography
@@ -25,14 +27,18 @@ const HomePage: React.FC = () => {
   const navigate = useNavigate()
   const { projects, setProjects, deleteProject, loading, setLoading } = useProjectStore()
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [activeTab, setActiveTab] = useState<'upload' | 'bilibili'>('bilibili')
+  // Na Web (sem servidor) começa na aba de arquivo — "Importar Link" segue visível, mas
+  // só funciona no desktop.
+  const [activeTab, setActiveTab] = useState<'upload' | 'bilibili'>(isTauri() ? 'bilibili' : 'upload')
 
-  // Usar Hook de pesquisa de projeto
+  // Usar Hook de pesquisa de projeto — só faz sentido no desktop (backend real). Na Web,
+  // sem servidor, os projetos locais (ver webstore/) só mudam por ação direta do usuário
+  // (upload/remover), então não há nada pra ficar sondando a cada 30s.
   useProjectPolling({
     onProjectsUpdate: (updatedProjects) => {
       setProjects(updatedProjects || [])
     },
-    enabled: true,
+    enabled: isTauri(),
     interval: 30000 // Polling a cada 30 segundos, reduzindo requisições frequentes
   })
 
@@ -63,8 +69,8 @@ const HomePage: React.FC = () => {
   const loadProjects = async () => {
     setLoading(true)
     try {
-      // Obter dados reais do projeto da API de backend
-      const projects = await projectApi.getProjects()
+      // Web (sem servidor): projetos vêm do IndexedDB local (webstore/), não da API.
+      const projects = isTauri() ? await projectApi.getProjects() : await listWebProjects()
       // Garantir que projects seja um tipo de array
       const safeProjects = Array.isArray(projects) ? projects : []
       setProjects(safeProjects)
@@ -80,7 +86,8 @@ const HomePage: React.FC = () => {
 
   const handleDeleteProject = async (id: string) => {
     try {
-      await projectApi.deleteProject(id)
+      if (isTauri()) await projectApi.deleteProject(id)
+      else await deleteWebProject(id)
       deleteProject(id)
       message.success('Projeto excluído com sucesso')
     } catch (error) {

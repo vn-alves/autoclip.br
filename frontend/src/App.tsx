@@ -41,6 +41,9 @@ function App() {
       <Header />
       <Content>
         <Routes>
+          {/* HomePage é a mesma tela em Web e Desktop — na Web ela usa o armazenamento local
+              (webstore/, ver FileUpload.tsx) no lugar da API pra "Importar Arquivo"; "Importar
+              Link" continua visível mas só funciona no desktop (precisa de servidor de verdade). */}
           <Route path="/" element={<HomePage />} />
           <Route path="/project/:id" element={<ProjectDetailPage />} />
           <Route path="/project/:id/editor/:clipId" element={<ClipEditorPage />} />
