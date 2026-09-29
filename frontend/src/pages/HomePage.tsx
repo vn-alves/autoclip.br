@@ -9,6 +9,7 @@ import {
 } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import ProjectCard from '../components/ProjectCard'
+import WebProjectCard from '../components/WebProjectCard'
 import FileUpload from '../components/FileUpload'
 import BilibiliDownload from '../components/BilibiliDownload'
 
@@ -312,12 +313,16 @@ const HomePage: React.FC = () => {
                  }}>
                    {filteredProjects.map((project: Project) => (
                      <div key={project.id} style={{ position: 'relative', zIndex: 1 }}>
-                       <ProjectCard 
-                         project={project} 
-                         onDelete={handleDeleteProject}
-                         onRetry={() => handleRetryProject()}
-                         onClick={() => handleProjectCardClick(project)}
-                       />
+                       {isTauri() ? (
+                         <ProjectCard
+                           project={project}
+                           onDelete={handleDeleteProject}
+                           onRetry={() => handleRetryProject()}
+                           onClick={() => handleProjectCardClick(project)}
+                         />
+                       ) : (
+                         <WebProjectCard project={project} onChanged={loadProjects} />
+                       )}
                      </div>
                    ))}
                  </div>

@@ -104,6 +104,23 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
 
   // Reflete o transform normalizado de CADA layer em pixels do frame atual — troca de formato,
   // resize da janela, ou commit de um drag/resize (qualquer uma delas, não só a selecionada).
+  //
+  // Bug real (vídeo principal não aparecia ao abrir o Editor em 9:16): um <video> bem maior
+  // que o frame (modo "cover" pode passar de 300%, ex.: vídeo 16:9 cobrindo canvas 9:16) e
+  // majoritariamente recortado pelo overflow:hidden do frame às vezes nunca chegava a pintar
+  // NENHUM frame no Chromium — o elemento existia no tamanho/posição certos, mas ficava
+  // transparente/preto. Confirmado isolando: o MESMO vídeo pinta normalmente se o layout box
+  // dele nunca for maior que o frame — então, pra layers que NÃO estão sendo manipuladas pelo
+  // Moveable agora, o box (width/height) fica sempre do tamanho do frame e o "cover" vira só
+  // um transform:scale() visual (CSS transform não conta como redimensionar o layout, então o
+  // Chromium volta a decodificar/pintar o vídeo normalmente).
+  //
+  // A layer SELECIONADA (Moveable ativo) continua com width/height reais em px, sem scale —
+  // é exatamente o que Moveable manipula durante o drag/resize (ver handleResize/
+  // commitFromTarget); misturar os dois modelos nela faria o Moveable calcular deltas errados
+  // com base num box pequeno enquanto o visual está escalado. Ao soltar o drag, o commit volta
+  // pro estado normalizado e, se a layer for desselecionada depois, ela troca pro modo
+  // transform:scale() acima.
   useEffect(() => {
     if (frameSize.width === 0) return
     for (const layer of layers) {
@@ -111,29 +128,22 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
       if (!el) continue
       const left = layer.transform.x * frameSize.width
       const top = layer.transform.y * frameSize.height
-      const width = layer.transform.width * frameSize.width
-      const height = layer.transform.height * frameSize.height
+      const rotatePart = layer.transform.rotation ? `rotate(${layer.transform.rotation}deg)` : ''
       el.style.left = `${left}px`
       el.style.top = `${top}px`
-      el.style.width = `${width}px`
-      el.style.height = `${height}px`
-      el.style.transform = layer.transform.rotation ? `rotate(${layer.transform.rotation}deg)` : ''
-      // Bug real: um <video> bem maior que o frame (modo "cover" pode passar de 300%,
-      // ex.: vídeo 16:9 cobrindo um canvas 9:16) e majoritariamente recortado pelo
-      // overflow:hidden do frame às vezes nunca chega a pintar NENHUM frame no Chromium — o
-      // elemento existe no tamanho/posição certos, mas fica 100% transparente (confirmado
-      // isolando: o mesmo vídeo pinta normalmente com overflow:visible no frame). clip-path
-      // no PRÓPRIO vídeo, recortando-o pra exatamente a região visível, evita o overflow:hidden
-      // do ancestral precisar recortar esse elemento e o Chromium volta a pintar normalmente.
-      const insetLeft = Math.max(0, -left)
-      const insetTop = Math.max(0, -top)
-      const insetRight = Math.max(0, left + width - frameSize.width)
-      const insetBottom = Math.max(0, top + height - frameSize.height)
-      el.style.clipPath = (insetLeft || insetTop || insetRight || insetBottom)
-        ? `inset(${insetTop}px ${insetRight}px ${insetBottom}px ${insetLeft}px)`
-        : ''
+      if (layer.id === selectedLayerId) {
+        el.style.width = `${layer.transform.width * frameSize.width}px`
+        el.style.height = `${layer.transform.height * frameSize.height}px`
+        el.style.transformOrigin = ''
+        el.style.transform = rotatePart
+      } else {
+        el.style.width = `${frameSize.width}px`
+        el.style.height = `${frameSize.height}px`
+        el.style.transformOrigin = '0 0'
+        el.style.transform = `scale(${layer.transform.width}, ${layer.transform.height})${rotatePart ? ` ${rotatePart}` : ''}`
+      }
     }
-  }, [layers, frameSize, videoEls])
+  }, [layers, frameSize, videoEls, selectedLayerId])
 
   // Fundo desfocado: um segundo <video>, mudo, espelhando play/pause/tempo do vídeo PRINCIPAL
   // (não das layers secundárias — o fundo sempre reflete o corte original).

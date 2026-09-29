@@ -122,9 +122,11 @@ async def create_bilibili_download_task(request: BilibiliDownloadRequest):
                 try:
                     import requests
                     import base64
-                    
-                    # 下载缩略图
-                    response = requests.get(video_info.thumbnail_url, timeout=10)
+
+                    # requests.get é bloqueante — sem run_in_executor, prende o event loop do
+                    # FastAPI (até 10s, o timeout) toda vez que alguém cria um projeto por link.
+                    loop = asyncio.get_event_loop()
+                    response = await loop.run_in_executor(None, lambda: requests.get(video_info.thumbnail_url, timeout=10))
                     if response.status_code == 200:
                         # 转换为base64
                         thumbnail_base64 = base64.b64encode(response.content).decode('utf-8')
@@ -329,11 +331,15 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest, 
                     model = "medium"  # 演讲内容使用高精度模型
                 
                 logger.info(f"使用Whisper生成字幕 - 语言: {language}, 模型: {model}")
-                
-                generated_subtitle = generate_subtitle_for_video(
-                    video_file_path,
-                    language=language,
-                    model=model
+
+                # Mesmo bug do youtube.py ("importação trava em algum %" com mais de um
+                # vídeo/usuário ao mesmo tempo): transcrição do Whisper é síncrona e pode
+                # levar bem mais de 10 minutos de CPU — chamada direto aqui, ela bloqueava o
+                # event loop inteiro do FastAPI por todo esse tempo, travando qualquer outra
+                # requisição (progresso de outro projeto, outro download) nesse meio-tempo.
+                loop = asyncio.get_event_loop()
+                generated_subtitle = await loop.run_in_executor(
+                    None, lambda: generate_subtitle_for_video(video_file_path, language=language, model=model)
                 )
                 subtitle_path = str(generated_subtitle)
                 logger.info(f"Whisper字幕生成成功: {subtitle_path}")

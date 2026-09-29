@@ -459,9 +459,11 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
                 try:
                     import requests
                     import base64
-                    
-                    # 下载缩略图
-                    response = requests.get(thumbnail_url, timeout=10)
+
+                    # requests.get é bloqueante — sem run_in_executor, prende o event loop do
+                    # FastAPI (até 10s, o timeout) toda vez que alguém cria um projeto por link,
+                    # atrasando/travando outras requisições em andamento nesse meio-tempo.
+                    response = await loop.run_in_executor(None, lambda: requests.get(thumbnail_url, timeout=10))
                     if response.status_code == 200:
                         # 转换为base64
                         thumbnail_base64 = base64.b64encode(response.content).decode('utf-8')
@@ -746,11 +748,19 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                 # 这里可以添加更智能的内容类型判断逻辑
                 
                 logger.info(f"使用Whisper生成字幕 - 语言: {language}, 模型: {model}")
-                
-                generated_subtitle = generate_subtitle_for_video(
-                    video_file_path,
-                    language=language,
-                    model=model
+
+                # Bug real ("importação trava em algum % e nunca sai disso" quando há mais de
+                # um vídeo/usuário ao mesmo tempo): generate_subtitle_for_video roda a
+                # transcrição do Whisper de forma SÍNCRONA — pra um vídeo de alguns minutos
+                # isso pode levar bem mais de 10 minutos de CPU. Chamado direto (sem
+                # run_in_executor) dentro desta função async, ele bloqueia o event loop
+                # inteiro do FastAPI por todo esse tempo: nenhuma outra requisição roda
+                # nesse meio-tempo — nem o polling de progresso de OUTRO projeto, nem o
+                # início de OUTRO download —, dando exatamente a impressão de "travado".
+                # O download em si já roda certo, via run_in_executor (ver acima); a
+                # transcrição precisa do mesmo tratamento.
+                generated_subtitle = await loop.run_in_executor(
+                    None, lambda: generate_subtitle_for_video(video_file_path, language=language, model=model)
                 )
                 subtitle_path = str(generated_subtitle)
                 logger.info(f"Whisper字幕生成成功: {subtitle_path}")

@@ -59,6 +59,30 @@ export async function createWebProjectFromFile(file: File, name?: string): Promi
   return project
 }
 
+export async function getWebProjectBlob(id: string): Promise<Blob | undefined> {
+  const record = await dbGet<{ id: string; blob: Blob }>(STORES.blobs, id)
+  return record?.blob
+}
+
+export async function updateWebProject(id: string, patch: Partial<Project>): Promise<Project | undefined> {
+  const project = await getWebProject(id)
+  if (!project) return undefined
+  const updated: Project = { ...project, ...patch, updated_at: new Date().toISOString() }
+  await dbPut(STORES.projects, updated)
+  return updated
+}
+
+/** Salva um corte gerado pela IA (ver webpipeline/) — o vídeo do clipe (já cortado via
+ * ffmpeg.wasm) fica no mesmo store de blobs que o vídeo original, chaveado pelo próprio id
+ * do clipe. */
+export async function addWebClip(projectId: string, clip: Omit<Clip, 'id'> & { id?: string }, videoBlob: Blob): Promise<Clip> {
+  const id = clip.id || newId()
+  const fullClip: Clip = { ...clip, id } as Clip
+  await dbPut(STORES.blobs, { id, blob: videoBlob })
+  await dbPut(STORES.clips, { ...fullClip, project_id: projectId } as Clip & { project_id: string })
+  return fullClip
+}
+
 export async function deleteWebProject(id: string): Promise<void> {
   await dbDelete(STORES.projects, id)
   await dbDelete(STORES.blobs, id)
