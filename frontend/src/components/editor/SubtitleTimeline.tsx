@@ -34,7 +34,6 @@ function InlineEditor({ segment, left, onSave, onDelete, onClose }: {
     }
     document.addEventListener('pointerdown', onPointerDown, true)
     return () => document.removeEventListener('pointerdown', onPointerDown, true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft])
 
   const commitAndClose = () => {

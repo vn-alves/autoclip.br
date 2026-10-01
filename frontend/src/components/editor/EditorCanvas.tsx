@@ -69,7 +69,6 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   // remedir o alvo manualmente depois de QUALQUER mudança de estilo feita por fora dele
   // (troca de formato, seleção, fitMode), já que ele só remede sozinho durante o próprio
   // drag/resize do usuário.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ver comentário abaixo do uso
   const moveableRef = useRef<Moveable<any>>(null)
   // Um callback de ref ESTÁVEL por layer (memoizado aqui, não recriado a cada render) — um
   // `ref={(el) => ...}` inline faz o React desanexar+reanexar a ref (null, depois o elemento
