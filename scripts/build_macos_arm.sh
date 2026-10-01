@@ -96,12 +96,53 @@ codesign --force --deep --sign - "$APP_PATH"
 echo "OK"
 
 # ---- create DMG manually ----
+# Bug real: app ad-hoc signed (sem certificado pago da Apple, sem notarização) baixado da
+# internet fica com o atributo de quarentena do macOS, e nessa combinação (ad-hoc + quarentena)
+# o Gatekeeper mostra "está danificado e não pode ser aberto" em vez do aviso normal de
+# "desenvolvedor não identificado" — "clique direito > Abrir" e permitir nas Preferências do
+# Sistema NÃO resolvem esse erro específico (só resolvem o aviso de desenvolvedor não
+# identificado). A única solução sem comprar um certificado Apple Developer ($99/ano) é limpar
+# o atributo de quarentena manualmente (xattr -cr). Como quase ninguém lê a descrição da
+# release no GitHub antes de abrir o .dmg, um README.txt DENTRO do .dmg (visível na hora que a
+# pessoa abre a janela) é o lugar que realmente chega no usuário.
 echo "==> Creating DMG"
 APP_VERSION="$(app_version)"
+DMG_STAGING="build/dmg-staging"
+rm -rf "$DMG_STAGING"
+mkdir -p "$DMG_STAGING"
+cp -R "$APP_PATH" "$DMG_STAGING/"
+ln -s /Applications "$DMG_STAGING/Aplicativos"
+cat > "$DMG_STAGING/LEIA-ME antes de abrir.txt" <<'EOF'
+AutoClip Desktop — como abrir no Mac
+=====================================
+
+Ao tentar abrir o app pela primeira vez, o macOS pode mostrar a mensagem:
+
+    "AutoClip Desktop está danificado e não pode ser aberto.
+     Você deve movê-lo para o Lixo."
+
+O app NÃO está danificado. Isso acontece porque ele não foi baixado da
+App Store nem tem um certificado pago da Apple — clicar com o botão
+direito e escolher "Abrir", ou permitir nas Preferências do Sistema >
+Privacidade e Segurança, NÃO resolve esse erro específico.
+
+Como resolver (só precisa fazer uma vez por atualização):
+
+1. Arraste o "AutoClip Desktop" para a pasta "Aplicativos" (atalho ao lado).
+2. Abra o Terminal (Spotlight: Cmd+Espaço, digite "Terminal", Enter).
+3. Cole o comando abaixo e aperte Enter:
+
+   xattr -cr "/Applications/AutoClip Desktop.app"
+
+4. Abra o AutoClip Desktop normalmente (Spotlight ou pasta Aplicativos).
+
+Depois disso o app abre normalmente, inclusive em futuras atualizações
+(precisa repetir o comando acima só se o aviso voltar a aparecer).
+EOF
 DMG_PATH="src-tauri/target/release/bundle/macos/AutoClip Desktop_${APP_VERSION}_aarch64.dmg"
 rm -f "$DMG_PATH"
 hdiutil create -volname "AutoClip Desktop" \
-    -srcfolder "$APP_PATH" \
+    -srcfolder "$DMG_STAGING" \
     -ov -format UDZO \
     "$DMG_PATH"
 echo "OK"

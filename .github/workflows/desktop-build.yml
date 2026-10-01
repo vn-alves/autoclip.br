@@ -183,8 +183,14 @@ jobs:
             ### macOS (Apple Silicon) — `.dmg`
             - Built-in portable Python runtime + static ffmpeg/ffprobe — no
               dependencies to install.
-            - Ad-hoc signed (not notarized): on first launch, right-click the
-              app and choose **Open** to bypass Gatekeeper.
+            - Ad-hoc signed (not notarized): macOS will likely say *"AutoClip
+              Desktop is damaged and can't be opened"* on first launch — this
+              is Gatekeeper, not actual file corruption, and the usual
+              right-click → Open / "Allow anyway" in Settings does **not**
+              fix this specific message. Open the DMG, read
+              `LEIA-ME antes de abrir.txt` inside it, and run:
+              `xattr -cr "/Applications/AutoClip Desktop.app"` in Terminal
+              after copying the app to Applications.
             - Apple Silicon (arm64) only.
 
             ### Windows (x64) — `-setup.exe`
