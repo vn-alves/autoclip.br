@@ -762,7 +762,13 @@ def render_clip(db: Session, project_id: str, clip_id: str, edit_config: Dict[st
 
         cmd = _build_ffmpeg_command(spec, out_path)
         logger.info("Editor render: %s", " ".join(cmd))
-        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+        # Bug real: ffmpeg sem timeout pode travar pra sempre (entrada corrompida, filtro
+        # preso) sem nunca reportar erro — ver mesmo fix em video_processor.py. Render do
+        # Editor pode ter várias layers/filtros, timeout mais generoso que um corte simples.
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=900)
+        except subprocess.TimeoutExpired:
+            raise EditorRenderError("Render travou (timeout) — tente novamente ou simplifique o corte.")
         if proc.returncode != 0 or not out_path.exists() or out_path.stat().st_size == 0:
             raise EditorRenderError((proc.stderr or proc.stdout or "ffmpeg falhou")[-1500:])
 

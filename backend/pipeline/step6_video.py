@@ -4,7 +4,7 @@ Step 6: 视频生成 - 根据聚类结果生成最终视频切片
 import json
 import logging
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from pathlib import Path
 
 # 导入依赖
@@ -34,19 +34,20 @@ class VideoGenerator:
         # 创建VideoProcessor实例，强制使用项目内路径
         self.video_processor = VideoProcessor(clips_dir=str(self.clips_dir), collections_dir=str(self.collections_dir))
     
-    def generate_clips(self, clips_with_titles: List[Dict], input_video: Path) -> List[Path]:
+    def generate_clips(self, clips_with_titles: List[Dict], input_video: Path, on_progress: Optional[Callable[[int, int], None]] = None) -> List[Path]:
         """
         生成切片视频
-        
+
         Args:
             clips_with_titles: 带标题的片段数据
             input_video: 输入视频路径
-            
+            on_progress: ver VideoProcessor.batch_extract_clips.
+
         Returns:
             生成的切片视频路径列表
         """
         logger.info("开始生成切片视频...")
-        
+
         # 准备切片数据
         clips_data = []
         for clip in clips_with_titles:
@@ -56,9 +57,9 @@ class VideoGenerator:
                 'start_time': clip['start_time'],
                 'end_time': clip['end_time']
             })
-        
+
         # 批量生成切片
-        successful_clips = self.video_processor.batch_extract_clips(input_video, clips_data)
+        successful_clips = self.video_processor.batch_extract_clips(input_video, clips_data, on_progress=on_progress)
         
         logger.info(f"切片视频生成完成，共{len(successful_clips)}个切片")
         return successful_clips
@@ -133,34 +134,37 @@ class VideoGenerator:
         logger.info(f"合集元数据已保存到: {output_path}")
         return output_path
 
-def run_step6_video(clips_with_titles_path: Path, collections_path: Path, 
-                   input_video: Path, output_dir: Optional[Path] = None, 
-                   clips_dir: Optional[str] = None, collections_dir: Optional[str] = None, 
-                   metadata_dir: Optional[str] = None) -> Dict:
+def run_step6_video(clips_with_titles_path: Path, collections_path: Path,
+                   input_video: Path, output_dir: Optional[Path] = None,
+                   clips_dir: Optional[str] = None, collections_dir: Optional[str] = None,
+                   metadata_dir: Optional[str] = None,
+                   on_progress: Optional[Callable[[int, int], None]] = None) -> Dict:
     """
     运行Step 6: 视频切割
-    
+
     Args:
         clips_with_titles_path: 带标题的片段文件路径
         collections_path: 合集文件路径
         input_video: 输入视频路径
         output_dir: 输出目录
-        
+        on_progress: ver VideoProcessor.batch_extract_clips — permite reportar progresso
+            incremental durante o corte (etapa EXPORT, ver simple_pipeline_adapter.py).
+
     Returns:
         生成结果信息
     """
     # 加载数据
     with open(clips_with_titles_path, 'r', encoding='utf-8') as f:
         clips_with_titles = json.load(f)
-    
+
     with open(collections_path, 'r', encoding='utf-8') as f:
         collections_data = json.load(f)
-    
+
     # 创建视频生成器
     generator = VideoGenerator(clips_dir=clips_dir, collections_dir=collections_dir, metadata_dir=metadata_dir)
-    
+
     # 生成切片视频
-    successful_clips = generator.generate_clips(clips_with_titles, input_video)
+    successful_clips = generator.generate_clips(clips_with_titles, input_video, on_progress=on_progress)
     
     # 生成合集视频
     successful_collections = generator.generate_collections(collections_data)

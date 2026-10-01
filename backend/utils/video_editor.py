@@ -182,15 +182,20 @@ class VideoEditor:
                 str(output_path)
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            
+            # timeout: ffmpeg sem timeout pode travar pra sempre sem reportar erro
+            # (ver mesmo fix em video_processor.py).
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+
             if result.returncode == 0:
                 logger.info(f"成功提取视频片段: {start_time:.2f}s - {end_time:.2f}s")
                 return True
             else:
                 logger.error(f"提取视频片段失败: {result.stderr}")
                 return False
-                
+
+        except subprocess.TimeoutExpired:
+            logger.error(f"extração de segmento travada (timeout): {start_time:.2f}s - {end_time:.2f}s")
+            return False
         except Exception as e:
             logger.error(f"提取视频片段异常: {e}")
             return False
@@ -247,15 +252,19 @@ class VideoEditor:
                     str(output_path)
                 ]
                 
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                
+                try:
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+                except subprocess.TimeoutExpired:
+                    logger.error("concatenação de segmentos travada (timeout)")
+                    return False
+
                 if result.returncode == 0:
                     logger.info(f"成功拼接 {len(segment_files)} 个视频片段")
                     return True
                 else:
                     logger.error(f"拼接视频片段失败: {result.stderr}")
                     return False
-                    
+
         except Exception as e:
             logger.error(f"拼接多个视频片段异常: {e}")
             return False
@@ -280,15 +289,18 @@ class VideoEditor:
                 str(video_path)
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+
             if result.returncode == 0:
                 duration = float(result.stdout.strip())
                 return duration
             else:
                 logger.warning(f"获取视频时长失败: {result.stderr}")
                 return 0.0
-                
+
+        except subprocess.TimeoutExpired:
+            logger.error(f"obtenção de duração travada (timeout): {video_path}")
+            return 0.0
         except Exception as e:
             logger.error(f"获取视频时长异常: {e}")
             return 0.0

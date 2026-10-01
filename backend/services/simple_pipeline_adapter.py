@@ -25,6 +25,19 @@ class SimplePipelineAdapter:
         self.project_id = project_id
         self.task_id = task_id
 
+    def _export_progress_callback(self) -> Callable[[int, int], None]:
+        """Reporta progresso incremental durante o corte dos vídeos (etapa EXPORT) — sem isso
+        ela ficava em 0% até TODOS os clipes terminarem (ver VideoProcessor.batch_extract_clips),
+        e um corte real mas lento (vídeo longo, muitos clipes) ficava indistinguível de um
+        travamento de verdade pro usuário. Reserva os últimos 10% pra geração de coleções
+        (não rastreada por clipe)."""
+        def _on_progress(done: int, total: int) -> None:
+            if total <= 0:
+                return
+            subpercent = min(90, round((done / total) * 90))
+            emit_progress(self.project_id, "EXPORT", f"Cortando vídeo {done}/{total}...", subpercent=subpercent)
+        return _on_progress
+
     def _prompt_files(self, project_dir: Path):
         """按项目类型选 prompt/<category>/，桌面端以前从没传过，类别目录形同虚设。"""
         from backend.core.shared_config import get_prompt_files
@@ -271,7 +284,8 @@ class SimplePipelineAdapter:
                         output_dir=output_dir,
                         clips_dir=str(clips_output_dir),
                         collections_dir=str(collections_output_dir),
-                        metadata_dir=str(metadata_dir)
+                        metadata_dir=str(metadata_dir),
+                        on_progress=self._export_progress_callback(),
                     )
                     if video_result.get("clips_generated", 0) < 1:
                         raise RuntimeError("A análise de IA não produziu cortes válidos")
@@ -318,6 +332,7 @@ class SimplePipelineAdapter:
                     clips_dir=str(clips_output_dir),
                     collections_dir=str(collections_output_dir),
                     metadata_dir=str(metadata_dir),
+                    on_progress=self._export_progress_callback(),
                 )
                 if video_result.get("clips_generated", 0) < 1:
                     raise RuntimeError("O corte do vídeo falhou; nenhum arquivo foi gerado")

@@ -247,7 +247,12 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
         cmd += ["-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
                 "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-y", str(out_path)]
         logger.info("发布导出: %s", " ".join(cmd))
-        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+        # timeout: mesmo bug/fix de video_processor.py — ffmpeg sem timeout pode travar pra
+        # sempre sem reportar erro.
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=900)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Exportação travou (timeout) — tente novamente.")
         if proc.returncode != 0 or not out_path.exists() or out_path.stat().st_size == 0:
             raise RuntimeError((proc.stderr or proc.stdout or "ffmpeg 失败")[-800])
 

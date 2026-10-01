@@ -5,7 +5,7 @@ import subprocess
 import json
 import logging
 import re
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable
 from pathlib import Path
 from .ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
 
@@ -192,16 +192,27 @@ class VideoProcessor:
                 str(output_path)
             ]
             
-            # 执行命令
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
-            
+            # Bug real (importação travando pra sempre em ~70%, sem erro nenhum no log): este
+            # subprocess.run nunca teve timeout — se o ffmpeg travar (ex.: entrada
+            # corrompida/parcial de um download que falhou e foi reaproveitado, encode preso),
+            # o processo do Editor/import fica esperando pra sempre, sem nunca reportar
+            # progresso nem erro. Timeout generoso (reencode de vídeo pode ser lento em cortes
+            # longos) + captura explícita de TimeoutExpired, matando o processo e reportando
+            # falha em vez de travar o pipeline inteiro silenciosamente.
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=600,
+            )
+
             if result.returncode == 0:
                 logger.info(f"成功提取视频片段: {output_path} ({ffmpeg_start_time} -> {ffmpeg_end_time}, 时长: {duration:.2f}秒)")
                 return True
             else:
                 logger.error(f"提取视频片段失败: {result.stderr}")
                 return False
-                
+
+        except subprocess.TimeoutExpired:
+            logger.error(f"提取视频片段超时（travado): {output_path}")
+            return False
         except Exception as e:
             logger.error(f"视频处理异常: {str(e)}")
             return False
@@ -274,12 +285,19 @@ class VideoProcessor:
             
             logger.info(f"执行FFmpeg命令: {' '.join(cmd)}")
             
-            # 执行命令
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
-            
+            # 执行命令 — timeout: ver comentário em extract_clip (mesmo bug de travar sem erro).
+            try:
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=600,
+                )
+            except subprocess.TimeoutExpired:
+                concat_file.unlink(missing_ok=True)
+                logger.error(f"criação de coleção travada (timeout): {output_path}")
+                return False
+
             # 清理临时文件
             concat_file.unlink(missing_ok=True)
-            
+
             if result.returncode == 0:
                 logger.info(f"成功创建合集: {output_path}")
                 return True
@@ -287,7 +305,7 @@ class VideoProcessor:
                 logger.error(f"创建合集失败: {result.stderr}")
                 logger.error(f"FFmpeg stdout: {result.stdout}")
                 return False
-                
+
         except Exception as e:
             logger.error(f"视频拼接异常: {str(e)}")
             return False
@@ -320,16 +338,21 @@ class VideoProcessor:
                 str(output_path)
             ]
             
-            # 执行命令
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
-            
+            # 执行命令 — timeout: ver comentário em extract_clip.
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=30,
+            )
+
             if result.returncode == 0 and output_path.exists():
                 logger.info(f"成功提取缩略图: {output_path}")
                 return True
             else:
                 logger.error(f"提取缩略图失败: {result.stderr}")
                 return False
-                
+
+        except subprocess.TimeoutExpired:
+            logger.error(f"extração de miniatura travada (timeout): {video_path}")
+            return False
         except Exception as e:
             logger.error(f"提取缩略图异常: {str(e)}")
             return False
@@ -356,8 +379,11 @@ class VideoProcessor:
                 str(video_path)
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
-            
+            # timeout: ver comentário em extract_clip.
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=30,
+            )
+
             if result.returncode == 0:
                 info = json.loads(result.stdout)
                 return {
@@ -369,25 +395,33 @@ class VideoProcessor:
             else:
                 logger.error(f"获取视频信息失败: {result.stderr}")
                 return {}
-                
+
+        except subprocess.TimeoutExpired:
+            logger.error(f"obtenção de informações do vídeo travada (timeout): {video_path}")
+            return {}
         except Exception as e:
             logger.error(f"获取视频信息异常: {str(e)}")
             return {}
     
-    def batch_extract_clips(self, input_video: Path, clips_data: List[Dict]) -> List[Path]:
+    def batch_extract_clips(self, input_video: Path, clips_data: List[Dict], on_progress: Optional[Callable[[int, int], None]] = None) -> List[Path]:
         """
         批量提取视频片段
-        
+
         Args:
             input_video: 输入视频路径
             clips_data: 片段数据列表，每个元素包含id、title、start_time、end_time
-            
+            on_progress: chamado após CADA corte (sucesso ou falha) com (feito, total) — ver
+                simple_pipeline_adapter.py. Sem isso a etapa EXPORT fica em 0% até TODOS os
+                cortes terminarem, então um corte real (não travado) de vídeo longo com muitos
+                clipes parece indistinguível de um travamento de verdade.
+
         Returns:
             成功提取的片段路径列表
         """
         successful_clips = []
-        
-        for clip_data in clips_data:
+        total = len(clips_data)
+
+        for i, clip_data in enumerate(clips_data):
             clip_id = clip_data['id']
             title = clip_data.get('title', f"片段_{clip_id}")
             start_time = clip_data['start_time']
@@ -411,7 +445,13 @@ class VideoProcessor:
                 logger.info(f"切片 {clip_id} 提取成功")
             else:
                 logger.error(f"切片 {clip_id} 提取失败")
-        
+
+            if on_progress:
+                try:
+                    on_progress(i + 1, total)
+                except Exception:
+                    logger.debug("on_progress callback falhou (ignorado)", exc_info=True)
+
         return successful_clips
     
     def create_collections_from_metadata(self, collections_data: List[Dict]) -> List[Dict]:

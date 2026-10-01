@@ -299,7 +299,14 @@ class OpenAIProvider(LLMProvider):
             self.api_key = api_key
         try:
             import openai
-            client_kwargs = {"api_key": api_key}
+            # Bug real: sem timeout explícito, uma chamada que trave (API do usuário fora do
+            # ar, proxy preso, endpoint OpenAI-compatible mal configurado) podia travar o
+            # pipeline inteiro pra sempre, parado silenciosamente numa etapa sem nunca
+            # reportar erro nem progredir (ver video_processor.py — mesma classe de bug nas
+            # chamadas de ffmpeg). 120s é generoso pra uma resposta de chat completion; o
+            # retry (call_with_retry, em llm_manager.py) trata o TimeoutError como qualquer
+            # outra falha transitória.
+            client_kwargs = {"api_key": api_key, "timeout": 120.0, "max_retries": 0}
             if self.base_url:
                 client_kwargs["base_url"] = self.base_url
                 http_client = make_openai_http_client(self.base_url)

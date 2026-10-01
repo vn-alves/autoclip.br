@@ -4,6 +4,7 @@ YouTube相关API路由
 """
 
 import logging
+import re
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Form, UploadFile, File
 from pydantic import BaseModel
@@ -24,15 +25,37 @@ router = APIRouter()
 # 存储下载任务的状态
 download_tasks = {}
 
-# Pedir muitos idiomas de legenda de uma vez causa HTTP 429 no YouTube e derruba o download inteiro.
-# Padrão: português e inglês. Pode ser sobrescrito com AUTOCLIP_YT_SUBTITLE_LANGS (separado por vírgula).
-DEFAULT_SUBTITLE_LANGS = ['pt', 'pt-BR', 'en']
+# Pedir muitos idiomas de legenda de uma vez causa HTTP 429 no YouTube e derruba o download
+# inteiro. 'en' foi removido: _pick_portuguese_subtitle_file (abaixo) nunca aceita uma legenda
+# baixada em inglês mesmo que ela exista, então pedi-la só aumentava a chance de 429 à toa —
+# sem ela, se pt/pt-BR não existirem a transcrição cai no Whisper (que gera o idioma certo a
+# partir do áudio real). Pode ser sobrescrito com AUTOCLIP_YT_SUBTITLE_LANGS (separado por vírgula).
+DEFAULT_SUBTITLE_LANGS = ['pt', 'pt-BR']
 
 
 def get_subtitle_langs() -> list:
     raw = os.getenv('AUTOCLIP_YT_SUBTITLE_LANGS', '')
     langs = [lang.strip() for lang in raw.split(',') if lang.strip()]
     return langs or list(DEFAULT_SUBTITLE_LANGS)
+
+
+# Bug real (legenda do corte saindo em inglês mesmo em vídeo falado em português): o yt-dlp
+# grava um arquivo .srt POR IDIOMA pedido que conseguir baixar (ex.: "Título.pt.srt",
+# "Título.en.srt") — quando 'pt'/'pt-BR' não tem faixa automática disponível (comum) mas 'en'
+# tem, e o código escolhia `subtitle_files[0]` (glob("*.srt")[0], ordem arbitrária do
+# filesystem), podia pegar a legenda em inglês sem nenhum aviso, e pior: por já ter "achado uma
+# legenda", pulava o fallback de Whisper inteiro (que transcreveria o áudio real, em português).
+# Esta função só aceita um .srt baixado da PLATAFORMA se o nome do arquivo indicar
+# português — qualquer outro idioma (inclusive inglês) é tratado como "sem legenda boa",
+# deixando o Whisper (abaixo) gerar a transcrição de verdade a partir do áudio.
+_PT_SUBTITLE_SUFFIX_RE = re.compile(r'\.(pt|pt-br)\.srt$', re.IGNORECASE)
+
+
+def _pick_portuguese_subtitle_file(subtitle_files: list) -> Optional[str]:
+    for f in subtitle_files:
+        if _PT_SUBTITLE_SUFFIX_RE.search(str(f)):
+            return str(f)
+    return None
 
 
 def _is_cookie_error(error: Exception) -> bool:
@@ -723,7 +746,11 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             raise Exception("O arquivo de vídeo baixado não foi encontrado")
         
         video_path = str(video_files[0])
-        subtitle_path = str(subtitle_files[0]) if subtitle_files else ""
+        # Ver _pick_portuguese_subtitle_file: só aceita a legenda baixada da plataforma se for
+        # em português — qualquer outra (inglês incluso) vira "sem legenda" pra cair no
+        # fallback de Whisper (abaixo), que transcreve o áudio real em vez de usar um idioma
+        # errado.
+        subtitle_path = _pick_portuguese_subtitle_file(subtitle_files) or ""
         
         download_tasks[task_id].progress = 80.0
         
