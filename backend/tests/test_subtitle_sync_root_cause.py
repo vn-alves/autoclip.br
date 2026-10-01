@@ -23,6 +23,7 @@ import pytest
 
 from backend.utils.subtitle_processor import SubtitleProcessor
 from backend.services import subtitle_sync_service as sync_svc
+from backend.api.v1.subtitle_editor import _inject_synced_timestamps, _enforce_monotonic_words
 
 
 def _write_srt(tmp_path: Path, cues) -> Path:
@@ -150,3 +151,66 @@ class TestWindowOffsetAppliedOnce:
         # window_start = 45.0 - 1.2 = 43.8; final = 43.8 + 2.0 = 45.8 (dentro do segmento [45,48], como esperado)
         assert final["startTime"] == pytest.approx(window_start + whisper_relative_to_window)
         assert seg["startTime"] - 5 < final["startTime"] < seg["endTime"] + 5
+
+
+class TestPreviewMonotonicWords:
+    """Bug real reportado no Editor: "ao sincronizar com IA a legenda fica aparecendo e
+    sumindo rápido". Causa: subtitle_sync_service.py alinha cada segmento do SRT de forma
+    INDEPENDENTE (janelas de áudio paralelas) — nada garante que as palavras do fim do
+    segmento N terminem antes do início do segmento N+1. Isso já tinha uma correção pro
+    RENDER (enforce_monotonic_segments em editor_render_service.py), mas o preview do Editor
+    lia clip_metadata.subtitle_sync.words crus direto de _inject_synced_timestamps, sem
+    proteção — corrigido com _enforce_monotonic_words."""
+
+    def _seg(self, start, end, *texts):
+        return {"startTime": start, "endTime": end, "words": [{"id": t, "text": t} for t in texts]}
+
+    def test_already_monotonic_words_are_unchanged(self):
+        words = [
+            {"startTime": 0.0, "endTime": 0.5},
+            {"startTime": 0.6, "endTime": 1.0},
+            {"startTime": 1.1, "endTime": 1.5},
+        ]
+        _enforce_monotonic_words(words)
+        assert [(w["startTime"], w["endTime"]) for w in words] == [(0.0, 0.5), (0.6, 1.0), (1.1, 1.5)]
+
+    def test_word_starting_before_previous_word_ends_is_clamped_forward(self):
+        # Padrão real: segmento seguinte alinhado por Whisper independente, começa ANTES do
+        # segmento anterior terminar — sem a correção, o frontend via isso como uma pausa
+        # negativa e fechava um bloco novo de 1 palavra, "piscando" na tela.
+        words = [
+            {"startTime": 0.0, "endTime": 2.0},
+            {"startTime": 1.2, "endTime": 1.4},  # começa 0.8s ANTES do anterior terminar
+            {"startTime": 1.5, "endTime": 1.9},
+        ]
+        _enforce_monotonic_words(words)
+        assert words[1]["startTime"] == pytest.approx(2.0)
+        assert words[1]["endTime"] >= words[1]["startTime"]
+        for a, b in zip(words, words[1:]):
+            assert a["endTime"] <= b["startTime"]
+
+    def test_degenerate_zero_duration_word_gets_minimum_span(self):
+        words = [{"startTime": 5.0, "endTime": 5.0}]
+        _enforce_monotonic_words(words)
+        assert words[0]["endTime"] > words[0]["startTime"]
+
+    def test_inject_synced_timestamps_fixes_overlap_across_segment_boundary(self):
+        # Dois segmentos ORIGINAIS não-sobrepostos (o SRT em si está limpo), mas os
+        # timestamps SINCRONIZADOS (vindos de subtitle_sync_service, um por segmento,
+        # independentes) se sobrepõem entre os dois — exatamente o cenário real do bug.
+        clip_subtitles = [
+            self._seg(0.0, 2.0, "ola", "mundo"),
+            self._seg(2.1, 4.0, "tudo", "bem"),
+        ]
+        synced_words = [
+            {"startTime": 0.0, "endTime": 1.0},
+            {"startTime": 1.0, "endTime": 2.3},
+            {"startTime": 1.9, "endTime": 2.9},  # sobrepõe o fim do segmento anterior
+            {"startTime": 3.0, "endTime": 3.8},
+        ]
+        result = _inject_synced_timestamps(clip_subtitles, synced_words)
+        flat = [w for seg in result for w in seg["words"]]
+        for a, b in zip(flat, flat[1:]):
+            assert a["endTime"] <= b["startTime"]
+        # segmentos continuam com startTime/endTime recalculados a partir das palavras corrigidas
+        assert result[0]["endTime"] <= result[1]["startTime"]

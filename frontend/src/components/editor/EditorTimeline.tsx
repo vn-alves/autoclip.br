@@ -10,6 +10,9 @@ interface EditorTimelineProps {
   subtitleSegments?: SubtitleSegment[]
   selectedSubtitleId?: string | null
   onSelectSubtitle?: (segment: SubtitleSegment) => void
+  /** Etapa 5 — edição inline direto no bloco da timeline (ver SubtitleTimeline). */
+  onEditSubtitleText?: (segmentIndex: number, text: string) => void
+  onDeleteSubtitle?: (segmentIndex: number) => void
 }
 
 const fmt = (sec: number): string => {
@@ -26,6 +29,7 @@ const fmt = (sec: number): string => {
  */
 const EditorTimeline: React.FC<EditorTimelineProps> = ({
   currentTime, duration, onSeek, subtitleSegments, selectedSubtitleId, onSelectSubtitle,
+  onEditSubtitleText, onDeleteSubtitle,
 }) => {
   const trackRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -72,12 +76,21 @@ const EditorTimeline: React.FC<EditorTimelineProps> = ({
         <div className="ac-editor-timeline-playhead" style={{ left: `${percent}%` }} />
       </div>
       {subtitleSegments && onSelectSubtitle && (
-        <SubtitleTimeline
-          segments={subtitleSegments}
-          duration={duration}
-          selectedSegmentId={selectedSubtitleId ?? null}
-          onSelectSegment={onSelectSubtitle}
-        />
+        <>
+          <SubtitleTimeline
+            segments={subtitleSegments}
+            duration={duration}
+            selectedSegmentId={selectedSubtitleId ?? null}
+            onSelectSegment={onSelectSubtitle}
+            onEditText={onEditSubtitleText}
+            onDelete={onDeleteSubtitle}
+          />
+          {(onEditSubtitleText || onDeleteSubtitle) && subtitleSegments.length > 0 && (
+            <p className="ac-editor-timeline-subtitle-hint">
+              Dê um duplo clique numa legenda acima para editar o texto ou remover.
+            </p>
+          )}
+        </>
       )}
     </div>
   )

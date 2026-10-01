@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import Moveable, { type OnDrag, type OnResize, type OnResizeStart } from 'react-moveable'
+import Moveable, { type OnDrag, type OnDragEnd, type OnResize, type OnResizeEnd, type OnResizeStart } from 'react-moveable'
 import { BackgroundConfig, CANVAS_DIMENSIONS, CanvasFormat, NormalizedTransform, SubtitlePosition, SubtitleSegment, SubtitleStyle, SubtitleTransition, WordHighlight, VideoLayer, findActiveLayers } from './types'
 import SubtitleLayer from './SubtitleLayer'
 
@@ -57,6 +57,20 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   // Registro dos elementos <video> de cada layer — precisa ser estado (não só ref) pra o
   // Moveable perceber quando o elemento da layer selecionada já existe no DOM.
   const [videoEls, setVideoEls] = useState<Record<string, HTMLVideoElement | null>>({})
+  // Alvo REAL do Moveable: um <div> invisível, nunca o <video> — ver useLayoutEffect abaixo
+  // (bug do Chromium: um <video> com layout box bem maior que a área visível às vezes nunca
+  // pinta). O vídeo em si fica SEMPRE do tamanho do frame + transform:scale (nunca ganha um box
+  // maior que o frame, selecionado ou não); o proxy é quem recebe o box "cru" em pixels que o
+  // Moveable precisa pra calcular drag/resize, e cada mudança nele é espelhada no vídeo via
+  // syncVideoToProxy. Precisa ser estado (não só ref) pra o Moveable perceber quando o elemento
+  // já existe no DOM — mesmo motivo de videoEls abaixo.
+  const [proxyEl, setProxyEl] = useState<HTMLDivElement | null>(null)
+  // Instância do Moveable ativo — ver useLayoutEffect abaixo: precisamos poder mandar ele
+  // remedir o alvo manualmente depois de QUALQUER mudança de estilo feita por fora dele
+  // (troca de formato, seleção, fitMode), já que ele só remede sozinho durante o próprio
+  // drag/resize do usuário.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ver comentário abaixo do uso
+  const moveableRef = useRef<Moveable<any>>(null)
   // Um callback de ref ESTÁVEL por layer (memoizado aqui, não recriado a cada render) — um
   // `ref={(el) => ...}` inline faz o React desanexar+reanexar a ref (null, depois o elemento
   // de novo) a cada commit, porque a identidade da função muda a cada render; cada uma dessas
@@ -81,7 +95,28 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   const mainLayer = layers.find((l) => l.isMain) ?? layers[0]
   const activeIds = new Set(findActiveLayers(layers, currentTime).map((l) => l.id))
   const selectedLayer = layers.find((l) => l.id === selectedLayerId) ?? null
-  const selectedVideoEl = selectedLayerId ? videoEls[selectedLayerId] : null
+
+  // Espelha o box "cru" em pixels do proxy no <video> real da layer selecionada, convertido
+  // pro modelo frame-size+scale (ver comentário do proxyEl acima) — chamado tanto no
+  // useLayoutEffect (seleção/troca de formato) quanto ao vivo durante um drag/resize
+  // (handleDrag/handleResize), pra o vídeo sempre acompanhar visualmente o proxy sem nunca
+  // ganhar um layout box maior que o frame.
+  const syncVideoToProxy = (proxy: HTMLElement) => {
+    if (!selectedLayerId || frameSize.width === 0) return
+    const el = videoEls[selectedLayerId]
+    if (!el) return
+    const left = parseFloat(proxy.style.left || '0')
+    const top = parseFloat(proxy.style.top || '0')
+    const width = parseFloat(proxy.style.width || '0')
+    const height = parseFloat(proxy.style.height || '0')
+    const rotatePart = proxy.style.transform || ''
+    el.style.left = `${left}px`
+    el.style.top = `${top}px`
+    el.style.width = `${frameSize.width}px`
+    el.style.height = `${frameSize.height}px`
+    el.style.transformOrigin = '0 0'
+    el.style.transform = `scale(${width / frameSize.width}, ${height / frameSize.height})${rotatePart ? ` ${rotatePart}` : ''}`
+  }
 
   // Tamanho do frame = o maior retângulo com a proporção do formato que cabe no container disponível.
   useLayoutEffect(() => {
@@ -105,23 +140,33 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   // Reflete o transform normalizado de CADA layer em pixels do frame atual — troca de formato,
   // resize da janela, ou commit de um drag/resize (qualquer uma delas, não só a selecionada).
   //
-  // Bug real (vídeo principal não aparecia ao abrir o Editor em 9:16): um <video> bem maior
-  // que o frame (modo "cover" pode passar de 300%, ex.: vídeo 16:9 cobrindo canvas 9:16) e
-  // majoritariamente recortado pelo overflow:hidden do frame às vezes nunca chegava a pintar
-  // NENHUM frame no Chromium — o elemento existia no tamanho/posição certos, mas ficava
-  // transparente/preto. Confirmado isolando: o MESMO vídeo pinta normalmente se o layout box
-  // dele nunca for maior que o frame — então, pra layers que NÃO estão sendo manipuladas pelo
-  // Moveable agora, o box (width/height) fica sempre do tamanho do frame e o "cover" vira só
-  // um transform:scale() visual (CSS transform não conta como redimensionar o layout, então o
-  // Chromium volta a decodificar/pintar o vídeo normalmente).
+  // Bug real (vídeo principal não aparecia ao abrir o Editor em 9:16, e reaparecia ao
+  // SELECIONAR uma layer 'cover' já com o Canvas em 9:16): um <video> bem maior que o frame
+  // (modo "cover" pode passar de 300%, ex.: vídeo 16:9 cobrindo canvas 9:16) e majoritariamente
+  // recortado pelo overflow:hidden do frame às vezes nunca chegava a pintar NENHUM frame no
+  // Chromium — o elemento existia no tamanho/posição certos, mas ficava transparente/preto.
+  // Confirmado isolando: o MESMO vídeo pinta normalmente se o layout box dele nunca for maior
+  // que o frame. Tentativas de "forçar o repaint" depois do box crescer (nudge de currentTime,
+  // clip-path, translateZ/will-change, toggle de object-fit) nunca foram 100% confiáveis.
   //
-  // A layer SELECIONADA (Moveable ativo) continua com width/height reais em px, sem scale —
-  // é exatamente o que Moveable manipula durante o drag/resize (ver handleResize/
-  // commitFromTarget); misturar os dois modelos nela faria o Moveable calcular deltas errados
-  // com base num box pequeno enquanto o visual está escalado. Ao soltar o drag, o commit volta
-  // pro estado normalizado e, se a layer for desselecionada depois, ela troca pro modo
-  // transform:scale() acima.
-  useEffect(() => {
+  // Por isso o <video> em si NUNCA recebe um box maior que o frame, esteja selecionado ou não —
+  // sempre frame-size + transform:scale() (CSS transform não conta como redimensionar o layout
+  // pra esse bug do Chromium). Quem recebe o box "cru" em pixels que o Moveable precisa pra
+  // calcular drag/resize é um <div> proxy invisível (ver proxyEl acima) na MESMA posição/tamanho
+  // visual final — um <div> não tem esse bug de vídeo, então pode ficar arbitrariamente grande
+  // sem problema. Cada mudança no proxy é espelhada no vídeo por syncVideoToProxy.
+  //
+  // Bug real (handles de resize ficando com o formato antigo do vídeo, ou o "preencher
+  // proporcionalmente" parecendo não preencher a tela ao selecionar/trocar de formato): o
+  // Moveable só remede o alvo sozinho durante o PRÓPRIO gesto de drag/resize — quando o box do
+  // alvo muda por fora dele (aqui: troca de formato, seleção de outra layer, fitMode), ele fica
+  // com o retângulo antigo em cache até a próxima interação do usuário, então as guias/handles
+  // aparecem na posição/tamanho errados mesmo com o <video> já no lugar certo. Usar
+  // useLayoutEffect (em vez de useEffect) garante que o estilo do alvo já está atualizado ANTES
+  // do Moveable (filho na árvore, efeitos de filho rodam antes) medir de novo; o updateRect()
+  // explícito no fim cobre o caso em que o Moveable mede antes desta mudança ainda ser aplicada
+  // (ex.: acabou de montar ao selecionar a layer).
+  useLayoutEffect(() => {
     if (frameSize.width === 0) return
     for (const layer of layers) {
       const el = videoEls[layer.id]
@@ -131,19 +176,20 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
       const rotatePart = layer.transform.rotation ? `rotate(${layer.transform.rotation}deg)` : ''
       el.style.left = `${left}px`
       el.style.top = `${top}px`
-      if (layer.id === selectedLayerId) {
-        el.style.width = `${layer.transform.width * frameSize.width}px`
-        el.style.height = `${layer.transform.height * frameSize.height}px`
-        el.style.transformOrigin = ''
-        el.style.transform = rotatePart
-      } else {
-        el.style.width = `${frameSize.width}px`
-        el.style.height = `${frameSize.height}px`
-        el.style.transformOrigin = '0 0'
-        el.style.transform = `scale(${layer.transform.width}, ${layer.transform.height})${rotatePart ? ` ${rotatePart}` : ''}`
-      }
+      el.style.width = `${frameSize.width}px`
+      el.style.height = `${frameSize.height}px`
+      el.style.transformOrigin = '0 0'
+      el.style.transform = `scale(${layer.transform.width}, ${layer.transform.height})${rotatePart ? ` ${rotatePart}` : ''}`
     }
-  }, [layers, frameSize, videoEls, selectedLayerId])
+    if (selectedLayer && proxyEl) {
+      proxyEl.style.left = `${selectedLayer.transform.x * frameSize.width}px`
+      proxyEl.style.top = `${selectedLayer.transform.y * frameSize.height}px`
+      proxyEl.style.width = `${selectedLayer.transform.width * frameSize.width}px`
+      proxyEl.style.height = `${selectedLayer.transform.height * frameSize.height}px`
+      proxyEl.style.transform = selectedLayer.transform.rotation ? `rotate(${selectedLayer.transform.rotation}deg)` : ''
+    }
+    moveableRef.current?.updateRect()
+  }, [layers, frameSize, videoEls, selectedLayerId, selectedLayer, proxyEl])
 
   // Fundo desfocado: um segundo <video>, mudo, espelhando play/pause/tempo do vídeo PRINCIPAL
   // (não das layers secundárias — o fundo sempre reflete o corte original).
@@ -212,6 +258,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   const handleDrag = ({ target, left, top }: OnDrag) => {
     target.style.left = `${left}px`
     target.style.top = `${top}px`
+    syncVideoToProxy(target as HTMLElement)
   }
 
   // Dois comportamentos de resize, escolhidos pelo fitMode da layer selecionada (item pedido:
@@ -257,6 +304,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
     target.style.height = `${height}px`
     target.style.left = `${newLeft}px`
     target.style.top = `${newTop}px`
+    syncVideoToProxy(target as HTMLElement)
   }
 
   // Layers renderizadas em ordem de zIndex crescente (a última no DOM fica visualmente acima
@@ -324,9 +372,17 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
           )
         })}
 
-        {selectedLayer && selectedVideoEl && frameSize.width > 0 && (
+        {/* Alvo real do Moveable — ver comentário de proxyEl/syncVideoToProxy acima. Invisível
+            e sem pointer-events próprio: quem desenha a caixa/alças visíveis e captura o
+            arrasto é o overlay que o próprio Moveable renderiza sobre este retângulo. */}
+        {selectedLayer && frameSize.width > 0 && (
+          <div ref={setProxyEl} className="ac-editor-moveable-proxy" style={{ position: 'absolute', pointerEvents: 'none' }} />
+        )}
+
+        {selectedLayer && proxyEl && frameSize.width > 0 && (
           <Moveable
-            target={selectedVideoEl}
+            ref={moveableRef}
+            target={proxyEl}
             container={frameRef.current}
             origin={false}
             draggable
@@ -345,10 +401,10 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
             verticalGuidelines={[0, frameSize.width / 2, frameSize.width]}
             horizontalGuidelines={[0, frameSize.height / 2, frameSize.height]}
             onDrag={handleDrag}
-            onDragEnd={({ target }) => commitFromTarget(selectedLayer.id, target)}
+            onDragEnd={({ target }: OnDragEnd) => commitFromTarget(selectedLayer.id, target)}
             onResizeStart={handleResizeStart}
             onResize={handleResize}
-            onResizeEnd={({ target }) => commitFromTarget(selectedLayer.id, target)}
+            onResizeEnd={({ target }: OnResizeEnd) => commitFromTarget(selectedLayer.id, target)}
           />
         )}
 

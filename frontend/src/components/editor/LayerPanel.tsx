@@ -16,6 +16,12 @@ interface LayerPanelProps {
   onAddFiles: (files: FileList) => void
   onSetFitMode: (id: string, mode: 'contain' | 'cover') => void
   uploadError: string | null
+  /** Legenda tratada como mais uma linha desta lista (mesmo ícone de olho, mesmo padrão
+   * visual) — só aparece quando o corte tem legenda disponível (ver SubtitleControls, que
+   * continua com o resto dos controles de legenda abaixo desta lista). */
+  subtitleAvailable: boolean
+  subtitleVisible: boolean
+  onToggleSubtitleVisible: () => void
 }
 
 // Rótulos em português (o valor interno continua 'contain'/'cover', só o texto muda) —
@@ -42,6 +48,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
   layers, selectedLayerId, duration,
   onSelect, onToggleVisible, onRename, onMoveUp, onMoveDown, onRemove, onTimeRangeChange, onAddFiles,
   onSetFitMode, uploadError,
+  subtitleAvailable, subtitleVisible, onToggleSubtitleVisible,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -63,6 +70,22 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
     <div className="ac-editor-panel-section">
       <div className="ac-editor-panel-label">Camadas</div>
       <div className="ac-layer-list">
+        {subtitleAvailable && (
+          <div className="ac-layer-row ac-layer-row--subtitle">
+            <div className="ac-layer-row-main">
+              <button
+                type="button"
+                className="ac-layer-visibility"
+                aria-label={subtitleVisible ? 'Ocultar legenda' : 'Mostrar legenda'}
+                onClick={onToggleSubtitleVisible}
+              >
+                {subtitleVisible ? <Icon.Eye size={13} /> : <Icon.EyeOff size={13} />}
+              </button>
+              <span className="ac-layer-icon"><Icon.Chat size={13} /></span>
+              <span className="ac-layer-name">Legenda</span>
+            </div>
+          </div>
+        )}
         {ordered.map((layer, idx) => {
           const isSelected = layer.id === selectedLayerId
           const isTop = idx === 0

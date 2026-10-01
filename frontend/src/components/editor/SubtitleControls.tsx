@@ -33,9 +33,6 @@ interface SubtitleControlsProps {
   onStartSync: () => void
   wordsPerCaption: SubtitleWordsPerCaption
   onWordsPerCaptionChange: (value: SubtitleWordsPerCaption) => void
-  /** Oculta a legenda inteira (preview + render) sem apagar a sincronização/estilo salvos. */
-  visible: boolean
-  onToggleVisible: () => void
 }
 
 const FONT_OPTIONS = [
@@ -91,6 +88,7 @@ const formatSyncedAt = (iso: string): string => {
   }
 }
 
+
 /** Painel de propriedades da legenda — Etapa 2. Some sozinho quando o corte não tem legenda. */
 const SubtitleControls: React.FC<SubtitleControlsProps> = ({
   loading, error, available, hasSegments, style, position,
@@ -98,7 +96,6 @@ const SubtitleControls: React.FC<SubtitleControlsProps> = ({
   transition, onTransitionChange, wordHighlight, onWordHighlightChange,
   syncStatus, syncMessage, syncError, syncedAt, onStartSync,
   wordsPerCaption, onWordsPerCaptionChange,
-  visible, onToggleVisible,
 }) => {
   if (loading) {
     return (
@@ -133,18 +130,6 @@ const SubtitleControls: React.FC<SubtitleControlsProps> = ({
 
   return (
     <>
-      <div className="ac-editor-panel-section">
-        <div className="ac-editor-panel-label">Legenda</div>
-        <Btn size="sm" onClick={onToggleVisible} style={{ width: '100%', justifyContent: 'center' }}>
-          {visible ? <><Icon.Eye size={13} /> Legenda visível</> : <><Icon.EyeOff size={13} /> Legenda oculta</>}
-        </Btn>
-        <p className="ac-editor-hint">
-          {visible
-            ? 'Aparece no preview e é gravada na exportação.'
-            : 'Ocultada — some do preview e da exportação, sem apagar estilo/sincronização.'}
-        </p>
-      </div>
-
       <div className="ac-editor-panel-section">
         <div className="ac-editor-panel-label">Sincronização</div>
         {syncStatus === 'syncing' ? (

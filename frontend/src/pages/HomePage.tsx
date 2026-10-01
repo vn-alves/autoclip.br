@@ -18,7 +18,15 @@ import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Project, useProjectStore } from '../store/useProjectStore'
 import { useProjectPolling } from '../hooks/useProjectPolling'
 import { isTauri } from '../utils/isTauri'
+import { canSaveSettings } from '../utils/desktopMode'
 import { listWebProjects, deleteWebProject } from '../webstore/projects'
+
+// Web sem servidor (IndexedDB) só entra em cena quando NÃO há backend nenhum por trás —
+// isTauri() sozinho não basta: localhost com o backend rodando é navegador comum, mas com
+// um servidor de verdade atrás, então a lista de projetos precisa vir da API igual ao
+// desktop. canSaveSettings() já pergunta "o backend responde?", reaproveitado aqui (mesma
+// checagem usada em FileUpload.tsx).
+const hasRealBackend = async (): Promise<boolean> => isTauri() || canSaveSettings()
 
 const { Content } = Layout
 const { Title, Text } = Typography
@@ -28,18 +36,28 @@ const HomePage: React.FC = () => {
   const navigate = useNavigate()
   const { projects, setProjects, deleteProject, loading, setLoading } = useProjectStore()
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  // Na Web (sem servidor) começa na aba de arquivo — "Importar Link" segue visível, mas
-  // só funciona no desktop.
+  // Na Web sem servidor começa na aba de arquivo — "Importar Link" segue visível, mas só
+  // funciona com um backend de verdade por trás.
   const [activeTab, setActiveTab] = useState<'upload' | 'bilibili'>(isTauri() ? 'bilibili' : 'upload')
+  // null enquanto ainda não sabemos (checagem assíncrona, ver hasRealBackend) — desktop já
+  // sabe de cara (isTauri síncrono), só o navegador precisa perguntar ao backend.
+  const [hasBackend, setHasBackend] = useState<boolean>(isTauri())
 
-  // Usar Hook de pesquisa de projeto — só faz sentido no desktop (backend real). Na Web,
+  useEffect(() => {
+    if (isTauri()) return
+    let alive = true
+    hasRealBackend().then((ok) => { if (alive) setHasBackend(ok) })
+    return () => { alive = false }
+  }, [])
+
+  // Usar Hook de pesquisa de projeto — só faz sentido quando há backend de verdade. Na Web
   // sem servidor, os projetos locais (ver webstore/) só mudam por ação direta do usuário
   // (upload/remover), então não há nada pra ficar sondando a cada 30s.
   useProjectPolling({
     onProjectsUpdate: (updatedProjects) => {
       setProjects(updatedProjects || [])
     },
-    enabled: isTauri(),
+    enabled: hasBackend,
     interval: 30000 // Polling a cada 30 segundos, reduzindo requisições frequentes
   })
 
@@ -70,8 +88,10 @@ const HomePage: React.FC = () => {
   const loadProjects = async () => {
     setLoading(true)
     try {
-      // Web (sem servidor): projetos vêm do IndexedDB local (webstore/), não da API.
-      const projects = isTauri() ? await projectApi.getProjects() : await listWebProjects()
+      // Web sem servidor: projetos vêm do IndexedDB local (webstore/), não da API.
+      const useApi = await hasRealBackend()
+      setHasBackend(useApi)
+      const projects = useApi ? await projectApi.getProjects() : await listWebProjects()
       // Garantir que projects seja um tipo de array
       const safeProjects = Array.isArray(projects) ? projects : []
       setProjects(safeProjects)
@@ -87,7 +107,7 @@ const HomePage: React.FC = () => {
 
   const handleDeleteProject = async (id: string) => {
     try {
-      if (isTauri()) await projectApi.deleteProject(id)
+      if (await hasRealBackend()) await projectApi.deleteProject(id)
       else await deleteWebProject(id)
       deleteProject(id)
       message.success('Projeto excluído com sucesso')
@@ -313,7 +333,7 @@ const HomePage: React.FC = () => {
                  }}>
                    {filteredProjects.map((project: Project) => (
                      <div key={project.id} style={{ position: 'relative', zIndex: 1 }}>
-                       {isTauri() ? (
+                       {hasBackend ? (
                          <ProjectCard
                            project={project}
                            onDelete={handleDeleteProject}

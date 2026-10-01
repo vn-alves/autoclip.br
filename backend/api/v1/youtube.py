@@ -1049,13 +1049,15 @@ async def _try_download_with_different_langs(url: str, download_dir: Path, brows
     import asyncio
     logger.info("尝试下载不同语言的YouTube字幕...")
     
-    lang_combinations = [
-        ['en', 'en-US'],      # 英文
-        ['zh-Hans', 'zh'],    # 中文
-        ['ja', 'ja-JP'],      # 日文
-        ['ko', 'ko-KR'],      # 韩文
-        ['auto']              # 自动检测
-    ]
+    # Bug real: legenda em chinês aparecendo em vídeos que não são chineses. YouTube serve
+    # faixas de legenda automática TRADUZIDAS pra qualquer idioma pedido (writeautomaticsub +
+    # subtitleslangs não exige que o idioma pedido bata com o do vídeo) — antes esta lista
+    # incluía zh-Hans/zh/ja/ko como fallback "pra tentar qualquer coisa", e esse fallback só é
+    # acionado quando Whisper falha (ver _try_youtube_subtitle_strategies), então o resultado
+    # era uma legenda real, porém traduzida errado pra chinês/japonês/coreano, sendo queimada
+    # no vídeo como se fosse o texto certo. Restrito aos idiomas que este app realmente usa
+    # (mesma lista de get_subtitle_langs) — sem tentar línguas que o usuário nunca pediu.
+    lang_combinations = [list(get_subtitle_langs()), ['auto']]
     
     for langs in lang_combinations:
         try:

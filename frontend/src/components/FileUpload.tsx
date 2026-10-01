@@ -6,7 +6,14 @@ import { projectApi, VideoCategory } from '../services/api'
 import { useProjectStore } from '../store/useProjectStore'
 import { validateApiConfigBeforeProjectCreation } from '../utils/apiConfigCheck'
 import { isTauri } from '../utils/isTauri'
+import { canSaveSettings } from '../utils/desktopMode'
 import { createWebProjectFromFile } from '../webstore/projects'
+
+// Web sem servidor (IndexedDB) só entra em cena quando NÃO há backend nenhum por trás —
+// isTauri() sozinho não basta: localhost com o backend rodando (ver conversa) é navegador
+// comum, mas com um servidor de verdade atrás, então deve se comportar como desktop.
+// canSaveSettings() já faz exatamente essa pergunta (backend responde?), reaproveitado aqui.
+const hasRealBackend = async (): Promise<boolean> => isTauri() || canSaveSettings()
 
 // Web (sem servidor): não há endpoint /video-categories pra consultar, então usa essa
 // lista fixa mínima — só "Padrão" mesmo, já que a Fase 2 (corte por IA) ainda não roda
@@ -35,15 +42,18 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
   
   const { addProject } = useProjectStore()
 
-  // Carregar configuração de categoria de vídeo — na Web (sem servidor) não existe esse
+  // Carregar configuração de categoria de vídeo — na Web sem servidor não existe esse
   // endpoint, usa a lista fixa mínima (ver WEB_DEFAULT_CATEGORIES).
   useEffect(() => {
-    if (!isTauri()) {
-      setCategories(WEB_DEFAULT_CATEGORIES)
-      setSelectedCategory(WEB_DEFAULT_CATEGORIES[0].value)
-      return
-    }
+    let alive = true
     const loadCategories = async () => {
+      if (!(await hasRealBackend())) {
+        if (alive) {
+          setCategories(WEB_DEFAULT_CATEGORIES)
+          setSelectedCategory(WEB_DEFAULT_CATEGORIES[0].value)
+        }
+        return
+      }
       setLoadingCategories(true)
       try {
         const response = await projectApi.getVideoCategories()
@@ -63,6 +73,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
     }
 
     loadCategories()
+    return () => { alive = false }
   }, [])
 
   const onDrop = (acceptedFiles: File[]) => {
@@ -104,9 +115,12 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
       return
     }
 
-    // Verificar configuração da API — só existe no desktop (backend real). Na Web ainda
-    // não há corte por IA rodando (ver webstore/projects.ts), então não há chave pra checar.
-    if (isTauri()) {
+    const useApi = await hasRealBackend()
+
+    // Verificar configuração da API — só faz sentido quando há backend de verdade. Na Web
+    // sem servidor ainda não há corte por IA rodando (ver webstore/projects.ts), então não
+    // há chave pra checar.
+    if (useApi) {
       const hasValidApiConfig = await validateApiConfigBeforeProjectCreation()
       if (!hasValidApiConfig) {
         return
@@ -116,10 +130,10 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
     setUploading(true)
     setUploadProgress(0)
 
-    // Web (sem servidor): salva o vídeo no navegador (IndexedDB) e para por aqui — ainda
+    // Web sem servidor: salva o vídeo no navegador (IndexedDB) e para por aqui — ainda
     // não há corte automático por IA rodando sem servidor (isso é a próxima etapa do
     // plano). Fluxo totalmente separado do upload por API do desktop, abaixo.
-    if (!isTauri()) {
+    if (!useApi) {
       try {
         const newProject = await createWebProjectFromFile(files.video, projectName.trim())
         addProject(newProject)

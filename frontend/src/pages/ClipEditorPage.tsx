@@ -13,7 +13,7 @@ import {
   SubtitlePosition, SubtitlePositionPreset, SubtitleStyle, SubtitleStylePreset, SubtitleWordsPerCaption,
   SubtitleTransition, WordHighlight,
   createDefaultEditorState, createVideoLayerFromFile, fitTransform, resizeTransformForFormat, SUBTITLE_POSITION_PRESETS,
-  groupWordsIntoSegments, toEditConfig, applyEditConfig, hasUnuploadedLayers, isDegenerateTransform,
+  groupWordsIntoSegments, splitPlainTextToWords, toEditConfig, applyEditConfig, hasUnuploadedLayers, isDegenerateTransform,
 } from '../components/editor/types'
 import './ClipEditorPage.css'
 
@@ -544,6 +544,41 @@ const ClipEditorPage: React.FC = () => {
     handleSeek(segment.startTime)
   }
 
+  // Edição manual de texto (corrigir tradução ruim) e remoção de uma legenda específica —
+  // salva no backend (mesclado, nunca substitui edições de outros segmentos — ver
+  // subtitle_editor.py save_subtitle_text_edits) e atualiza o estado local direto (sem
+  // precisar de um refetch: a resposta do backend seria a mesma coisa que já calculamos aqui).
+  // `segmentIndex` é `segment.index` (cue do SRT original) — estável entre reloads, ao
+  // contrário do `id` (uuid recriado a cada parse). Também recalcula `subtitleWords` (a lista
+  // achatada usada pelo preview/karaokê quando sincronizado — ver flatSubtitleWords) a partir
+  // dos segmentos já editados, senão a edição só apareceria na lista deste painel, não no
+  // Canvas nem no reagrupamento por "palavras por legenda" em cortes já sincronizados.
+  const updateSubtitleSegmentsAndWords = (updater: (prev: SubtitleSegment[]) => SubtitleSegment[]) => {
+    setSubtitleSegments((prev) => {
+      const next = updater(prev)
+      setSubtitleWords((prevWords) => (prevWords.length > 0 ? next.flatMap((seg) => seg.words) : prevWords))
+      return next
+    })
+  }
+
+  const handleEditSubtitleSegmentText = (segmentIndex: number, text: string) => {
+    if (!projectId || !clipId) return
+    updateSubtitleSegmentsAndWords((prev) => prev.map((seg) => (
+      seg.index === segmentIndex
+        ? { ...seg, text: text.trim(), words: splitPlainTextToWords(text, seg.startTime, seg.endTime) }
+        : seg
+    )))
+    projectApi.saveClipSubtitleTextEdits(projectId, clipId, { segmentEdits: { [String(segmentIndex)]: text } })
+      .catch(() => setSubtitleError('Não foi possível salvar a edição da legenda'))
+  }
+
+  const handleDeleteSubtitleSegment = (segmentIndex: number) => {
+    if (!projectId || !clipId) return
+    updateSubtitleSegmentsAndWords((prev) => prev.filter((seg) => seg.index !== segmentIndex))
+    projectApi.saveClipSubtitleTextEdits(projectId, clipId, { deletedSegmentIndexes: [String(segmentIndex)] })
+      .catch(() => setSubtitleError('Não foi possível remover a legenda'))
+  }
+
   // Único player "de verdade" é a layer principal (item 15) — play/pause/seek/currentTime
   // sempre agem nela; as layers secundárias só seguem esse relógio (ver useEffect em
   // EditorCanvas que sincroniza currentTime/isPlaying com cada <video> secundário).
@@ -783,8 +818,6 @@ const ClipEditorPage: React.FC = () => {
             onStartSync={handleStartSync}
             wordsPerCaption={editorState.subtitle.wordsPerCaption}
             onWordsPerCaptionChange={handleWordsPerCaptionChange}
-            visible={editorState.subtitle.visible}
-            onToggleVisible={handleToggleSubtitleVisible}
           />
         </aside>
 
@@ -824,9 +857,16 @@ const ClipEditorPage: React.FC = () => {
             currentTime={currentTime}
             duration={duration}
             onSeek={handleSeek}
-            subtitleSegments={displaySegments}
+            // Segmentos ORIGINAIS do SRT (não os `displaySegments` regrupados por "palavras
+            // por legenda") — são a unidade estável entre reloads (seg.index bate com a chave
+            // usada no backend, ver _apply_subtitle_text_edits), então é aqui que a edição/
+            // remoção inline funciona; o agrupamento por "palavras por legenda" continua sendo
+            // só um detalhe visual do Canvas/exportação, sem afetar o que é editável aqui.
+            subtitleSegments={subtitleSegments}
             selectedSubtitleId={editorState.subtitle.selectedSegmentId}
             onSelectSubtitle={handleSelectSubtitleSegment}
+            onEditSubtitleText={handleEditSubtitleSegmentText}
+            onDeleteSubtitle={handleDeleteSubtitleSegment}
           />
 
           <LayersTimeline
@@ -852,13 +892,10 @@ const ClipEditorPage: React.FC = () => {
             onAddFiles={handleAddVideoFiles}
             onSetFitMode={handleSetFitMode}
             uploadError={layerUploadError}
+            subtitleAvailable={displaySegments.length > 0}
+            subtitleVisible={editorState.subtitle.visible}
+            onToggleSubtitleVisible={handleToggleSubtitleVisible}
           />
-          {displaySegments.length > 0 && (
-            <div className="ac-editor-panel-section">
-              <div className="ac-editor-panel-label">Legenda</div>
-              <div className="ac-editor-layer-item"><Icon.Chat size={13} /> Legenda</div>
-            </div>
-          )}
         </aside>
       </div>
     </div>

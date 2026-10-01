@@ -116,10 +116,15 @@ export interface VideoLayer {
   customized: boolean
 }
 
+// fitMode 'contain' (Normal) por padrão na layer principal: 'cover' pode deixar o box real do
+// <video> bem maior que o frame (ex.: vídeo 16:9 em canvas 9:16 passa de 300% de largura), o
+// que dispara um bug real do Chromium — o vídeo às vezes some ao ser selecionado, mostrando só
+// o fundo (ver EditorCanvas.tsx, useLayoutEffect de aplicação de transform). 'contain' nunca
+// ultrapassa o frame, então nunca aciona esse caso. Cover continua disponível como opção manual.
 export const createMainVideoLayer = (source: string): VideoLayer => ({
   id: 'main', type: 'video', name: 'Vídeo principal', source, visible: true,
   transform: { x: 0, y: 0, width: 1, height: 1, rotation: 0 },
-  zIndex: 0, startTime: 0, endTime: Number.POSITIVE_INFINITY, isMain: true, fitMode: 'cover',
+  zIndex: 0, startTime: 0, endTime: Number.POSITIVE_INFINITY, isMain: true, fitMode: 'contain',
   customized: false,
 })
 
@@ -471,6 +476,30 @@ const AUTO_MAX_CHARS = 42
 // uma pausa clara sempre fecha o bloco antes disso (item 4 do pedido de "palavras por legenda").
 const NATURAL_PAUSE_GAP_SECONDS = 0.6
 const SENTENCE_END_RE = /[.!?;]$/
+
+// Mesmos separadores de backend/utils/subtitle_processor.py (SubtitleProcessor.word_separators)
+// — pontuação chinesa/CJK comum + espaço em branco.
+const WORD_SEPARATORS_RE = /[，。！？；：""''（）【】、\s]+/
+
+/**
+ * Quebra um texto livre (digitado pelo usuário ao editar uma legenda) em palavras com
+ * timestamp, redistribuindo o tempo igualmente na janela [startTime, endTime] do segmento —
+ * mesma lógica de backend/utils/subtitle_processor.py:_split_text_to_words (ver
+ * _apply_subtitle_text_edits), só que local, pra refletir a edição no preview na hora, sem
+ * esperar o round-trip da API confirmar. Usado só por edição manual (Editar texto no painel de
+ * legenda) — a legenda estimada/sincronizada normal sempre vem pronta do backend.
+ */
+export function splitPlainTextToWords(text: string, startTime: number, endTime: number): SubtitleWord[] {
+  const parts = text.trim().split(WORD_SEPARATORS_RE).map((p) => p.trim()).filter(Boolean)
+  if (parts.length === 0) return []
+  const wordDuration = (endTime - startTime) / parts.length
+  return parts.map((part, i) => ({
+    id: `edit-${startTime}-${i}`,
+    text: part,
+    startTime: startTime + i * wordDuration,
+    endTime: startTime + (i + 1) * wordDuration,
+  }))
+}
 
 /**
  * Reagrupa uma lista "achatada" de palavras (já com timestamps reais, sincronizados

@@ -60,6 +60,14 @@ class EditPreviewRequest(BaseModel):
     clip_id: str
     deleted_segments: List[str]
 
+class SubtitleTextEditRequest(BaseModel):
+    """Edição manual de texto por segmento (corrigir tradução ruim) e/ou remoção de segmentos
+    inteiros (o usuário não quer aquela legenda aparecendo) — ver _apply_subtitle_text_edits.
+    Chave de `segment_edits`/itens de `deleted_segment_indexes`: `str(segment['index'])`, o
+    número do cue no SRT original (estável entre reloads, ao contrário do `id`/uuid)."""
+    segment_edits: Dict[str, str] = {}
+    deleted_segment_indexes: List[str] = []
+
 # 依赖注入函数
 def get_subtitle_processor() -> SubtitleProcessor:
     return SubtitleProcessor()
@@ -129,6 +137,58 @@ def _get_clip_subtitles_from_srt(project_id: str, clip, subtitle_processor: Subt
     return clip_subtitles
 
 
+def _enforce_monotonic_words(words: List[Dict]) -> None:
+    """Garante startTime/endTime crescentes entre palavras vizinhas, na lista inteira do
+    clip (ajusta in-place). Bug real reportado no Editor: "ao sincronizar com IA a legenda
+    fica aparecendo e sumindo rápido" — subtitle_sync_service.py alinha cada segmento do SRT
+    de forma INDEPENDENTE (janelas de áudio paralelas, ver docstring de lá), então nada
+    garante que as palavras do fim do segmento N terminem antes das palavras do início do
+    segmento N+1 começarem. Isso já tinha uma correção equivalente (enforce_monotonic_segments
+    em editor_render_service.py), mas só no caminho de RENDER/exportação — o preview do Editor
+    lia os timestamps crus direto daqui, sem essa proteção, e a regrupagem em blocos
+    (groupWordsIntoSegments no frontend) via de vez em quando um "buraco"/sobreposição como
+    pausa, fechando um bloco de 1-2 palavras que pisca na tela."""
+    cursor = 0.0
+    for w in words:
+        if w['startTime'] < cursor:
+            w['startTime'] = cursor
+        if w['endTime'] < w['startTime'] + 0.01:
+            w['endTime'] = w['startTime'] + 0.01
+        cursor = w['endTime']
+
+
+def _apply_subtitle_text_edits(clip, clip_subtitles: List[Dict], subtitle_processor: SubtitleProcessor) -> List[Dict]:
+    """Aplica edições manuais de texto (reescrever tradução ruim / remover uma legenda que o
+    usuário não quer no vídeo), feitas no Editor via POST .../subtitles/text-edit e salvas em
+    clip_metadata['subtitle_text_edits']. Chamado por ÚLTIMO (depois de qualquer injeção de
+    timestamp sincronizado) tanto pelo GET /subtitles (preview) quanto pelo render/export
+    (_load_flat_words_for_render), pra preview e vídeo final nunca divergirem.
+
+    Chave estável por segmento: `seg['index']` (número do cue no SRT original, ver
+    SubtitleProcessor.parse_srt_to_word_level) — não o `id` (uuid aleatório, recriado a cada
+    parse do SRT, não sobrevive a um reload). Reescrever o texto de um segmento reparte as
+    palavras de novo a partir do texto novo, redistribuindo o tempo igualmente na janela
+    [startTime, endTime] do segmento (já sincronizada, se for o caso) — mesma lógica usada no
+    parse original (_split_text_to_words), só que sobre o texto editado."""
+    edits = (clip.clip_metadata or {}).get('subtitle_text_edits') or {}
+    segment_edits = edits.get('segmentEdits') or {}
+    deleted = set(edits.get('deletedSegmentIndexes') or [])
+    if not segment_edits and not deleted:
+        return clip_subtitles
+
+    result = []
+    for seg in clip_subtitles:
+        key = str(seg['index'])
+        if key in deleted:
+            continue
+        new_text = segment_edits.get(key)
+        if new_text is not None:
+            words = subtitle_processor._split_text_to_words(new_text, seg['startTime'], seg['endTime'])
+            seg = {**seg, 'text': new_text.strip(), 'words': words}
+        result.append(seg)
+    return result
+
+
 def _inject_synced_timestamps(clip_subtitles: List[Dict], synced_words: List[Dict]) -> List[Dict]:
     """Substitui os timestamps (estimativa linear) dos segmentos originais pelos
     timestamps reais alinhados pela sincronização com IA — preserva o texto e a
@@ -142,6 +202,10 @@ def _inject_synced_timestamps(clip_subtitles: List[Dict], synced_words: List[Dic
                 word['startTime'] = sw['startTime']
                 word['endTime'] = sw['endTime']
             flat_index += 1
+
+    _enforce_monotonic_words([word for seg in clip_subtitles for word in seg['words']])
+
+    for seg in clip_subtitles:
         if seg['words']:
             seg['startTime'] = seg['words'][0]['startTime']
             seg['endTime'] = seg['words'][-1]['endTime']
@@ -194,6 +258,14 @@ async def get_clip_subtitles(
                     f"({len(synced_words)} vs {total_words} palavras) — ignorando, tratando como not_synced."
                 )
 
+        clip_subtitles = _apply_subtitle_text_edits(clip, clip_subtitles, subtitle_processor)
+        # `flat_words` tinha sido montado a partir do synced_words CRU, antes da edição de
+        # texto — o frontend prefere esse campo (ver flatSubtitleWords em ClipEditorPage.tsx)
+        # quando sincronizado, então sem isso uma edição/remoção de texto seria ignorada no
+        # reagrupamento em blocos sempre que o clip já estivesse sincronizado com IA.
+        if flat_words is not None:
+            flat_words = [w for seg in clip_subtitles for w in seg['words']]
+
         # 获取统计信息
         stats = subtitle_processor.get_subtitle_statistics(clip_subtitles)
 
@@ -214,6 +286,49 @@ async def get_clip_subtitles(
         logger.error(f"获取字幕数据失败: {e}")
         logger.error(f"错误详情: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"获取字幕数据失败: {str(e)}")
+
+
+@router.post("/{project_id}/clips/{clip_id}/subtitles/text-edit")
+async def save_subtitle_text_edits(
+    project_id: str,
+    clip_id: str,
+    request: SubtitleTextEditRequest,
+    project_service: ProjectService = Depends(get_project_service),
+):
+    """Salva edição manual de texto (corrigir tradução) e/ou remoção de segmento de legenda —
+    mesclado (read-merge-write, igual subtitle_sync_service.py) em
+    clip_metadata['subtitle_text_edits'], nunca substituindo edições anteriores de outros
+    segmentos. Ver _apply_subtitle_text_edits pra onde isso é lido/aplicado."""
+    try:
+        from ...models.clip import Clip
+        clip = project_service.db.query(Clip).filter(Clip.id == clip_id, Clip.project_id == project_id).first()
+        if not clip:
+            raise HTTPException(status_code=404, detail="片段不存在")
+
+        metadata = dict(clip.clip_metadata or {})
+        existing = dict(metadata.get('subtitle_text_edits') or {})
+        segment_edits = dict(existing.get('segmentEdits') or {})
+        segment_edits.update(request.segment_edits)
+        deleted = set(existing.get('deletedSegmentIndexes') or [])
+        deleted.update(request.deleted_segment_indexes)
+        # Um segmento apagado não precisa mais de edição de texto guardada (evita lixo
+        # acumulando se o usuário editar o texto e depois remover o mesmo segmento).
+        for key in deleted:
+            segment_edits.pop(key, None)
+
+        metadata['subtitle_text_edits'] = {
+            'segmentEdits': segment_edits,
+            'deletedSegmentIndexes': sorted(deleted),
+        }
+        clip.clip_metadata = metadata
+        project_service.db.commit()
+
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"保存字幕文本编辑失败: {e}")
+        raise HTTPException(status_code=500, detail=f"保存字幕文本编辑失败: {str(e)}")
 
 
 @router.post("/{project_id}/clips/{clip_id}/subtitles/sync")

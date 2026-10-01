@@ -97,6 +97,14 @@
   margin-bottom: 8px;
 }
 
+.ac-editor-panel-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .ac-editor-layer-item {
   display: flex;
   align-items: center;
@@ -107,6 +115,27 @@
   color: var(--ac-ink);
   background: var(--ac-line-2);
   border: 1px solid var(--ac-line);
+}
+
+.ac-editor-subtitle-row-delete {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--ac-sub);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  margin-top: 2px;
+}
+
+.ac-editor-subtitle-row-delete:hover {
+  color: var(--ac-error);
+  border-color: var(--ac-line);
+  background: var(--ac-card);
 }
 
 .ac-editor-color-input {
@@ -436,6 +465,40 @@
   color: var(--ac-ink);
 }
 
+.ac-editor-timeline-subtitle-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--ac-sub);
+}
+
+/* Caixa de edição flutuante (duplo clique num bloco) — ancorada ACIMA da faixa de blocos,
+   fora do fluxo, pra nunca ficar espremida na largura de um bloco curto. */
+.ac-editor-subtitle-inline-editor {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  width: 260px;
+  max-width: 70vw;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--ac-card);
+  border: 1px solid var(--ac-line);
+  box-shadow: var(--ac-shadow);
+  z-index: 20;
+}
+
+.ac-editor-subtitle-inline-editor textarea {
+  resize: none;
+  font-size: 13px;
+}
+
+.ac-editor-subtitle-inline-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* ---------------------------------------------------------- Layers (Etapa 3) --- */
 
 .ac-layer-list {
@@ -453,6 +516,11 @@
 .ac-layer-row--selected {
   border-color: var(--ac-accent);
   box-shadow: 0 0 0 1px var(--ac-accent);
+}
+
+.ac-layer-row--subtitle {
+  margin-bottom: 4px;
+  border-style: dashed;
 }
 
 .ac-layer-row-main {

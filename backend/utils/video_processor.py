@@ -153,16 +153,40 @@ class VideoProcessor:
             end_seconds = VideoProcessor.convert_ffmpeg_time_to_seconds(ffmpeg_end_time)
             duration = end_seconds - start_seconds
             
-            # 构建优化的FFmpeg命令
-            # 使用 -ss 在输入前进行精确定位，使用 -t 指定持续时间
+            # Bug real (legenda dessincronizada a partir do 2º corte, alternando certo/errado):
+            # '-ss' antes de '-i' com '-c:v copy' não é frame-accurate — o demuxer só consegue
+            # começar o vídeo no keyframe mais próximo ANTES de start_time (não dá pra cortar
+            # no meio de um GOP sem decodificar), enquanto o áudio (sem dependência de GOP) é
+            # cortado exatamente em start_time. Resultado: o arquivo do corte tem "sobra" de
+            # vídeo antes do áudio/legenda começarem — em vídeos do YouTube, com intervalo de
+            # keyframe praticamente constante, a distância até o keyframe anterior varia de
+            # forma quase periódica entre os cortes (por isso o padrão alternado certo/errado,
+            # não um offset constante). Reencodar o vídeo (em vez de copiar o stream) faz o
+            # ffmpeg decodificar a partir do keyframe e descartar os frames antes de
+            # start_time, então o frame 0 do corte bate exatamente com o offset já usado pelas
+            # legendas.
+            #
+            # Bug real #2 (residual depois do fix acima: legenda ficava um pouco ADIANTADA da
+            # fala em todo corte com start_time > 0, exceto o primeiro): reencodar só o vídeo e
+            # deixar o áudio em '-c:a copy' quebra a simetria — o accurate-seek do ffmpeg só
+            # descarta o "lead-in" de pré-seek em streams REENCODADOS; um stream copiado
+            # preserva esse pedacinho de áudio anterior a start_time (até ~1 frame de
+            # áudio, ~20-40ms). Como esse pacote de áudio fica com PTS negativo, o
+            # '-avoid_negative_ts make_zero' empurra TODOS os streams pra frente por esse mesmo
+            # valor pra compensar — deslocando o t=0 real do arquivo pra depois de start_time,
+            # exatamente na direção "legenda adiantada" (tudo que o resto do código calcula a
+            # partir de start_time assume t=0 == start_time). Só não acontecia no 1º corte
+            # porque start_time=0 não aciona seek nenhum (sem lead-in, sem PTS negativo, sem
+            # correção). Reencodar o áudio também elimina a assimetria: os dois streams passam
+            # pelo mesmo descarte preciso, então t=0 bate exato com start_time nos dois.
             ffmpeg_bin = get_ffmpeg_path()
             cmd = [
                 ffmpeg_bin,
                 '-ss', ffmpeg_start_time,  # 在输入前定位，更精确
                 '-i', str(input_video),
                 '-t', str(duration),  # 使用持续时间而不是绝对结束时间
-                '-c:v', 'copy',  # 复制视频流
-                '-c:a', 'copy',  # 复制音频流
+                '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+                '-c:a', 'aac', '-b:a', '192k',
                 '-avoid_negative_ts', 'make_zero',
                 '-y',  # 覆盖输出文件
                 str(output_path)

@@ -644,6 +644,21 @@ export const projectApi = {
     return api.get(`/subtitle-editor/${projectId}/clips/${clipId}/subtitles/sync/${jobId}`)
   },
 
+  // Edição manual de texto de um segmento de legenda (corrigir tradução) e/ou remoção
+  // completa de segmentos (o usuário não quer aquela legenda aparecendo no vídeo) — mesclado
+  // no backend, nunca substitui edições salvas de outros segmentos. `segmentIndex` é o
+  // `segment.index` retornado por getClipSubtitles (estável entre reloads).
+  saveClipSubtitleTextEdits: (
+    projectId: string,
+    clipId: string,
+    payload: { segmentEdits?: Record<string, string>; deletedSegmentIndexes?: string[] },
+  ): Promise<{ success: boolean }> => {
+    return api.post(`/subtitle-editor/${projectId}/clips/${clipId}/subtitles/text-edit`, {
+      segment_edits: payload.segmentEdits || {},
+      deleted_segment_indexes: payload.deletedSegmentIndexes || [],
+    })
+  },
+
   // Obter URL do vídeo da coleção
   getCollectionVideoUrl: (projectId: string, collectionId: string): string => {
     // Usar a rota files para obter vídeos de coleção

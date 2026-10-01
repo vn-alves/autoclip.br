@@ -354,7 +354,9 @@ def enforce_monotonic_segments(segments: List[Dict[str, Any]]) -> List[Dict[str,
 def _load_flat_words_for_render(db: Session, project_id: str, clip_id: str) -> List[Dict[str, Any]]:
     """Mesma fonte usada por GET /subtitle-editor/{project_id}/clips/{clip_id}/subtitles —
     importa e chama as funções de lá em vez de duplicá-las (ver docstring do módulo)."""
-    from backend.api.v1.subtitle_editor import _get_clip_subtitles_from_srt, _inject_synced_timestamps
+    from backend.api.v1.subtitle_editor import (
+        _get_clip_subtitles_from_srt, _inject_synced_timestamps, _apply_subtitle_text_edits,
+    )
     from backend.utils.subtitle_processor import SubtitleProcessor
     from backend.models.clip import Clip
 
@@ -362,8 +364,9 @@ def _load_flat_words_for_render(db: Session, project_id: str, clip_id: str) -> L
     if not clip:
         raise EditorRenderError(f"Corte não encontrado (clip_id={clip_id})")
 
+    subtitle_processor = SubtitleProcessor()
     try:
-        clip_subtitles = _get_clip_subtitles_from_srt(project_id, clip, SubtitleProcessor())
+        clip_subtitles = _get_clip_subtitles_from_srt(project_id, clip, subtitle_processor)
     except Exception:
         return []  # corte sem legenda disponível — render segue sem legenda (não é erro fatal).
 
@@ -373,6 +376,11 @@ def _load_flat_words_for_render(db: Session, project_id: str, clip_id: str) -> L
         total_words = sum(len(seg["words"]) for seg in clip_subtitles)
         if synced_words and len(synced_words) == total_words:
             clip_subtitles = _inject_synced_timestamps(clip_subtitles, synced_words)
+
+    # Mesma edição manual de texto/remoção aplicada no preview do Editor (GET /subtitles) —
+    # sem isso o vídeo exportado/renderizado voltaria a queimar o texto original, ignorando
+    # correções de tradução ou legendas que o usuário pediu pra tirar.
+    clip_subtitles = _apply_subtitle_text_edits(clip, clip_subtitles, subtitle_processor)
 
     return [w for seg in clip_subtitles for w in seg["words"]]
 

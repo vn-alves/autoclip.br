@@ -16,6 +16,15 @@ class SubtitleProcessor:
         # 使用双引号原始字符串，避免内嵌单引号导致字面量被提前截断/隐式拼接，
         # 同时让 \s 保持原义、不触发 SyntaxWarning。
         self.word_separators = r"[，。！？；：“”‘’（）【】、\s]+"
+        # Bug real: ">>" aparecia na legenda exibida/queimada. Vem de duas fontes — Whisper às
+        # vezes alucina ">>" como marcador de troca de locutor (artefato do dataset de
+        # treinamento, que incluía legendas de TV), e legendas automáticas do YouTube (caminho
+        # de fallback VTT→SRT) usam ">>" e tags entre colchetes ([Music], [Applause]) do jeito
+        # que vêm, sem limpeza nenhuma. Nenhum estágio do pipeline sanitizava o texto — só
+        # strip() de espaço. Removido aqui, na origem (split em palavras), pra cobrir tanto a
+        # legenda estimada quanto qualquer coisa derivada dela.
+        self._bracket_tag_re = re.compile(r"[\(\[［（][^\)\]）］]{0,60}[\)\]）］]")
+        self._angle_marker_re = re.compile(r"[<>]{2,}")
     
     def parse_srt_to_word_level(self, srt_path: Path) -> List[Dict]:
         """
@@ -84,16 +93,27 @@ class SubtitleProcessor:
             字粒度字幕数据
         """
         # 分解文本为单词
-        words = self._split_text_to_words(sub.text, start_seconds, end_seconds)
+        clean_text = self._clean_subtitle_text(sub.text)
+        words = self._split_text_to_words(clean_text, start_seconds, end_seconds)
 
         return {
             'id': str(uuid.uuid4()),
             'startTime': start_seconds,
             'endTime': end_seconds,
-            'text': sub.text.strip(),
+            'text': clean_text,
             'words': words,
             'index': sub.index
         }
+
+    def _clean_subtitle_text(self, text: str) -> str:
+        """Remove artefatos de ASR/legenda automática que não devem aparecer na tela:
+        tags entre colchetes ([Music], [Applause], (inaudível)) e marcadores de troca de
+        locutor em ângulo (">>", "<<"). Ver comentário do __init__ pra contexto completo."""
+        if not text:
+            return ''
+        cleaned = self._bracket_tag_re.sub(' ', text)
+        cleaned = self._angle_marker_re.sub(' ', cleaned)
+        return re.sub(r'\s+', ' ', cleaned).strip()
     
     def _split_text_to_words(self, text: str, start_time: float, end_time: float) -> List[Dict]:
         """

@@ -1,3 +1,10 @@
+## IDIOMA DE SAÍDA (OUTPUT LANGUAGE) — LEIA ANTES DE TUDO
+As instruções e os exemplos abaixo estão em chinês, mas isso é só o formato do prompt — NÃO é o idioma esperado da resposta. Todo texto em linguagem natural que você gerar (título, recommend_reason, outline, generated_title, ou qualquer outro campo de texto livre) DEVE ser escrito em português do Brasil (pt-BR), nunca em chinês, japonês ou qualquer outro idioma — mesmo que os exemplos de poucos-shots abaixo estejam em chinês. Ignore o idioma dos exemplos ao decidir o idioma da sua resposta; escreva sempre em português, refletindo o idioma real do conteúdo de entrada (a transcrição do vídeo). Nomes de campos JSON (as chaves) continuam exatamente como especificado abaixo, em inglês/conforme o formato pedido — só o TEXTO (os valores) deve ser português.
+
+IMPORTANT (English restatement, for models that follow English instructions more reliably): the instructions and examples below are written in Chinese, but that is only the prompt's authoring language — it is NOT the expected output language. Any natural-language text you generate in output fields (title, recommend_reason, outline, generated_title, or any other free-text field) MUST be written in Brazilian Portuguese (pt-BR), never in Chinese or any other language, regardless of the language used in the few-shot examples below. Disregard the examples' language when choosing your output language — always respond in Portuguese, matching the actual language of the input content (the video transcript). JSON field names (keys) stay exactly as specified below — only the text VALUES must be Portuguese.
+
+---
+
 # 演讲脱口秀视频主题聚类 Prompt
 
 你是一位资深的演讲内容策划师，深谙演讲、脱口秀、访谈等口语表达内容的价值挖掘和系统化组织。你的任务是将多个演讲脱口秀视频片段进行**智能主题聚类**，形成**高价值、强感染力**的表达合集。
