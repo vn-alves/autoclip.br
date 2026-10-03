@@ -215,9 +215,24 @@
 }
 
 /* O Moveable mantém o box real (inclusive acima de 100%), mas cada ponto de resize recebe
-   uma translação visual independente para permanecer alcançável na borda do frame. */
+   uma translação visual independente para permanecer alcançável na borda do frame. As linhas
+   nativas ficam transparentes (mas continuam interativas); o contorno abaixo acompanha os
+   mesmos limites dos pontos e nunca é desenhado fora do frame. */
 .ac-editor-frame .moveable-control.moveable-direction.moveable-resizable {
   transition: none;
+}
+
+.ac-editor-frame .moveable-line {
+  opacity: 0;
+}
+
+.ac-editor-moveable-outline {
+  position: absolute;
+  z-index: 3000;
+  display: none;
+  box-sizing: border-box;
+  border: 1px solid var(--ac-accent);
+  pointer-events: none;
 }
 
 .ac-editor-controls {

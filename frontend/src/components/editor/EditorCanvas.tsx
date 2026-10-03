@@ -70,6 +70,10 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   // (troca de formato, seleção, fitMode), já que ele só remede sozinho durante o próprio
   // drag/resize do usuário.
   const moveableRef = useRef<Moveable<any>>(null)
+  // Contorno VISUAL limitado ao frame. O contorno nativo do Moveable continua existindo (só
+  // fica transparente via CSS) para preservar toda a área interativa e os cálculos internos.
+  // Este elemento acompanha os mesmos limites aplicados aos pontos, sem alterar o box real.
+  const clampedOutlineRef = useRef<HTMLDivElement>(null)
   // O retângulo do vídeo pode crescer muito além do frame. O Moveable precisa manter esse
   // retângulo real para calcular o zoom, mas suas alças não precisam ser desenhadas fora da
   // área visível. Reposicionamos apenas cada controle (e sua área clicável) na borda do frame;
@@ -92,6 +96,20 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
       const offsetY = clampedY - centerY
       control.style.translate = `${offsetX}px ${offsetY}px`
     })
+
+    const outline = clampedOutlineRef.current
+    const proxy = proxyEl
+    if (!outline || !proxy) return
+    const proxyRect = proxy.getBoundingClientRect()
+    const left = Math.min(Math.max(proxyRect.left, frameRect.left), frameRect.right)
+    const right = Math.min(Math.max(proxyRect.right, frameRect.left), frameRect.right)
+    const top = Math.min(Math.max(proxyRect.top, frameRect.top), frameRect.bottom)
+    const bottom = Math.min(Math.max(proxyRect.bottom, frameRect.top), frameRect.bottom)
+    outline.style.left = `${left - frameRect.left}px`
+    outline.style.top = `${top - frameRect.top}px`
+    outline.style.width = `${Math.max(0, right - left)}px`
+    outline.style.height = `${Math.max(0, bottom - top)}px`
+    outline.style.display = 'block'
   }
   const scheduleHandleClamp = () => {
     if (handleClampRafRef.current !== null) cancelAnimationFrame(handleClampRafRef.current)
@@ -413,6 +431,10 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
             arrasto é o overlay que o próprio Moveable renderiza sobre este retângulo. */}
         {selectedLayer && frameSize.width > 0 && (
           <div ref={setProxyEl} className="ac-editor-moveable-proxy" style={{ position: 'absolute', pointerEvents: 'none' }} />
+        )}
+
+        {selectedLayer && frameSize.width > 0 && (
+          <div ref={clampedOutlineRef} className="ac-editor-moveable-outline" aria-hidden="true" />
         )}
 
         {selectedLayer && proxyEl && frameSize.width > 0 && (
