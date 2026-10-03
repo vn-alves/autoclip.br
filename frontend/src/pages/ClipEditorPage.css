@@ -163,15 +163,28 @@
   justify-content: center;
   min-height: 0;
   padding: 24px;
-  overflow: hidden;
+  /* Sem overflow:hidden aqui — ver .ac-editor-clip: só o vídeo/fundo precisa ser recortado;
+     as alças do Moveable precisam poder aparecer fora do frame quando o zoom deixa a caixa
+     maior que a tela, senão ficam escondidas/impossíveis de clicar (bug real relatado). */
+  overflow: visible;
 }
 
 .ac-editor-frame {
   position: relative;
   background: #000;
   border-radius: 12px;
-  overflow: hidden;
   box-shadow: var(--ac-shadow);
+  overflow: visible;
+}
+
+/* Recorta SÓ o vídeo/fundo — as alças do Moveable ficam no .ac-editor-frame (sem
+   overflow:hidden), pra nunca ficarem escondidas/impossíveis de clicar quando o zoom deixa a
+   caixa bem maior que a tela (bug real relatado). */
+.ac-editor-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 12px;
 }
 
 .ac-editor-bg {
