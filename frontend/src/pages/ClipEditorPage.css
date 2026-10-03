@@ -216,7 +216,7 @@
 
 /* O Moveable mantém o box real (inclusive acima de 100%), mas cada ponto de resize recebe
    uma translação visual independente para permanecer alcançável na borda do frame. */
-.ac-editor-frame .moveable-control.direction.resizable {
+.ac-editor-frame .moveable-control.moveable-direction.moveable-resizable {
   transition: none;
 }
 

@@ -79,7 +79,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
     const frame = frameRef.current
     if (!frame) return
     const frameRect = frame.getBoundingClientRect()
-    const controls = frame.querySelectorAll<HTMLElement>('.moveable-control.direction.resizable')
+    const controls = frame.querySelectorAll<HTMLElement>('.moveable-control.moveable-direction.moveable-resizable')
     controls.forEach((control) => {
       // Mede sempre a posição real gerada pelo Moveable, sem acumular a correção anterior.
       control.style.translate = ''
