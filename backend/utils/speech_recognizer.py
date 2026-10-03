@@ -382,7 +382,11 @@ class SpeechRecognizer:
             model = WhisperModel(
                 config.model, device="auto", compute_type="int8", download_root=models_dir,
             )
-            seg_iter, _info = model.transcribe(str(video_path), language=language, vad_filter=True)
+            # beam_size=1 (greedy) é bem mais rápido que o padrão (5) com perda
+            # mínima de qualidade para geração de cortes.
+            seg_iter, _info = model.transcribe(
+                str(video_path), language=language, vad_filter=True, beam_size=1,
+            )
             segments = [{"start": s.start, "end": s.end, "text": s.text} for s in seg_iter]
             if not segments:
                 raise SpeechRecognitionError("Whisper 未识别出任何语音内容")
