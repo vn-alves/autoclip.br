@@ -407,6 +407,42 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
               // travado em proporção nos cantos, ver handleResize).
               style={{ zIndex: layer.zIndex, display: isActive ? undefined : 'none', objectFit: layer.fitMode === 'cover' ? 'cover' : 'fill' }}
               onClick={(e) => { e.stopPropagation(); setSubtitleSelected(false); onSelectLayer(layer.id) }}
+              // Arraste manual (pointer events): funciona igual no navegador e no app desktop
+              // (WebKit do macOS/WebView2 não repassam bem o arraste do <video> ao Moveable).
+              onPointerDown={(e) => {
+                if (e.button !== 0) return
+                if (layer.id !== selectedLayerId || !proxyEl) return
+                e.preventDefault()
+                e.stopPropagation()
+                const videoEl = e.currentTarget
+                const startX = e.clientX
+                const startY = e.clientY
+                const startLeft = parseFloat(proxyEl.style.left || '0')
+                const startTop = parseFloat(proxyEl.style.top || '0')
+                let moved = false
+                try { videoEl.setPointerCapture(e.pointerId) } catch { /* ignore */ }
+                const onMove = (ev: PointerEvent) => {
+                  const dx = ev.clientX - startX
+                  const dy = ev.clientY - startY
+                  if (!moved && Math.abs(dx) + Math.abs(dy) < 2) return
+                  moved = true
+                  proxyEl.style.left = `${startLeft + dx}px`
+                  proxyEl.style.top = `${startTop + dy}px`
+                  syncVideoToProxy(proxyEl)
+                  moveableRef.current?.updateRect()
+                  scheduleHandleClamp()
+                }
+                const onUp = (ev: PointerEvent) => {
+                  try { videoEl.releasePointerCapture(ev.pointerId) } catch { /* ignore */ }
+                  window.removeEventListener('pointermove', onMove)
+                  window.removeEventListener('pointerup', onUp)
+                  window.removeEventListener('pointercancel', onUp)
+                  if (moved) commitFromTarget(layer.id, proxyEl)
+                }
+                window.addEventListener('pointermove', onMove)
+                window.addEventListener('pointerup', onUp)
+                window.addEventListener('pointercancel', onUp)
+              }}
               onLoadedMetadata={(e) => {
                 onLayerLoadedMetadata(layer.id, e.currentTarget.videoWidth, e.currentTarget.videoHeight)
                 // Bug real: um vídeo "cover" pode nascer com até ~300%+ do tamanho do frame e a
@@ -445,8 +481,6 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
             // O proxy continua sendo a geometria usada no resize, mas o próprio vídeo visível
             // captura o arraste. Assim, depois de ampliar, o usuário pode clicar em qualquer
             // parte do vídeo dentro do preview e reposicioná-lo sem procurar a linha/alça.
-            dragTarget={selectedLayerId ? videoEls[selectedLayerId] : null}
-            dragTargetSelf={false}
             container={frameRef.current}
             origin={false}
             draggable
