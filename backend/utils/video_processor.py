@@ -418,41 +418,55 @@ class VideoProcessor:
         Returns:
             成功提取的片段路径列表
         """
-        successful_clips = []
-        total = len(clips_data)
+        # Desempenho: antes os cortes eram feitos um por vez (cada um reencoda o vídeo), o que
+        # dominava o tempo total da importação. Agora rodam em paralelo (cada ffmpeg é um
+        # processo separado), mantendo a ordem original do resultado.
+        import os
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
 
-        for i, clip_data in enumerate(clips_data):
+        total = len(clips_data)
+        results: List[Optional[Path]] = [None] * total
+        done = 0
+        lock = threading.Lock()
+
+        def _work(clip_data: Dict) -> Optional[Path]:
             clip_id = clip_data['id']
             title = clip_data.get('title', f"片段_{clip_id}")
             start_time = clip_data['start_time']
             end_time = clip_data['end_time']
-            
-            # 处理时间格式 - 如果是秒数，转换为SRT格式
             if isinstance(start_time, (int, float)):
                 start_time = VideoProcessor.convert_seconds_to_ffmpeg_time(start_time)
             if isinstance(end_time, (int, float)):
                 end_time = VideoProcessor.convert_seconds_to_ffmpeg_time(end_time)
-            
-            # 使用标题作为文件名，并清理不合法的字符
-            # 在文件名中包含clip_id，便于后续合集拼接时查找
             safe_title = VideoProcessor.sanitize_filename(title)
             output_path = self.clips_dir / f"{clip_id}_{safe_title}.mp4"
-            
             logger.info(f"提取切片 {clip_id}: {start_time} -> {end_time}, 输出: {output_path}")
-            
             if VideoProcessor.extract_clip(input_video, output_path, start_time, end_time):
-                successful_clips.append(output_path)
                 logger.info(f"切片 {clip_id} 提取成功")
-            else:
-                logger.error(f"切片 {clip_id} 提取失败")
+                return output_path
+            logger.error(f"切片 {clip_id} 提取失败")
+            return None
 
-            if on_progress:
+        workers = int(os.getenv("AUTOCLIP_CLIP_WORKERS", "0")) or max(1, min(4, (os.cpu_count() or 2) // 2 or 1))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(_work, c): i for i, c in enumerate(clips_data)}
+            for fut in as_completed(futures):
+                idx = futures[fut]
                 try:
-                    on_progress(i + 1, total)
+                    results[idx] = fut.result()
                 except Exception:
-                    logger.debug("on_progress callback falhou (ignorado)", exc_info=True)
+                    logger.error("corte falhou", exc_info=True)
+                with lock:
+                    done += 1
+                    current = done
+                if on_progress:
+                    try:
+                        on_progress(current, total)
+                    except Exception:
+                        logger.debug("on_progress callback falhou (ignorado)", exc_info=True)
 
-        return successful_clips
+        return [p for p in results if p is not None]
     
     def create_collections_from_metadata(self, collections_data: List[Dict]) -> List[Dict]:
         """
