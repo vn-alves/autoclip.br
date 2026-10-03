@@ -212,6 +212,8 @@
   object-fit: fill;
   background: #000;
   cursor: move;
+  touch-action: none;
+  user-select: none;
 }
 
 /* O Moveable mantém o box real (inclusive acima de 100%), mas cada ponto de resize recebe

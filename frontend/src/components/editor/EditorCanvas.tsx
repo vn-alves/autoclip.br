@@ -397,6 +397,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
               ref={getVideoRefCallback(layer.id, layer.isMain)}
               src={layer.source}
               className="ac-editor-video"
+              draggable={false}
               playsInline
               muted={!layer.isMain}
               // 'cover': o conteúdo NUNCA deforma não importa o formato da caixa (o usuário
@@ -441,6 +442,11 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
           <Moveable
             ref={moveableRef}
             target={proxyEl}
+            // O proxy continua sendo a geometria usada no resize, mas o próprio vídeo visível
+            // captura o arraste. Assim, depois de ampliar, o usuário pode clicar em qualquer
+            // parte do vídeo dentro do preview e reposicioná-lo sem procurar a linha/alça.
+            dragTarget={selectedLayerId ? videoEls[selectedLayerId] : null}
+            dragTargetSelf={false}
             container={frameRef.current}
             origin={false}
             draggable
