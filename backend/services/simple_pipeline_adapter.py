@@ -386,6 +386,7 @@ class SimplePipelineAdapter:
             logger.error(error_msg)
 
             # 发送失败状态
+            stop_heartbeat(self.project_id)
             emit_progress(self.project_id, "DONE", error_msg)
             
             return {
