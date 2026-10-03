@@ -86,29 +86,29 @@ class OutlineExtractor:
         self._save_srt_chunks(chunks)
         
         all_outlines = []
-        
-        # 4. 逐一处理每个文本块文件
-        for i, chunk_file in enumerate(chunk_files):
+
+        # Desempenho: os blocos são independentes, então as chamadas à IA rodam em paralelo
+        # (antes era uma por vez, o que somava minutos em vídeos longos).
+        from concurrent.futures import ThreadPoolExecutor
+        import os
+
+        def _process(i: int, chunk_file: Path) -> List[Dict]:
             logger.info(f"处理第{i+1}/{len(chunks)}个文本块: {chunk_file.name}")
             try:
-                # 读取文本块内容
                 with open(chunk_file, 'r', encoding='utf-8') as f:
                     chunk_text = f.read()
-                
-                # 为每个块调用LLM
-                input_data = {"text": chunk_text}
-                response = self.llm_client.call_with_retry(outline_prompt, input_data)
-                
+                response = self.llm_client.call_with_retry(outline_prompt, {"text": chunk_text})
                 if response:
-                    # 解析响应并附加块索引
-                    # 注意：这里的chunk_index直接用i，与文件名和原始chunk对应
-                    parsed_outlines = self._parse_outline_response(response, i)
-                    all_outlines.extend(parsed_outlines)
-                else:
-                    logger.warning(f"处理第{i+1}个文本块时返回空响应")
+                    return self._parse_outline_response(response, i)
+                logger.warning(f"处理第{i+1}个文本块时返回空响应")
             except Exception as e:
                 logger.error(f"处理第{i+1}个文本块失败: {e}")
-                continue
+            return []
+
+        workers = int(os.getenv("AUTOCLIP_LLM_WORKERS", "4"))
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            for outlines in pool.map(lambda a: _process(*a), list(enumerate(chunk_files))):
+                all_outlines.extend(outlines)
         
         # 5. 合并和去重
         final_outlines = self._merge_outlines(all_outlines)
