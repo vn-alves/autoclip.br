@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any, Optional, Callable
 from pathlib import Path
 
-from backend.services.simple_progress import emit_progress, clear_progress
+from backend.services.simple_progress import emit_progress, clear_progress, start_heartbeat, stop_heartbeat
 from backend.pipeline.step1_outline import run_step1_outline
 from backend.pipeline.step2_timeline import run_step2_timeline
 from backend.pipeline.step3_scoring import run_step3_scoring
@@ -168,6 +168,7 @@ class SimplePipelineAdapter:
         try:
             # 清除之前的进度数据
             clear_progress(self.project_id)
+            start_heartbeat(self.project_id)
             
             # 创建必要的目录结构 - 使用正确的路径
             from backend.core.path_utils import get_project_directory
@@ -342,12 +343,10 @@ class SimplePipelineAdapter:
                 )
                 if video_result.get("clips_generated", 0) < 1:
                     raise RuntimeError("O corte do vídeo falhou; nenhum arquivo foi gerado")
-            emit_progress(self.project_id, "EXPORT", "视频导出完成", subpercent=100)
-            
-            # 阶段6: 处理完成
-            emit_progress(self.project_id, "DONE", "处理完成")
-            
-            # 自动同步数据到数据库
+            emit_progress(self.project_id, "EXPORT", "Salvando cortes...", subpercent=95)
+
+            # 自动同步数据到数据库 (antes do DONE: a barra ficava em 100% enquanto os cortes
+            # ainda não apareciam porque a sincronização vinha depois)
             try:
                 from backend.services.data_sync_service import DataSyncService
                 from backend.core.database import SessionLocal
@@ -364,7 +363,9 @@ class SimplePipelineAdapter:
                     db.close()
             except Exception as e:
                 logger.error(f"数据同步失败: {e}")
-            
+
+            stop_heartbeat(self.project_id)
+            emit_progress(self.project_id, "DONE", "Processamento concluído")
             logger.info(f"项目处理完成: {self.project_id}")
             return {
                 "status": "succeeded",
