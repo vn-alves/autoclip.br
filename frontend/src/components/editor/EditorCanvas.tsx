@@ -70,6 +70,36 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   // (troca de formato, seleção, fitMode), já que ele só remede sozinho durante o próprio
   // drag/resize do usuário.
   const moveableRef = useRef<Moveable<any>>(null)
+  // O retângulo do vídeo pode crescer muito além do frame. O Moveable precisa manter esse
+  // retângulo real para calcular o zoom, mas suas alças não precisam ser desenhadas fora da
+  // área visível. Reposicionamos apenas cada controle (e sua área clicável) na borda do frame;
+  // a direção e os cálculos do resize continuam ligados ao canto/borda original.
+  const handleClampRafRef = useRef<number | null>(null)
+  const clampMoveableHandlesToFrame = () => {
+    const frame = frameRef.current
+    if (!frame) return
+    const frameRect = frame.getBoundingClientRect()
+    const controls = frame.querySelectorAll<HTMLElement>('.moveable-control.direction.resizable')
+    controls.forEach((control) => {
+      // Mede sempre a posição real gerada pelo Moveable, sem acumular a correção anterior.
+      control.style.translate = ''
+      const rect = control.getBoundingClientRect()
+      const centerX = rect.left + rect.width / 2
+      const centerY = rect.top + rect.height / 2
+      const clampedX = Math.min(Math.max(centerX, frameRect.left), frameRect.right)
+      const clampedY = Math.min(Math.max(centerY, frameRect.top), frameRect.bottom)
+      const offsetX = clampedX - centerX
+      const offsetY = clampedY - centerY
+      control.style.translate = `${offsetX}px ${offsetY}px`
+    })
+  }
+  const scheduleHandleClamp = () => {
+    if (handleClampRafRef.current !== null) cancelAnimationFrame(handleClampRafRef.current)
+    handleClampRafRef.current = requestAnimationFrame(() => {
+      handleClampRafRef.current = null
+      clampMoveableHandlesToFrame()
+    })
+  }
   // Um callback de ref ESTÁVEL por layer (memoizado aqui, não recriado a cada render) — um
   // `ref={(el) => ...}` inline faz o React desanexar+reanexar a ref (null, depois o elemento
   // de novo) a cada commit, porque a identidade da função muda a cada render; cada uma dessas
@@ -188,7 +218,12 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
       proxyEl.style.transform = selectedLayer.transform.rotation ? `rotate(${selectedLayer.transform.rotation}deg)` : ''
     }
     moveableRef.current?.updateRect()
+    scheduleHandleClamp()
   }, [layers, frameSize, videoEls, selectedLayerId, selectedLayer, proxyEl])
+
+  useEffect(() => () => {
+    if (handleClampRafRef.current !== null) cancelAnimationFrame(handleClampRafRef.current)
+  }, [])
 
   // Fundo desfocado: um segundo <video>, mudo, espelhando play/pause/tempo do vídeo PRINCIPAL
   // (não das layers secundárias — o fundo sempre reflete o corte original).
@@ -258,6 +293,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
     target.style.left = `${left}px`
     target.style.top = `${top}px`
     syncVideoToProxy(target as HTMLElement)
+    scheduleHandleClamp()
   }
 
   // Dois comportamentos de resize, escolhidos pelo fitMode da layer selecionada (item pedido:
@@ -304,6 +340,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
     target.style.left = `${newLeft}px`
     target.style.top = `${newTop}px`
     syncVideoToProxy(target as HTMLElement)
+    scheduleHandleClamp()
   }
 
   // Layers renderizadas em ordem de zIndex crescente (a última no DOM fica visualmente acima
@@ -404,6 +441,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
             onResizeStart={handleResizeStart}
             onResize={handleResize}
             onResizeEnd={({ target }: OnResizeEnd) => commitFromTarget(selectedLayer.id, target)}
+            onRender={scheduleHandleClamp}
           />
         )}
 
