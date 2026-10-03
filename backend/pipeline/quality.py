@@ -245,6 +245,31 @@ def _cues(srt_entries: Sequence[Dict[str, Any]]) -> List[_Cue]:
     return out
 
 
+_SENT_END = __import__("re").compile(r"[.!?…。！？]['\")\]]*\s*$")
+
+
+def _ends_sentence(cues: List[_Cue], i: int) -> bool:
+    if i >= len(cues) - 1:
+        return True
+    return bool(_SENT_END.search(cues[i].text or "")) or (cues[i + 1].start - cues[i].end) >= 0.8
+
+
+def _to_sentence_start(i: int, cues: List[_Cue], max_back: float = 8.0) -> int:
+    """Recua até o começo da frase (cue anterior termina frase)."""
+    j = i
+    while j > 0 and not _ends_sentence(cues, j - 1) and cues[i].start - cues[j - 1].start <= max_back:
+        j -= 1
+    return j
+
+
+def _to_sentence_end(i: int, cues: List[_Cue], max_fwd: float = 10.0) -> int:
+    """Avança até o fim da frase, nunca cortando no meio."""
+    j = i
+    while not _ends_sentence(cues, j) and j + 1 < len(cues) and cues[j + 1].end - cues[i].end <= max_fwd:
+        j += 1
+    return j
+
+
 def _snap_start(sec: float, cues: List[_Cue], window: float) -> Tuple[float, int]:
     """吸附到最近 cue 的 start；窗口内没有则取包含该时刻（或其后第一条）的 cue。返回 (时间, cue 下标)。"""
     if not cues:
@@ -257,10 +282,12 @@ def _snap_start(sec: float, cues: List[_Cue], window: float) -> Tuple[float, int
         if c.start > sec + window:
             break
     if best_d <= window:
-        return cues[best_i].start, best_i
+        k = _to_sentence_start(best_i, cues)
+        return cues[k].start, k
     for i, c in enumerate(cues):
         if c.end >= sec:
-            return c.start, i
+            k = _to_sentence_start(i, cues)
+            return cues[k].start, k
     return cues[-1].start, len(cues) - 1
 
 
@@ -275,10 +302,12 @@ def _snap_end(sec: float, cues: List[_Cue], window: float) -> Tuple[float, int]:
         if c.start > sec + window:
             break
     if best_d <= window:
-        return cues[best_i].end, best_i
+        k = _to_sentence_end(best_i, cues)
+        return cues[k].end, k
     for i in range(len(cues) - 1, -1, -1):
         if cues[i].start <= sec:
-            return cues[i].end, i
+            k = _to_sentence_end(i, cues)
+            return cues[k].end, k
     return cues[0].end, 0
 
 
@@ -298,6 +327,12 @@ def _trim_to_max(start: float, end_i: int, cues: List[_Cue], max_sec: float) -> 
     while end - start > max_sec and i > 0 and cues[i - 1].end > start:
         i -= 1
         end = cues[i].end
+    # recua até um fim de frase, para não cortar no meio
+    k = i
+    while k > 0 and not _ends_sentence(cues, k) and cues[k - 1].end > start:
+        k -= 1
+    if _ends_sentence(cues, k):
+        i, end = k, cues[k].end
     return end, i
 
 

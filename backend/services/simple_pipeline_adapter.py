@@ -65,6 +65,7 @@ class SimplePipelineAdapter:
             except Exception:  # noqa: BLE001
                 pass
         logger.info(f"使用类别提示词: {category}")
+        self._category = category
         return get_prompt_files(category)
 
     def _clip_overrides(self) -> Dict[str, Any]:
@@ -319,7 +320,7 @@ class SimplePipelineAdapter:
                     target_clip_seconds=clip_overrides.get("target_clip_seconds"),
                     clip_count=clip_overrides.get("clip_count"),
                 ) if srt_entries else None
-                titled_clips = build_fallback_clips(srt_entries, profile=fallback_profile)
+                titled_clips = build_fallback_clips(srt_entries, profile=fallback_profile, category=getattr(self, "_category", None))
                 if not titled_clips:
                     raise RuntimeError("Não foi possível criar cortes: as legendas estão vazias ou inválidas")
                 with open(titles_file, 'w', encoding='utf-8') as f:
