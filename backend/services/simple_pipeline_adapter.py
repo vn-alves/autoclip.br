@@ -121,11 +121,16 @@ class SimplePipelineAdapter:
                 
                 logger.info("尝试使用Whisper本地模型生成字幕")
                 output_path = metadata_dir / f"{video_file_path.stem}.srt"
+                # Modelo configurável via AUTOCLIP_WHISPER_MODEL. O padrão é "tiny":
+                # sem chave de IA este é o caminho usado, e "base" podia levar
+                # dezenas de minutos em vídeos longos. "tiny" é ~5x mais rápido.
+                import os
+                whisper_model = os.getenv("AUTOCLIP_WHISPER_MODEL", "tiny")
                 srt_path = generate_subtitle_for_video(
                     video_file_path,
                     output_path=output_path,
                     method="whisper_local",
-                    model="base",
+                    model=whisper_model,
                     language="auto"
                 )
                 
