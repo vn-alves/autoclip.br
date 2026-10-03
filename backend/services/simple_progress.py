@@ -219,6 +219,48 @@ def compute_percent(stage: str, subpercent: Optional[float] = None) -> int:
 # 进程内监听器（CLI / MCP 用来实时打印进度；API 进程用不到）
 _listeners: List[Any] = []
 
+# Heartbeat: etapas longas (Whisper, IA, corte) não emitem progresso intermediário e a barra
+# parecia travada em 10% / 75%. Enquanto o projeto processa, uma thread avança devagar dentro
+# da etapa atual (sem nunca passar dela), até a próxima atualização real chegar.
+_hb_lock = threading.Lock()
+_hb_state: Dict[str, Dict[str, Any]] = {}
+_hb_stop: Dict[str, threading.Event] = {}
+
+
+def start_heartbeat(project_id: str, interval: float = 4.0) -> None:
+    with _hb_lock:
+        if project_id in _hb_stop:
+            return
+        _hb_state[project_id] = {"stage": "INGEST", "sub": 0.0, "message": ""}
+        ev = threading.Event()
+        _hb_stop[project_id] = ev
+
+    def _run():
+        while not ev.wait(interval):
+            with _hb_lock:
+                st = _hb_state.get(project_id)
+                if not st or st["stage"] == "DONE":
+                    continue
+                st["sub"] = st["sub"] + max(0.5, (95 - st["sub"]) * 0.04)
+                st["sub"] = min(95.0, st["sub"])
+                stage, sub, msg = st["stage"], st["sub"], st["message"]
+            if not store:
+                continue
+            try:
+                store.save(project_id, stage, compute_percent(stage, sub), msg, int(time.time()))
+            except Exception:
+                pass
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def stop_heartbeat(project_id: str) -> None:
+    with _hb_lock:
+        ev = _hb_stop.pop(project_id, None)
+        _hb_state.pop(project_id, None)
+    if ev:
+        ev.set()
+
 
 def add_progress_listener(fn) -> None:
     """注册进程内进度回调：fn(payload: dict)。payload 含 project_id / stage / percent / message / ts。"""
@@ -244,6 +286,9 @@ def emit_progress(project_id: str, stage: str, message: str = "", subpercent: Op
         subpercent: 子进度百分比，可选
     """
     percent = compute_percent(stage, subpercent)
+    with _hb_lock:
+        if project_id in _hb_state:
+            _hb_state[project_id] = {"stage": stage, "sub": float(subpercent or 0), "message": message}
     payload = {
         "project_id": project_id,
         "stage": stage,
