@@ -1,7 +1,7 @@
 {
   "name": "auto-clips-frontend",
   "private": true,
-  "version": "1.9.3",
+  "version": "2.0.2",
   "type": "module",
   "scripts": {
     "dev": "vite",

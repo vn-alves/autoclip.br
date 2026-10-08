@@ -7,6 +7,20 @@
 
 ## [未发布]
 
+## [2.0.2] - 2026-10-08
+
+### 新增
+- 编辑器时间线中的视频图层现在可直接拖动，并可通过两端手柄调整开始和结束时间。
+- 图层时间范围支持吸附到视频起点、中点、终点、播放头和其他图层边界，并显示低干扰吸附提示。
+- `NEW LAYER +` 现在打开视频选择器，并在当前播放头位置创建和选中新图层。
+
+### 改进
+- 预览区滚轮现在只缩放视图，不再改变图层的位置、宽度或高度，也不会污染保存、撤销或导出数据。
+- 时间线与右侧数值字段保持同步，图层可见区间继续由 `startTime` / `endTime` 控制。
+
+### 质量
+- 新增图层移动、边缘调整、最小时长和磁性吸附的自动化回归测试。
+
 ### 新增
 - **`autoclip` 命令行**：`autoclip run video.mp4 --provider ollama` 一条命令出片，`list / show / providers / doctor` 子命令，`--json` 给脚本与 agent；与桌面应用共用数据目录与 SQLite（`pip install -e .`；`docs/CLI_AND_MCP.md`）
 - **MCP server**（`autoclip mcp`，stdio）：`clip_video`、`start_clip_job` / `get_job_status`、`get_project`、`list_projects`、`list_providers`、`check_environment`，Cursor / Claude 可直接调用；Agent skill `skills/autoclip/SKILL.md`
@@ -149,7 +163,8 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.2.0...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v2.0.2...HEAD
+- [2.0.2]: https://github.com/zhouxiaoka/autoclip/releases/tag/v2.0.2
 - [1.2.0]: https://github.com/zhouxiaoka/autoclip/releases/tag/v1.2.0
 - [1.1.0]: https://github.com/zhouxiaoka/autoclip/releases/tag/v1.1.0
 - [1.0.0]: https://github.com/zhouxiaoka/autoclip/releases/tag/v1.0.0
