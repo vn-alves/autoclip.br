@@ -237,11 +237,20 @@ def build_render_spec(
     for l in sorted(edit_config["layers"], key=lambda x: x.get("zIndex", 0)):
         if not l.get("visible", True):
             continue
-        if l.get("isMain"):
+        if l.get("isMain") and not l.get("isDuplicate"):
             input_path = main_path
             start_time = 0.0
             end_time = duration
             has_audio = True
+        elif l.get("isMain"):
+            # Cópia do vídeo principal: mesmo arquivo, mas com intervalo próprio na timeline.
+            input_path = main_path
+            start_time = float(l.get("startTime") or 0.0)
+            raw_end = l.get("endTime")
+            end_time = min(float(raw_end), duration) if isinstance(raw_end, (int, float)) else duration
+            if end_time <= start_time:
+                continue
+            has_audio = False
         else:
             input_path = resolve_editor_asset_path(project_id, l["assetId"])
             start_time = float(l.get("startTime") or 0.0)

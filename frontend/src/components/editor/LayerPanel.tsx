@@ -138,7 +138,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
                 <button type="button" disabled={isBottom} onClick={() => onMoveDown(layer.id)} aria-label="Mover para baixo" title="Mover para baixo">
                   <Icon.Down size={12} />
                 </button>
-                {!layer.isMain && (
+                {!(layer.isMain && !layer.isDuplicate) && (
                   <button type="button" onClick={() => onRemove(layer.id)} aria-label="Remover camada" title="Remover camada">
                     <Icon.Close size={12} />
                   </button>
@@ -160,7 +160,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
                   </p>
                 </div>
               )}
-              {isSelected && !layer.isMain && (
+              {isSelected && !(layer.isMain && !layer.isDuplicate) && (
                 <div className="ac-layer-time-range" onClick={(e) => e.stopPropagation()}>
                   <label>
                     <span>Início (s)</span>

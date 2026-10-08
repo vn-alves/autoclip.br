@@ -11,9 +11,9 @@
 export const RELEASES_URL = 'https://github.com/vn-alves/autoclip.br/releases/latest'
 
 export const WINDOWS_DOWNLOAD_URL =
-  'https://github.com/vn-alves/autoclip.br/releases/download/v1.9.9/AutoClip.Desktop_1.9.9_x64-setup.exe'
+  'https://github.com/vn-alves/autoclip.br/releases/download/v2.0.3/AutoClip.Desktop_2.0.3_x64-setup.exe'
 export const MACOS_DOWNLOAD_URL =
-  'https://github.com/vn-alves/autoclip.br/releases/download/v1.9.9/AutoClip.Desktop_1.9.9_aarch64.dmg'
+  'https://github.com/vn-alves/autoclip.br/releases/download/v2.0.3/AutoClip.Desktop_2.0.3_aarch64.dmg'
 
 const LATEST_API = 'https://api.github.com/repos/vn-alves/autoclip.br/releases/latest'
 

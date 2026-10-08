@@ -508,7 +508,7 @@ const ClipEditorPage: React.FC = () => {
   const handleRemoveLayer = (layerId: string) => {
     setEditorState((s) => {
       const layer = s.layers.find((l) => l.id === layerId)
-      if (!layer || layer.isMain) return s
+      if (!layer || (layer.isMain && !layer.isDuplicate)) return s
       URL.revokeObjectURL(layer.source)
       return {
         ...s,
