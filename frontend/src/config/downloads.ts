@@ -1,4 +1,4 @@
-import { fetchNewestRelease, findMacAsset, findWindowsAsset, releaseVersion } from '../utils/githubReleases'
+import { compareVersions, fetchNewestRelease, findMacAsset, findWindowsAsset, releaseVersion } from '../utils/githubReleases'
 
 /**
  * Config central dos links de download do app desktop — usada pela Landing Page e por
@@ -11,11 +11,12 @@ import { fetchNewestRelease, findMacAsset, findWindowsAsset, releaseVersion } fr
  * e devem apontar para a última release conhecida.
  */
 export const RELEASES_URL = 'https://github.com/vn-alves/autoclip.br/releases/latest'
+export const DOWNLOAD_VERSION = '2.0.4'
 
 export const WINDOWS_DOWNLOAD_URL =
-  'https://github.com/vn-alves/autoclip.br/releases/download/v2.0.3/AutoClip.Desktop_2.0.3_x64-setup.exe'
+  `https://github.com/vn-alves/autoclip.br/releases/download/v${DOWNLOAD_VERSION}/AutoClip.Desktop_${DOWNLOAD_VERSION}_x64-setup.exe`
 export const MACOS_DOWNLOAD_URL =
-  'https://github.com/vn-alves/autoclip.br/releases/download/v2.0.3/AutoClip.Desktop_2.0.3_aarch64.dmg'
+  `https://github.com/vn-alves/autoclip.br/releases/download/v${DOWNLOAD_VERSION}/AutoClip.Desktop_${DOWNLOAD_VERSION}_aarch64.dmg`
 
 
 export interface DownloadUrls {
@@ -26,9 +27,11 @@ export interface DownloadUrls {
 
 /** Busca os instaladores da release mais recente; em caso de erro, usa o fallback acima. */
 export async function resolveDownloadUrls(): Promise<DownloadUrls> {
-  const fallback: DownloadUrls = { windows: WINDOWS_DOWNLOAD_URL, macos: MACOS_DOWNLOAD_URL, version: null }
+  const fallback: DownloadUrls = { windows: WINDOWS_DOWNLOAD_URL, macos: MACOS_DOWNLOAD_URL, version: DOWNLOAD_VERSION }
   try {
     const data = await fetchNewestRelease()
+    const version = releaseVersion(data)
+    if (compareVersions(version, DOWNLOAD_VERSION) < 0) return fallback
     const assets: any[] = Array.isArray(data.assets) ? data.assets : []
     const exe = findWindowsAsset(assets)
     const dmg = findMacAsset(assets)
@@ -36,7 +39,7 @@ export async function resolveDownloadUrls(): Promise<DownloadUrls> {
     return {
       windows: exe?.browser_download_url || fallback.windows,
       macos: dmg?.browser_download_url || fallback.macos,
-      version: releaseVersion(data) || null,
+      version: version || DOWNLOAD_VERSION,
     }
   } catch {
     return fallback
