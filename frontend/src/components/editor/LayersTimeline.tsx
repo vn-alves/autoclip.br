@@ -25,7 +25,7 @@ const LayersTimeline: React.FC<LayersTimelineProps> = ({
   const ordered = [...layers].sort((a, b) => b.zIndex - a.zIndex)
 
   const startGesture = (event: React.PointerEvent, layer: VideoLayer, edge?: 'start' | 'end') => {
-    if (layer.isMain) { onSelect(layer.id); return }
+    if (layer.isMain && !layer.isDuplicate) { onSelect(layer.id); return }
     event.preventDefault()
     event.stopPropagation()
     onSelect(layer.id)
@@ -103,7 +103,7 @@ const LayersTimeline: React.FC<LayersTimelineProps> = ({
                 onClick={() => onSelect(layer.id)}
                 title={`${layer.name}: ${start.toFixed(1)}s – ${end.toFixed(1)}s`}
               >
-                {!layer.isMain && (
+                {!(layer.isMain && !layer.isDuplicate) && (
                   <>
                     <span
                       className="ac-layers-timeline-handle ac-layers-timeline-handle--start"

@@ -1,4 +1,5 @@
 import { isTauri } from './isTauri'
+import { cleanVersion, compareVersions, fetchNewestRelease, findMacAsset, findWindowsAsset, releaseVersion } from './githubReleases'
 
 /**
  * Atualização do app desktop direto pelo aplicativo: consulta a release mais recente no
@@ -6,7 +7,6 @@ import { isTauri } from './isTauri'
  * (comando Rust `download_and_install_update`, ver src-tauri/src/updater.rs).
  */
 const REPO = 'vn-alves/autoclip.br'
-const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`
 const DISMISS_KEY = 'autoclip.update.dismissed'
 
 export interface UpdateInfo {
@@ -29,17 +29,8 @@ export function detectPlatform(): Platform {
   return 'other'
 }
 
-const clean = (v: string) => v.trim().replace(/^v/i, '')
-
-export function compareVersions(a: string, b: string): number {
-  const pa = clean(a).split(/[.-]/).map((x) => parseInt(x, 10) || 0)
-  const pb = clean(b).split(/[.-]/).map((x) => parseInt(x, 10) || 0)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pa[i] || 0) - (pb[i] || 0)
-    if (d !== 0) return d > 0 ? 1 : -1
-  }
-  return 0
-}
+const clean = cleanVersion
+export { compareVersions }
 
 export async function getCurrentVersion(): Promise<string> {
   if (isTauri()) {
@@ -55,21 +46,24 @@ export async function getCurrentVersion(): Promise<string> {
 
 export async function checkForUpdate(): Promise<UpdateInfo> {
   const current = await getCurrentVersion()
-  const res = await fetch(LATEST_API, { headers: { Accept: 'application/vnd.github+json' } })
-  if (!res.ok) throw new Error(`Não foi possível verificar atualizações (HTTP ${res.status})`)
-  const data = await res.json()
+  let data: any
+  try {
+    data = await fetchNewestRelease()
+  } catch (e: any) {
+    throw new Error(`Não foi possível verificar atualizações (${e?.message || 'sem conexão'})`)
+  }
   const latest = clean(String(data.tag_name || '0.0.0'))
   const assets: any[] = Array.isArray(data.assets) ? data.assets : []
   const platform = detectPlatform()
   const asset =
     platform === 'windows'
-      ? assets.find((a) => /x64-setup\.exe$/i.test(a.name)) || assets.find((a) => /\.exe$/i.test(a.name))
+      ? findWindowsAsset(assets)
       : platform === 'macos'
-        ? assets.find((a) => /\.dmg$/i.test(a.name))
+        ? findMacAsset(assets)
         : null
   // A versão real é a do instalador (ex.: AutoClip.Desktop_2.0.3_aarch64.dmg); a tag pode divergir.
   const assetVersion = asset?.name?.match(/_(\d+\.\d+\.\d+)_/)?.[1]
-  const effective = assetVersion || latest
+  const effective = assetVersion || releaseVersion(data) || latest
   return {
     current,
     latest: effective,
