@@ -3,8 +3,8 @@
 - [x] Create layers at the playhead through “NEW LAYER +”.
 - [x] Add drag, edge resizing, snapping, and a snap guide to layer bars.
 - [x] Keep timeline edits synchronized with panel fields, history, save, export, and visibility.
-- [x] Make preview wheel zoom view-only.
+- [x] Keep the preview and resize bounds fixed; wheel zooms only video content inside each layer.
 - [x] Add focused temporal calculation and snapping tests.
-- [ ] Verify the complete editor interaction with a real clip in the browser (blocked by no editor clip in preview data).
+- [x] Verify layer creation, independent ranges, snapping, visibility, and internal video zoom with real media (browser test video; desktop API responses intercepted).
 - [x] Prepare the desktop application release metadata and checks for v2.0.2.
 - [x] Confirm the exact GitHub release artifacts and publishing steps.

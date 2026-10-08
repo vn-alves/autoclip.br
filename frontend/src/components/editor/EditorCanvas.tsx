@@ -3,6 +3,7 @@ import Moveable, { type OnDrag, type OnDragEnd, type OnResize, type OnResizeEnd,
 import { BackgroundConfig, CANVAS_DIMENSIONS, CanvasFormat, NormalizedTransform, SubtitlePosition, SubtitleSegment, SubtitleStyle, SubtitleTransition, WordHighlight, VideoLayer, findActiveLayers } from './types'
 import SubtitleLayer from './SubtitleLayer'
 import { snapToCenter } from './centerSnap'
+import { videoContentZoom } from './videoContentZoom'
 
 interface EditorCanvasProps {
   format: CanvasFormat
@@ -54,7 +55,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   const frameRef = useRef<HTMLDivElement>(null)
   const bgVideoRef = useRef<HTMLVideoElement>(null)
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
-  const [viewZoom, setViewZoom] = useState(1)
+  const [contentZooms, setContentZooms] = useState<Record<string, number>>({})
   const [subtitleSelected, setSubtitleSelected] = useState(false)
   // Registro dos elementos <video> de cada layer — precisa ser estado (não só ref) pra o
   // Moveable perceber quando o elemento da layer selecionada já existe no DOM.
@@ -181,7 +182,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   // ganhar um layout box maior que o frame.
   const syncVideoToProxy = (proxy: HTMLElement) => {
     if (!selectedLayerId || frameSize.width === 0) return
-    const el = videoEls[selectedLayerId]
+    const el = videoEls[selectedLayerId]?.parentElement
     if (!el) return
     const left = parseFloat(proxy.style.left || '0')
     const top = parseFloat(proxy.style.top || '0')
@@ -247,7 +248,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   useLayoutEffect(() => {
     if (frameSize.width === 0) return
     for (const layer of layers) {
-      const el = videoEls[layer.id]
+      const el = videoEls[layer.id]?.parentElement
       if (!el) continue
       const left = layer.transform.x * frameSize.width
       const top = layer.transform.y * frameSize.height
@@ -340,13 +341,15 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
     })
   }
 
-  // Zoom de visualização: altera somente a escala local da prévia. Não toca no transform da
-  // layer, no histórico ou no edit_config usado por salvar/exportar.
+  // Magnify only the selected video's content inside its unchanged clipping rectangle.
+  // The frame, proxy, outline and handles never receive this content scale.
   const handleWheel = (e: React.WheelEvent) => {
     if (frameSize.width === 0) return
     e.preventDefault()
     e.stopPropagation()
-    setViewZoom((zoom) => Math.min(3, Math.max(0.5, zoom + (e.deltaY < 0 ? 0.1 : -0.1))))
+    const layerId = selectedLayer?.id ?? mainLayer?.id
+    if (!layerId) return
+    setContentZooms((zooms) => ({ ...zooms, [layerId]: videoContentZoom(zooms[layerId] ?? 1, e.deltaY) }))
   }
 
   const handleDrag = ({ target, left, top }: OnDrag) => {
@@ -415,7 +418,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
       <div
         ref={frameRef}
         className="ac-editor-frame"
-        style={{ width: frameSize.width, height: frameSize.height, transform: `scale(${viewZoom})` }}
+        style={{ width: frameSize.width, height: frameSize.height }}
         onMouseDown={(e) => { if (e.target === frameRef.current) { onSelectLayer(null); setSubtitleSelected(false) } }}
         onWheel={handleWheel}
       >
@@ -442,8 +445,13 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
           const isActive = activeIds.has(layer.id)
           const isTrueMain = layer.isMain && !layer.isDuplicate
           return (
-            <video
+            <div
               key={layer.id}
+              className="ac-editor-video-bounds"
+              data-layer-id={layer.id}
+              style={{ zIndex: layer.zIndex, display: isActive ? undefined : 'none' }}
+            >
+            <video
               ref={getVideoRefCallback(layer.id, isTrueMain)}
               src={layer.source}
               className="ac-editor-video"
@@ -455,7 +463,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
               // object-fit, não uma trava no resize. 'contain'/Normal continua 'fill' (a caixa
               // já É o retângulo final calculado por fitTransform ou por um resize manual
               // travado em proporção nos cantos, ver handleResize).
-              style={{ zIndex: layer.zIndex, display: isActive ? undefined : 'none', objectFit: layer.fitMode === 'cover' ? 'cover' : 'fill' }}
+              style={{ objectFit: layer.fitMode === 'cover' ? 'cover' : 'fill', transform: `scale(${contentZooms[layer.id] ?? 1})` }}
               onClick={(e) => { e.stopPropagation(); setSubtitleSelected(false); onSelectLayer(layer.id) }}
               // Arraste manual (pointer events): funciona igual no navegador e no app desktop
               // (WebKit do macOS/WebView2 não repassam bem o arraste do <video> ao Moveable).
@@ -512,6 +520,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
               onPlay={isTrueMain ? () => onMainPlayStateChange(true) : undefined}
               onPause={isTrueMain ? () => onMainPlayStateChange(false) : undefined}
             />
+            </div>
           )
         })}
         </div>

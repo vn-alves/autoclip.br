@@ -1,2 +1,3 @@
 Keep center snapping in a browser-safe pure helper and share it between manual pointer dragging and Moveable dragging; screen-pixel hysteresis must not change video size or constrain movement outside the frame.
 Keep layer timeline movement, resizing, and snapping in a browser-safe pure helper so pointer interactions and regression tests share the same temporal rules.
+Apply wheel magnification to video content inside a clipped layer wrapper, never the preview frame or Moveable proxy, so selection geometry stays independent of content zoom.

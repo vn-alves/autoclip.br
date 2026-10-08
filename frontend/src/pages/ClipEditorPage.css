@@ -175,8 +175,6 @@
   border-radius: 12px;
   box-shadow: var(--ac-shadow);
   overflow: visible;
-  transform-origin: center;
-  transition: transform 100ms ease-out;
 }
 
 /* Recorta SÓ o vídeo/fundo — as alças do Moveable ficam no .ac-editor-frame (sem
@@ -203,8 +201,18 @@
   object-fit: cover;
 }
 
+.ac-editor-video-bounds {
+  position: absolute;
+  overflow: hidden;
+  transform-origin: 0 0;
+}
+
 .ac-editor-video {
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: center;
   /* NUNCA contain/cover aqui: o box (width/height inline, ver EditorCanvas) já É o retângulo
      final calculado por fitTransform (cover/contain) OU o resultado de um resize manual —
      `fill` faz o elemento <video> ocupar exatamente esse box, sem re-letterboxar por dentro.
