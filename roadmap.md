@@ -6,3 +6,5 @@
 - [x] Make preview wheel zoom view-only.
 - [x] Add focused temporal calculation and snapping tests.
 - [ ] Verify the complete editor interaction with a real clip in the browser (blocked by no editor clip in preview data).
+- [ ] Prepare the desktop application release metadata and checks for v2.0.2.
+- [ ] Confirm the exact GitHub release artifacts and publishing steps.
