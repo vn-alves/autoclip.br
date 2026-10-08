@@ -135,7 +135,12 @@ let secondaryLayerCounter = 0
 /** Nova layer secundária a partir de um arquivo local (item 4) — ainda sem `transform` ajustado
  * ao aspect ratio real do vídeo (isso só é conhecido depois do onLoadedMetadata, ver
  * EditorCanvas); usa um enquadramento central razoável como ponto de partida. */
-export function createVideoLayerFromFile(file: File, existingLayers: VideoLayer[], duration: number): VideoLayer {
+export function createVideoLayerFromFile(
+  file: File,
+  existingLayers: VideoLayer[],
+  duration: number,
+  startTime = 0,
+): VideoLayer {
   secondaryLayerCounter += 1
   const nextIndex = existingLayers.length + 1
   const maxZ = existingLayers.reduce((m, l) => Math.max(m, l.zIndex), 0)
@@ -147,7 +152,7 @@ export function createVideoLayerFromFile(file: File, existingLayers: VideoLayer[
     visible: true,
     transform: { x: 0.15, y: 0.15, width: 0.5, height: 0.5, rotation: 0 },
     zIndex: maxZ + 1,
-    startTime: 0,
+    startTime: Math.min(Math.max(0, startTime), Math.max(0, duration - 0.1)),
     endTime: duration > 0 ? duration : Number.POSITIVE_INFINITY,
     isMain: false,
     fitMode: 'cover',

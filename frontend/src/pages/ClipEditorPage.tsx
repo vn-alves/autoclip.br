@@ -552,7 +552,7 @@ const ClipEditorPage: React.FC = () => {
         let nextLayers = s.layers
         let lastId: string | null = null
         for (const file of accepted) {
-          const layer = createVideoLayerFromFile(file, nextLayers, duration)
+          const layer = createVideoLayerFromFile(file, nextLayers, duration, currentTime)
           pendingFilesRef.current[layer.id] = file
           nextLayers = [...nextLayers, layer]
           lastId = layer.id
@@ -1108,8 +1108,12 @@ const ClipEditorPage: React.FC = () => {
           <LayersTimeline
             layers={editorState.layers}
             duration={duration}
+            currentTime={currentTime}
             selectedLayerId={editorState.selectedLayerId}
             onSelect={handleSelectLayer}
+            onTimeRangeChange={handleLayerTimeRangeChange}
+            onAddFiles={handleAddVideoFiles}
+            allowAdd={!isWebClip}
           />
         </main>
 
