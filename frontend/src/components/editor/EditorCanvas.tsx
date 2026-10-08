@@ -54,6 +54,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   const frameRef = useRef<HTMLDivElement>(null)
   const bgVideoRef = useRef<HTMLVideoElement>(null)
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
+  const [viewZoom, setViewZoom] = useState(1)
   const [subtitleSelected, setSubtitleSelected] = useState(false)
   // Registro dos elementos <video> de cada layer — precisa ser estado (não só ref) pra o
   // Moveable perceber quando o elemento da layer selecionada já existe no DOM.
@@ -339,39 +340,13 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
     })
   }
 
-  // Zoom via scroll do mouse na layer selecionada — escala proporcional ancorada na posição
-  // do cursor dentro do frame (o ponto sob o cursor fica fixo). Não muda o tamanho do frame
-  // nem afeta outras layers; o resultado final é um commit de NormalizedTransform (mesma
-  // pipeline de drag/resize). O scroll fora de qualquer seleção é ignorado.
+  // Zoom de visualização: altera somente a escala local da prévia. Não toca no transform da
+  // layer, no histórico ou no edit_config usado por salvar/exportar.
   const handleWheel = (e: React.WheelEvent) => {
-    if (!selectedLayer || frameSize.width === 0) return
+    if (frameSize.width === 0) return
     e.preventDefault()
     e.stopPropagation()
-    const ZOOM_STEP = 0.08
-    const factor = e.deltaY < 0 ? 1 + ZOOM_STEP : 1 - ZOOM_STEP
-    const t = selectedLayer.transform
-    const newWidth = Math.min(10, Math.max(0.05, t.width * factor))
-    const newHeight = Math.min(10, Math.max(0.05, t.height * factor))
-    // Ponto do cursor em coordenadas normalizadas (0..1) relativas ao frame.
-    const frameRect = frameRef.current?.getBoundingClientRect()
-    let anchorNx = 0.5
-    let anchorNy = 0.5
-    if (frameRect && frameRect.width > 0 && frameRect.height > 0) {
-      anchorNx = Math.min(1, Math.max(0, (e.clientX - frameRect.left) / frameRect.width))
-      anchorNy = Math.min(1, Math.max(0, (e.clientY - frameRect.top) / frameRect.height))
-    }
-    // Mantém o ponto sob o cursor fixo: newX = anchorNx - (anchorNx - oldX) * (newW / oldW)
-    const scaleX = t.width > 0 ? newWidth / t.width : 1
-    const scaleY = t.height > 0 ? newHeight / t.height : 1
-    const newX = anchorNx - (anchorNx - t.x) * scaleX
-    const newY = anchorNy - (anchorNy - t.y) * scaleY
-    onLayerTransformChange(selectedLayer.id, {
-      x: newX,
-      y: newY,
-      width: newWidth,
-      height: newHeight,
-      rotation: t.rotation,
-    })
+    setViewZoom((zoom) => Math.min(3, Math.max(0.5, zoom + (e.deltaY < 0 ? 0.1 : -0.1))))
   }
 
   const handleDrag = ({ target, left, top }: OnDrag) => {
@@ -440,7 +415,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
       <div
         ref={frameRef}
         className="ac-editor-frame"
-        style={{ width: frameSize.width, height: frameSize.height }}
+        style={{ width: frameSize.width, height: frameSize.height, transform: `scale(${viewZoom})` }}
         onMouseDown={(e) => { if (e.target === frameRef.current) { onSelectLayer(null); setSubtitleSelected(false) } }}
         onWheel={handleWheel}
       >

@@ -175,6 +175,8 @@
   border-radius: 12px;
   box-shadow: var(--ac-shadow);
   overflow: visible;
+  transform-origin: center;
+  transition: transform 100ms ease-out;
 }
 
 /* Recorta SÓ o vídeo/fundo — as alças do Moveable ficam no .ac-editor-frame (sem
@@ -706,13 +708,35 @@
   color: var(--ac-sub);
 }
 
-/* Timeline de layers (só leitura/seleção — editar é no painel) */
+/* Timeline de layers */
 .ac-layers-timeline {
   margin-top: 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+
+.ac-layers-timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ac-sub);
+  text-transform: uppercase;
+}
+
+.ac-layers-timeline-add {
+  border: 0;
+  background: transparent;
+  color: var(--ac-sub);
+  font: inherit;
+  cursor: pointer;
+  padding: 3px 0;
+}
+
+.ac-layers-timeline-add:hover { color: var(--ac-accent); }
 
 .ac-layers-timeline-row {
   display: flex;
@@ -736,6 +760,7 @@
   height: 14px;
   background: var(--ac-line-2);
   border-radius: 4px;
+  overflow: visible;
 }
 
 .ac-layers-timeline-bar {
@@ -745,9 +770,13 @@
   border-radius: 4px;
   background: color-mix(in srgb, var(--ac-accent) 55%, var(--ac-line-2));
   border: none;
-  cursor: pointer;
+  cursor: grab;
   padding: 0;
+  touch-action: none;
+  overflow: visible;
 }
+
+.ac-layers-timeline-bar:active { cursor: grabbing; }
 
 .ac-layers-timeline-bar--selected {
   background: var(--ac-accent);
@@ -756,4 +785,28 @@
 
 .ac-layers-timeline-bar--hidden {
   opacity: 0.35;
+}
+
+.ac-layers-timeline-handle {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 6px;
+  border-radius: 3px;
+  background: var(--ac-card);
+  border: 1px solid var(--ac-accent);
+  cursor: ew-resize;
+}
+
+.ac-layers-timeline-handle--start { left: -3px; }
+.ac-layers-timeline-handle--end { right: -3px; }
+
+.ac-layers-timeline-snap {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 1px;
+  z-index: 4;
+  background: var(--ac-accent);
+  pointer-events: none;
 }
