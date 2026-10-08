@@ -223,7 +223,7 @@ jobs:
           body: |
             ## AutoClip Desktop ${{ github.ref_name }}
 
-            ### Novidades da v2.0.2
+            ### Novidades da ${{ github.ref_name }}
             - As barras das camadas de vídeo agora podem ser movidas e redimensionadas diretamente na timeline.
             - Encaixe magnético no início, centro e fim do vídeo, no playhead e nas bordas de outras camadas.
             - `NEW LAYER +` adiciona o vídeo na posição atual do playhead.

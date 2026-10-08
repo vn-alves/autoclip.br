@@ -8,3 +8,5 @@
 - [x] Verify layer creation, independent ranges, snapping, visibility, and internal video zoom with real media (browser test video; desktop API responses intercepted).
 - [x] Prepare the desktop application release metadata and checks for v2.0.2.
 - [x] Confirm the exact GitHub release artifacts and publishing steps.
+- [x] Align internal desktop/frontend versions and lockfiles with v2.0.3.
+- [x] Verify macOS and Windows installer version configuration for v2.0.3 (3 regression tests pass; native installers must still be generated on GitHub).

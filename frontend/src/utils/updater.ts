@@ -67,7 +67,7 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
       : platform === 'macos'
         ? assets.find((a) => /\.dmg$/i.test(a.name))
         : null
-  // A versão real é a do instalador (ex.: AutoClip.Desktop_2.0.2_aarch64.dmg); a tag pode divergir.
+  // A versão real é a do instalador (ex.: AutoClip.Desktop_2.0.3_aarch64.dmg); a tag pode divergir.
   const assetVersion = asset?.name?.match(/_(\d+\.\d+\.\d+)_/)?.[1]
   const effective = assetVersion || latest
   return {
