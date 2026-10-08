@@ -9,7 +9,7 @@ const release = (version: string) => ({
   ],
 })
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals() })
 
 describe('desktop download version', () => {
   it('uses 2.0.4 installers when GitHub is unavailable', async () => {
