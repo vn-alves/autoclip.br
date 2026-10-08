@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Sobe o AutoClip em modo local (preview):
+#   - backend FastAPI em 127.0.0.1:8000 (SQLite, sem Redis)
+#   - frontend Vite em 0.0.0.0:8080 (com proxy /api -> backend)
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+export AUTOCLIP_DESKTOP_MODE=1
+export AUTOCLIP_MODE=desktop
+export AUTOCLIP_APP_DIR="${AUTOCLIP_APP_DIR:-$ROOT/data}"
+export AUTOCLIP_DATA_DIR="$AUTOCLIP_APP_DIR"
+export DATABASE_URL="${DATABASE_URL:-sqlite:///$ROOT/data/autoclip.db}"
+export LOG_FILE="${LOG_FILE:-$ROOT/data/logs/backend.log}"
+export PYTHONPATH="$ROOT:${PYTHONPATH:-}"
+export PYTHONUNBUFFERED=1
+
+mkdir -p data/logs data/uploads data/temp data/output data/projects
+
+# python: usa/cria um venv local com as dependencias do backend
+PY="$ROOT/.venv/bin/python"
+if [ ! -x "$PY" ]; then
+  python3 -m venv "$ROOT/.venv" >> data/logs/setup.log 2>&1 || true
+fi
+if [ -x "$PY" ]; then
+  "$PY" -c "import sqlalchemy, uvicorn, fastapi" >/dev/null 2>&1 || \
+    "$PY" -m pip install -q -r requirements.txt >> data/logs/setup.log 2>&1 || true
+else
+  PY="python3"
+fi
+
+# frontend: garante dependencias instaladas E INTEIRAS.
+# O node_modules nao sobrevive a reinicios do ambiente; quando um pacote fica
+# instalado pela metade (ex.: antd sem a pasta dist) o Vite devolve 500 e a tela
+# fica em branco. Aqui validamos os arquivos de entrada e reparamos antes de subir.
+frontend_deps_ok() {
+  [ -x "$ROOT/frontend/node_modules/.bin/vite" ] || return 1
+  [ -f "$ROOT/frontend/node_modules/antd/dist/antd.js" ] || return 1
+  [ -d "$ROOT/frontend/node_modules/antd/es" ] || return 1
+  [ -f "$ROOT/frontend/node_modules/react/index.js" ] || return 1
+  [ -f "$ROOT/frontend/node_modules/react-dom/index.js" ] || return 1
+  [ -d "$ROOT/frontend/node_modules/react-router-dom" ] || return 1
+  return 0
+}
+
+for attempt in 1 2 3; do
+  frontend_deps_ok && break
+  echo "[dev] dependencias do frontend incompletas (tentativa $attempt), instalando..."
+  npm --prefix frontend install --no-audit --no-fund >> data/logs/setup.log 2>&1 || true
+  if ! frontend_deps_ok && [ "$attempt" -ge 2 ]; then
+    rm -rf "$ROOT/frontend/node_modules/antd"
+    npm --prefix frontend install antd@5.27.4 --no-audit --no-fund >> data/logs/setup.log 2>&1 || true
+  fi
+done
+
+if ! frontend_deps_ok; then
+  echo "[dev] aviso: dependencias do frontend seguem incompletas, veja data/logs/setup.log"
+fi
+
+# limpa o cache do Vite quando ele aponta para modulos que nao existem mais
+if [ -d "$ROOT/frontend/node_modules/.vite" ] && ! frontend_deps_ok; then
+  rm -rf "$ROOT/frontend/node_modules/.vite"
+fi
+
+
+BACKEND_PORT="${BACKEND_PORT:-8000}"
+FRONTEND_PORT="${FRONTEND_PORT:-8080}"
+
+# banco (idempotente)
+"$PY" init_database.py >> data/logs/init_db.log 2>&1 || \
+  echo "[dev] aviso: init_database falhou, veja data/logs/init_db.log"
+
+# backend
+"$PY" -m uvicorn backend.app_factory:create_app --factory --host 127.0.0.1 --port "$BACKEND_PORT" \
+  >> data/logs/backend.stdout.log 2>&1 &
+BACKEND_PID=$!
+
+cleanup() { kill "$BACKEND_PID" 2>/dev/null || true; }
+trap cleanup EXIT INT TERM
+
+for _ in $(seq 1 40); do
+  curl -sf -o /dev/null "http://127.0.0.1:$BACKEND_PORT/health" && break
+  sleep 1
+done
+
+export BACKEND_URL="http://127.0.0.1:$BACKEND_PORT"
+exec npm --prefix frontend run dev -- --host 0.0.0.0 --port "$FRONTEND_PORT"

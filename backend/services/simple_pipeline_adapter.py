@@ -1,0 +1,402 @@
+"""
+简化的流水线适配器 - 集成新的进度系统
+"""
+
+import logging
+from typing import Dict, Any, Optional, Callable
+from pathlib import Path
+
+from backend.services.simple_progress import emit_progress, clear_progress, start_heartbeat, stop_heartbeat
+from backend.pipeline.step1_outline import run_step1_outline
+from backend.pipeline.step2_timeline import run_step2_timeline
+from backend.pipeline.step3_scoring import run_step3_scoring
+from backend.pipeline.step4_title import run_step4_title
+from backend.pipeline.step5_clustering import run_step5_clustering
+from backend.pipeline.step6_video import run_step6_video
+from backend.pipeline.fallback_clips import build_fallback_clips
+
+logger = logging.getLogger(__name__)
+
+
+class SimplePipelineAdapter:
+    """简化的流水线适配器，使用固定阶段进度系统"""
+    
+    def __init__(self, project_id: str, task_id: str):
+        self.project_id = project_id
+        self.task_id = task_id
+
+    def _export_progress_callback(self) -> Callable[[int, int], None]:
+        """Reporta progresso incremental durante o corte dos vídeos (etapa EXPORT) — sem isso
+        ela ficava em 0% até TODOS os clipes terminarem (ver VideoProcessor.batch_extract_clips),
+        e um corte real mas lento (vídeo longo, muitos clipes) ficava indistinguível de um
+        travamento de verdade pro usuário. Reserva os últimos 10% pra geração de coleções
+        (não rastreada por clipe)."""
+        def _on_progress(done: int, total: int) -> None:
+            if total <= 0:
+                return
+            subpercent = min(90, round((done / total) * 90))
+            emit_progress(self.project_id, "EXPORT", f"Cortando vídeo {done}/{total}...", subpercent=subpercent)
+        return _on_progress
+
+    def _prompt_files(self, project_dir: Path):
+        """按项目类型选 prompt/<category>/，桌面端以前从没传过，类别目录形同虚设。"""
+        from backend.core.shared_config import get_prompt_files
+        import json
+
+        category = "default"
+        meta_path = project_dir / "project.json"
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                category = meta.get("video_category") or "default"
+            except Exception:  # noqa: BLE001
+                pass
+        if category == "default":
+            try:
+                from backend.core.database import SessionLocal
+                from backend.models.project import Project
+                db = SessionLocal()
+                try:
+                    row = db.query(Project).filter(Project.id == self.project_id).first()
+                    if row is not None and row.project_type is not None:
+                        category = row.project_type.value if hasattr(row.project_type, "value") else str(row.project_type)
+                finally:
+                    db.close()
+            except Exception:  # noqa: BLE001
+                pass
+        logger.info(f"使用类别提示词: {category}")
+        self._category = category
+        return get_prompt_files(category)
+
+    def _clip_overrides(self) -> Dict[str, Any]:
+        """Duração média do corte / quantidade de cortes escolhidas na tela de
+        importação (POST /youtube/download, /bilibili/download), salvas em
+        Project.processing_config['clip_options']. Ausente = deixa o profile
+        automático (DurationProfile) decidir, como sempre foi."""
+        try:
+            from backend.core.database import SessionLocal
+            from backend.models.project import Project
+            db = SessionLocal()
+            try:
+                row = db.query(Project).filter(Project.id == self.project_id).first()
+                opts = (row.processing_config or {}).get("clip_options") if row else None
+                if opts:
+                    return {
+                        "target_clip_seconds": opts.get("target_clip_seconds"),
+                        "clip_count": opts.get("clip_count"),
+                    }
+            finally:
+                db.close()
+        except Exception:  # noqa: BLE001
+            pass
+        return {}
+
+
+    async def _generate_subtitle_automatically(self, video_path: str, metadata_dir: Path) -> Path:
+        """
+        自动生成字幕文件
+        
+        Args:
+            video_path: 视频文件路径
+            metadata_dir: 元数据目录
+            
+        Returns:
+            生成的SRT文件路径，如果失败返回None
+        """
+        try:
+            logger.info(f"开始为视频 {video_path} 自动生成字幕")
+            
+            # 更新进度
+            from backend.services.simple_progress import emit_progress
+            emit_progress(self.project_id, "SUBTITLE", "正在使用AI生成字幕...", subpercent=25)
+            
+            # 使用Whisper本地模型生成字幕
+            try:
+                from backend.utils.speech_recognizer import generate_subtitle_for_video
+                from pathlib import Path
+                
+                video_file_path = Path(video_path)
+                if not video_file_path.exists():
+                    logger.error(f"视频文件不存在: {video_path}")
+                    return None
+                
+                logger.info("尝试使用Whisper本地模型生成字幕")
+                output_path = metadata_dir / f"{video_file_path.stem}.srt"
+                # Modelo configurável via AUTOCLIP_WHISPER_MODEL. O padrão é "tiny":
+                # sem chave de IA este é o caminho usado, e "base" podia levar
+                # dezenas de minutos em vídeos longos. "tiny" é ~5x mais rápido.
+                import os
+                whisper_model = os.getenv("AUTOCLIP_WHISPER_MODEL", "tiny")
+                srt_path = generate_subtitle_for_video(
+                    video_file_path,
+                    output_path=output_path,
+                    method="whisper_local",
+                    model=whisper_model,
+                    language="auto"
+                )
+                
+                if srt_path and srt_path.exists():
+                    logger.info(f"Whisper生成字幕成功: {srt_path}")
+                    emit_progress(self.project_id, "SUBTITLE", "AI字幕生成完成", subpercent=40)
+                    return srt_path
+                else:
+                    logger.warning("Whisper生成字幕失败")
+                    
+            except Exception as e:
+                logger.warning(f"Whisper生成字幕失败: {e}")
+            
+            logger.error("Whisper字幕生成失败")
+            return None
+            
+        except Exception as e:
+            logger.error(f"自动生成字幕过程中发生错误: {e}")
+            return None
+        
+    async def process_project_sync(self, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
+        """
+        同步处理项目 - 使用简化的进度系统
+        
+        Args:
+            input_video_path: 输入视频路径
+            input_srt_path: 输入SRT路径
+            
+        Returns:
+            处理结果
+        """
+        logger.info(f"开始处理项目: {self.project_id}")
+        
+        try:
+            # 清除之前的进度数据
+            clear_progress(self.project_id)
+            start_heartbeat(self.project_id)
+            
+            # 创建必要的目录结构 - 使用正确的路径
+            from backend.core.path_utils import get_project_directory
+            project_dir = get_project_directory(self.project_id)
+            metadata_dir = project_dir / "metadata"
+            output_dir = project_dir / "output"
+            metadata_dir.mkdir(parents=True, exist_ok=True)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            # 项目内专属输出子目录
+            clips_output_dir = output_dir / "clips"
+            collections_output_dir = output_dir / "collections"
+            clips_output_dir.mkdir(parents=True, exist_ok=True)
+            collections_output_dir.mkdir(parents=True, exist_ok=True)
+            prompt_files = self._prompt_files(project_dir)
+            clip_overrides = self._clip_overrides()
+
+            # 阶段1: 素材准备
+            emit_progress(self.project_id, "INGEST", "素材准备完成")
+            
+            # 阶段2: 字幕处理
+            emit_progress(self.project_id, "SUBTITLE", "开始字幕处理")
+            
+            # Step 1: 大纲提取
+            logger.info("执行Step 1: 大纲提取")
+            if input_srt_path and Path(input_srt_path).exists():
+                logger.info(f"使用现有SRT文件: {input_srt_path}")
+                outlines = run_step1_outline(Path(input_srt_path), metadata_dir=metadata_dir, prompt_files=prompt_files, clip_overrides=clip_overrides)
+            else:
+                logger.warning("没有SRT文件，尝试自动生成字幕")
+                # 尝试自动生成字幕
+                srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
+                if srt_path and srt_path.exists():
+                    logger.info(f"自动生成字幕成功: {srt_path}")
+                    outlines = run_step1_outline(srt_path, metadata_dir=metadata_dir, prompt_files=prompt_files, clip_overrides=clip_overrides)
+                else:
+                    logger.warning("自动生成字幕失败，创建空大纲")
+                    # 创建一个空的大纲文件
+                    outlines = []
+                    outline_file = metadata_dir / "step1_outline.json"
+                    import json
+                    with open(outline_file, 'w', encoding='utf-8') as f:
+                        json.dump(outlines, f, ensure_ascii=False, indent=2)
+            emit_progress(self.project_id, "SUBTITLE", "字幕处理完成", subpercent=50)
+            
+            # 阶段3: 内容分析
+            emit_progress(self.project_id, "ANALYZE", "开始内容分析")
+            
+            # Step 2: 时间线提取
+            logger.info("执行Step 2: 时间线提取")
+            if outlines:  # 只有当有大纲时才执行后续步骤
+                timeline_data = run_step2_timeline(
+                    metadata_dir / "step1_outline.json",
+                    metadata_dir=metadata_dir,
+                    prompt_files=prompt_files,
+                )
+                emit_progress(self.project_id, "ANALYZE", "时间线提取完成", subpercent=50)
+                
+                # Step 3: 内容评分
+                logger.info("执行Step 3: 内容评分")
+                scored_clips = run_step3_scoring(
+                    metadata_dir / "step2_timeline.json",
+                    metadata_dir=metadata_dir,
+                    prompt_files=prompt_files,
+                )
+                emit_progress(self.project_id, "ANALYZE", "内容分析完成", subpercent=100)
+            else:
+                logger.warning("没有大纲数据，跳过时间线提取和内容评分")
+                # 创建空的时间线和评分文件
+                timeline_file = metadata_dir / "step2_timeline.json"
+                scored_file = metadata_dir / "step3_high_score_clips.json"
+                import json
+                with open(timeline_file, 'w', encoding='utf-8') as f:
+                    json.dump([], f, ensure_ascii=False, indent=2)
+                with open(scored_file, 'w', encoding='utf-8') as f:
+                    json.dump([], f, ensure_ascii=False, indent=2)
+                # 初始化空变量
+                timeline_data = []
+                scored_clips = []
+                emit_progress(self.project_id, "ANALYZE", "内容分析完成", subpercent=100)
+            
+            # 阶段4: 片段定位
+            emit_progress(self.project_id, "HIGHLIGHT", "开始片段定位")
+
+            # Step 4: 标题生成
+            logger.info("执行Step 4: 标题生成")
+            titled_clips = None
+            collections = None
+            video_result = None
+            if outlines:  # 只有当有大纲时才执行后续步骤
+                # Qualquer etapa de IA daqui em diante pode falhar (chave inválida,
+                # rate limit, timeout). Isso não pode derrubar o projeto inteiro com
+                # zero cortes - cai no mesmo fallback determinístico usado quando o
+                # Step 1 não produz nenhum outline.
+                try:
+                    titled_clips = run_step4_title(
+                        metadata_dir / "step3_high_score_clips.json",
+                        metadata_dir=str(metadata_dir),
+                        prompt_files=prompt_files,
+                    )
+                    emit_progress(self.project_id, "HIGHLIGHT", "标题生成完成", subpercent=40)
+
+                    # Step 5: 主题聚类
+                    logger.info("执行Step 5: 主题聚类")
+                    collections = run_step5_clustering(
+                        metadata_dir / "step4_titles.json",
+                        metadata_dir=str(metadata_dir),
+                        prompt_files=prompt_files,
+                    )
+                    emit_progress(self.project_id, "HIGHLIGHT", "片段定位完成", subpercent=100)
+
+                    # 阶段5: 视频导出
+                    emit_progress(self.project_id, "EXPORT", "开始视频导出")
+
+                    # Step 6: 视频切割
+                    logger.info("执行Step 6: 视频切割")
+                    video_result = run_step6_video(
+                        metadata_dir / "step4_titles.json",
+                        metadata_dir / "step5_collections.json",
+                        input_video_path,
+                        output_dir=output_dir,
+                        clips_dir=str(clips_output_dir),
+                        collections_dir=str(collections_output_dir),
+                        metadata_dir=str(metadata_dir),
+                        on_progress=self._export_progress_callback(),
+                    )
+                    if video_result.get("clips_generated", 0) < 1:
+                        raise RuntimeError("A análise de IA não produziu cortes válidos")
+                except Exception as ai_error:
+                    logger.warning(f"Pipeline de IA falhou depois do Step 1 ({ai_error}); usando fallback a partir das legendas")
+                    titled_clips = None
+                    collections = None
+                    video_result = None
+
+            if titled_clips is None:
+                if outlines:
+                    logger.warning("Fallback determinístico acionado após falha da IA")
+                else:
+                    logger.warning("A análise de IA não produziu resultados; criando cortes a partir das legendas")
+                # A falha de uma chave/modelo não pode concluir o projeto com zero cortes.
+                # Use as marcações das legendas para produzir cortes equilibrados e válidos.
+                from backend.utils.text_processor import TextProcessor
+                titles_file = metadata_dir / "step4_titles.json"
+                collections_file = metadata_dir / "step5_collections.json"
+                import json
+                subtitle_source = Path(input_srt_path) if input_srt_path else None
+                srt_entries = TextProcessor.parse_srt(subtitle_source) if subtitle_source and subtitle_source.exists() else []
+                from backend.pipeline.quality import profile_from_srt
+                fallback_profile = profile_from_srt(
+                    srt_entries,
+                    target_clip_seconds=clip_overrides.get("target_clip_seconds"),
+                    clip_count=clip_overrides.get("clip_count"),
+                ) if srt_entries else None
+                titled_clips = build_fallback_clips(srt_entries, profile=fallback_profile, category=getattr(self, "_category", None))
+                if not titled_clips:
+                    raise RuntimeError("Não foi possível criar cortes: as legendas estão vazias ou inválidas")
+                with open(titles_file, 'w', encoding='utf-8') as f:
+                    json.dump(titled_clips, f, ensure_ascii=False, indent=2)
+                with open(collections_file, 'w', encoding='utf-8') as f:
+                    json.dump([], f, ensure_ascii=False, indent=2)
+                collections = []
+                emit_progress(self.project_id, "HIGHLIGHT", "片段定位完成", subpercent=100)
+                emit_progress(self.project_id, "EXPORT", "开始视频导出")
+                video_result = run_step6_video(
+                    titles_file,
+                    collections_file,
+                    Path(input_video_path),
+                    output_dir=output_dir,
+                    clips_dir=str(clips_output_dir),
+                    collections_dir=str(collections_output_dir),
+                    metadata_dir=str(metadata_dir),
+                    on_progress=self._export_progress_callback(),
+                )
+                if video_result.get("clips_generated", 0) < 1:
+                    raise RuntimeError("O corte do vídeo falhou; nenhum arquivo foi gerado")
+            emit_progress(self.project_id, "EXPORT", "Salvando cortes...", subpercent=95)
+
+            # 自动同步数据到数据库 (antes do DONE: a barra ficava em 100% enquanto os cortes
+            # ainda não apareciam porque a sincronização vinha depois)
+            try:
+                from backend.services.data_sync_service import DataSyncService
+                from backend.core.database import SessionLocal
+                
+                db = SessionLocal()
+                try:
+                    sync_service = DataSyncService(db)
+                    sync_result = sync_service.sync_project_from_filesystem(self.project_id, project_dir)
+                    if sync_result.get("success"):
+                        logger.info(f"项目 {self.project_id} 数据同步成功: {sync_result}")
+                    else:
+                        logger.error(f"项目 {self.project_id} 数据同步失败: {sync_result}")
+                finally:
+                    db.close()
+            except Exception as e:
+                logger.error(f"数据同步失败: {e}")
+
+            stop_heartbeat(self.project_id)
+            emit_progress(self.project_id, "DONE", "Processamento concluído")
+            logger.info(f"项目处理完成: {self.project_id}")
+            return {
+                "status": "succeeded",
+                "project_id": self.project_id,
+                "task_id": self.task_id,
+                "result": {
+                    "outlines": outlines,
+                    "timeline": timeline_data,
+                    "scored_clips": scored_clips,
+                    "titled_clips": titled_clips,
+                    "collections": collections,
+                    "video_result": video_result
+                }
+            }
+            
+        except Exception as e:
+            error_msg = f"Falha no processamento: {str(e)}"
+            logger.error(error_msg)
+
+            # 发送失败状态
+            stop_heartbeat(self.project_id)
+            emit_progress(self.project_id, "DONE", error_msg)
+            
+            return {
+                "status": "failed",
+                "project_id": self.project_id,
+                "task_id": self.task_id,
+                "error": error_msg
+            }
+
+
+def create_simple_pipeline_adapter(project_id: str, task_id: str) -> SimplePipelineAdapter:
+    """创建简化的流水线适配器实例"""
+    return SimplePipelineAdapter(project_id, task_id)

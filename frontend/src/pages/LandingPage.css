@@ -1,0 +1,345 @@
+/* Landing Page — exclusiva da versão Web (ver App.tsx). Usa os mesmos tokens --ac-* do resto
+   do produto (ver DESIGN.md / ac.css) — nenhuma cor nova, mesma fonte, mesmo raio de borda. */
+
+.lp {
+  min-height: 100vh;
+  background: var(--ac-bg);
+  color: var(--ac-ink);
+  overflow-x: hidden;
+}
+
+.lp h1, .lp h2, .lp h3 { font-family: var(--ac-font-sans); color: var(--ac-ink); margin: 0; }
+
+/* ---------------------------------------------------------------------------- header --- */
+.lp-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--ac-bg) 78%, transparent);
+  border-bottom: 1px solid var(--ac-line-2);
+}
+
+.lp-header-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  height: 64px;
+  padding: 0 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.lp-logo {
+  font-family: var(--ac-font-serif);
+  font-size: 24px;
+  color: var(--ac-ink);
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  flex: 0 0 auto;
+}
+.lp-logo em { font-style: italic; }
+
+.lp-nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  flex: 1 1 auto;
+  justify-content: center;
+}
+.lp-nav a {
+  font-size: 13.5px;
+  color: var(--ac-sub);
+  text-decoration: none;
+  transition: color var(--ac-t-micro, 100ms) ease-out;
+}
+.lp-nav a:hover { color: var(--ac-ink); }
+
+.lp-header-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+
+.lp-burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--ac-line);
+  background: var(--ac-card);
+  color: var(--ac-sub);
+  cursor: pointer;
+}
+
+.lp-mobile-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 24px 20px;
+  background: var(--ac-card);
+  border-bottom: 1px solid var(--ac-line);
+}
+.lp-mobile-menu a {
+  padding: 10px 4px;
+  font-size: 14px;
+  color: var(--ac-sub);
+  text-decoration: none;
+  border-bottom: 1px solid var(--ac-line-2);
+}
+.lp-mobile-menu .lp-btn { margin-top: 8px; width: 100%; justify-content: center; }
+
+/* ------------------------------------------------------------------------- buttons --- */
+.lp-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  border: 1px solid var(--ac-line);
+  background: var(--ac-card);
+  color: var(--ac-ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--ac-t-micro, 100ms) ease-out, border-color var(--ac-t-micro, 100ms) ease-out, opacity var(--ac-t-micro, 100ms) ease-out, transform var(--ac-t-micro, 100ms) ease-out;
+}
+.lp-btn:hover { border-color: var(--ac-muted); }
+.lp-btn--cta { background: var(--ac-cta-bg); color: var(--ac-cta-fg); border-color: var(--ac-cta-bg); }
+.lp-btn--cta:hover { opacity: 0.88; border-color: var(--ac-cta-bg); }
+.lp-btn--text { border-color: transparent; background: transparent; color: var(--ac-sub); }
+.lp-btn--text:hover { color: var(--ac-ink); background: var(--ac-line-2); }
+.lp-btn--lg { height: 44px; padding: 0 22px; font-size: 14.5px; }
+
+/* ---------------------------------------------------------------------------- hero --- */
+.lp-hero {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 88px 24px 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lp-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ac-accent);
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.lp-hero h1 {
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.lp-hero-sub {
+  margin: 20px 0 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ac-sub);
+  max-width: 62ch;
+}
+
+.lp-hero-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+/* Screenshots reais do produto — não é mockup (ver DESIGN.md: preferir telas reais a imagens
+   inventadas). Duas colunas assimétricas: a lista de cortes (larga) + o painel do Editor
+   (alto), do mesmo jeito que aparecem de verdade na ferramenta. */
+.lp-showcase {
+  margin-top: 56px;
+  width: 100%;
+  max-width: 960px;
+  display: grid;
+  grid-template-columns: 1.8fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.lp-showcase img {
+  width: 100%;
+  display: block;
+  border-radius: 16px;
+  border: 1px solid var(--ac-line);
+  box-shadow: var(--ac-shadow);
+  background: var(--ac-card);
+}
+
+.lp-showcase-wide { height: 300px; object-fit: cover; object-position: top; }
+.lp-showcase-tall { height: 460px; object-fit: cover; object-position: top; }
+
+/* -------------------------------------------------------------------------- sections --- */
+.lp-section {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 96px 56px 0;
+}
+
+.lp-section h2 {
+  font-size: 28px;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: -0.01em;
+}
+
+.lp-section-sub {
+  margin: 12px auto 0;
+  max-width: 56ch;
+  text-align: center;
+  color: var(--ac-sub);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.lp-hint {
+  margin: 24px auto 0;
+  max-width: 60ch;
+  text-align: center;
+  color: var(--ac-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------------- features --- */
+.lp-features {
+  margin-top: 40px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.lp-feature-card {
+  background: var(--ac-card);
+  border: 1px solid var(--ac-line);
+  border-radius: 16px;
+  padding: 24px;
+  transition: transform var(--ac-t-short, 200ms) ease-out, box-shadow var(--ac-t-short, 200ms) ease-out;
+}
+.lp-feature-card:hover { transform: translateY(-2px); box-shadow: var(--ac-shadow); }
+
+.lp-feature-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--ac-line-2);
+  color: var(--ac-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.lp-feature-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+.lp-feature-card p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--ac-sub); }
+
+/* ------------------------------------------------------------------------- platforms --- */
+.lp-platforms {
+  margin-top: 40px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.lp-platform-card {
+  background: var(--ac-card);
+  border: 1px solid var(--ac-line);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.lp-platform-card h3 { font-size: 15px; font-weight: 600; }
+.lp-platform-card p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--ac-sub); }
+
+/* ------------------------------------------------------------------------------ steps --- */
+.lp-steps {
+  margin-top: 40px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.lp-step { text-align: left; }
+.lp-step-n {
+  display: block;
+  font-family: var(--ac-font-serif);
+  font-size: 30px;
+  color: var(--ac-accent);
+  margin-bottom: 10px;
+}
+.lp-step h3 { font-size: 14.5px; font-weight: 600; margin-bottom: 6px; }
+.lp-step p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ac-sub); }
+
+/* --------------------------------------------------------------------------- cta final --- */
+.lp-cta-final {
+  max-width: 1120px;
+  margin: 96px auto 0;
+  padding: 56px;
+  text-align: center;
+  border-top: 1px solid var(--ac-line);
+}
+.lp-cta-final h2 { font-size: 26px; font-weight: 600; margin-bottom: 24px; }
+
+/* -------------------------------------------------------------------------------- footer --- */
+.lp-footer {
+  max-width: 1120px;
+  margin: 56px auto 0;
+  padding: 24px 56px 40px;
+  border-top: 1px solid var(--ac-line);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px;
+  font-size: 12.5px;
+  color: var(--ac-sub);
+}
+.lp-footer a { color: var(--ac-sub); text-decoration: none; }
+.lp-footer a:hover { color: var(--ac-ink); }
+
+/* ---------------------------------------------------------------------- responsividade --- */
+@media (max-width: 1024px) {
+  .lp-features, .lp-platforms { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lp-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .lp-nav { display: none; }
+  .lp-header-actions { display: none; }
+  .lp-burger { display: flex; }
+  .lp-hero h1 { font-size: 34px; }
+  .lp-showcase-wide { height: 220px; }
+  .lp-showcase-tall { height: 340px; }
+}
+
+@media (max-width: 640px) {
+  .lp-header-inner { padding: 0 20px; }
+  .lp-hero { padding: 56px 20px 0; }
+  .lp-hero h1 { font-size: 28px; }
+  .lp-hero-sub { font-size: 14.5px; }
+  .lp-section { padding: 56px 20px 0; }
+  .lp-section h2 { font-size: 22px; }
+  .lp-features, .lp-platforms, .lp-steps { grid-template-columns: 1fr; }
+  .lp-showcase { grid-template-columns: 1fr; }
+  .lp-showcase-wide, .lp-showcase-tall { height: 220px; }
+  .lp-cta-final { padding: 40px 20px; margin-top: 56px; }
+  .lp-footer { padding: 20px 20px 32px; }
+}
