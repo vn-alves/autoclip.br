@@ -212,12 +212,23 @@ jobs:
           done
           ls -la dist
 
+      - name: Generate SHA-256 checksums
+        working-directory: dist
+        run: sha256sum AutoClip.Desktop_* > checksums.txt
+
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           body: |
             ## AutoClip Desktop ${{ github.ref_name }}
+
+            ### Novidades da v2.0.2
+            - As barras das camadas de vídeo agora podem ser movidas e redimensionadas diretamente na timeline.
+            - Encaixe magnético no início, centro e fim do vídeo, no playhead e nas bordas de outras camadas.
+            - `NEW LAYER +` adiciona o vídeo na posição atual do playhead.
+            - O scroll sobre a prévia agora altera somente o zoom de visualização, sem modificar o tamanho salvo da camada.
+            - `checksums.txt` contém os hashes SHA-256 dos instaladores.
 
             ### macOS (Apple Silicon) — `.dmg`
             - Built-in portable Python runtime + static ffmpeg/ffprobe — no

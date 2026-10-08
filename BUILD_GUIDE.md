@@ -15,7 +15,7 @@
 ```
 src-tauri/target/release/bundle/macos/
 ├── AutoClip Desktop.app                    # 应用包（~550M）
-└── AutoClip Desktop_1.0.0_aarch64.dmg      # DMG 安装包（~260M）
+└── AutoClip Desktop_2.0.2_aarch64.dmg      # DMG 安装包（~260M）
 ```
 
 脚本各步骤说明见 [`scripts/README.md`](scripts/README.md)。
@@ -32,14 +32,14 @@ src-tauri/target/release/bundle/macos/
 
 ## CI / 发布（GitHub Actions）
 
-`.github/workflows/desktop-build.yml` 跑同一个 `build_macos_arm.sh`：
+`.github/workflows/desktop-build.yml` 并行构建 macOS Apple Silicon 和 Windows x64：
 
 ```bash
-# 手动触发：仓库页面 → Actions → "Desktop Build (macOS arm64)" → Run workflow
+# 手动触发：仓库页面 → Actions → "Desktop Build" → Run workflow
 
 # 或打 tag 触发，并自动把 DMG 挂到 GitHub Release：
-git tag v1.0.0
-git push origin v1.0.0
+git tag v2.0.2
+git push origin v2.0.2
 ```
 
 ## 安装与首次运行
@@ -67,5 +67,5 @@ DMG 是 ad-hoc 签名（未做 Apple 公证），所以：
 
 ## 已知限制
 
-- 仅 Apple Silicon (arm64)，暂无 Intel / Windows / Linux 包
+- macOS 仅提供 Apple Silicon (arm64)；Windows 提供 x64；暂无 Intel mac / Linux 包
 - ad-hoc 签名、未公证，首次需右键打开
