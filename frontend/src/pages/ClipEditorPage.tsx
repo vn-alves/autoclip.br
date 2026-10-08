@@ -495,7 +495,9 @@ const ClipEditorPage: React.FC = () => {
     setEditorState((s) => {
       const sourceLayer = s.layers.find((l) => l.id === layerId)
       if (!sourceLayer) return s
-      const newLayer = duplicateVideoLayer(sourceLayer, s.layers)
+      const dup = duplicateVideoLayer(sourceLayer, s.layers)
+      // Cópia ganha intervalo próprio e finito (o principal usa Infinity = o corte todo).
+      const newLayer = Number.isFinite(dup.endTime) || duration <= 0 ? dup : { ...dup, endTime: duration }
       // Se for duplicata do vídeo principal (ou de uma já duplicada que usa o arquivo local), copia
       // a referência no pendingFilesRef (se for upload local). Mas a layer principal tem URL web.
       if (pendingFilesRef.current[sourceLayer.id]) {

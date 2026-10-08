@@ -103,7 +103,7 @@ const LayersTimeline: React.FC<LayersTimelineProps> = ({
                 onClick={() => onSelect(layer.id)}
                 title={`${layer.name}: ${start.toFixed(1)}s – ${end.toFixed(1)}s`}
               >
-                {!layer.isMain && (
+                {!(layer.isMain && !layer.isDuplicate) && (
                   <>
                     <span
                       className="ac-layers-timeline-handle ac-layers-timeline-handle--start"
