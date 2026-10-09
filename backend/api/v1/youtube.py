@@ -173,6 +173,14 @@ def _friendly_yt_error(error: Exception) -> str:
                 "Eles podem ter expirado: exporte um cookies.txt novo (estando logado no YouTube) "
                 "e envie de novo, ou importe o arquivo de vídeo direto do seu computador."
             )
+        from ...core.path_utils import is_desktop_mode
+        if is_desktop_mode():
+            return (
+                "O YouTube pediu verificação para este vídeo. Entre na sua conta do YouTube "
+                "no Chrome, Edge, Firefox ou Safari, feche o navegador e tente de novo — o AutoClip "
+                "usa essa sessão automaticamente. Se continuar, envie um cookies.txt na tela de "
+                "importação ou importe o arquivo de vídeo direto do seu computador."
+            )
         return (
             "O YouTube está pedindo verificação para este vídeo a partir deste servidor. "
             "Envie um arquivo cookies.txt de uma conta logada do YouTube na tela de importação "
@@ -185,6 +193,29 @@ def _friendly_yt_error(error: Exception) -> str:
 def _with_client(ydl_opts: dict, client: str) -> dict:
     opts = dict(ydl_opts)
     opts['extractor_args'] = {'youtube': {'player_client': [client]}}
+    return opts
+
+
+def _local_browser_candidates(explicit_browser: Optional[str] = None) -> list:
+    """No aplicativo desktop o yt-dlp roda no computador do usuário, então pode usar
+    a sessão do YouTube já logada nos navegadores instalados — sem cookies.txt."""
+    from ...core.path_utils import is_desktop_mode
+    if not is_desktop_mode() or get_cookies_file():
+        return []
+    if sys.platform == 'darwin':
+        browsers = ['chrome', 'safari', 'firefox', 'brave', 'edge', 'chromium']
+    elif sys.platform.startswith('win'):
+        browsers = ['chrome', 'edge', 'firefox', 'brave', 'opera', 'chromium']
+    else:
+        browsers = ['chrome', 'firefox', 'chromium', 'brave', 'edge']
+    used = (explicit_browser or '').lower()
+    return [b for b in browsers if b != used]
+
+
+def _with_browser(ydl_opts: dict, browser: str) -> dict:
+    opts = dict(ydl_opts)
+    opts.pop('cookiefile', None)
+    opts['cookiesfrombrowser'] = (browser,)
     return opts
 
 
@@ -389,7 +420,16 @@ async def parse_youtube_video(
                     raise
                 # O YouTube pediu verificação: tenta os clientes alternativos
                 last_error = e
-                for fallback in YT_CLIENT_FALLBACKS:
+                for local_browser in _local_browser_candidates(browser):
+                    try:
+                        logger.warning(f"YouTube pediu verificação, usando a sessão do navegador: {local_browser}")
+                        info_dict = await loop.run_in_executor(None, extract_info_sync, url, local_browser)
+                        last_error = None
+                        break
+                    except Exception as browser_error:
+                        logger.warning(f"Sessão do {local_browser} não serviu: {browser_error}")
+                if last_error:
+                  for fallback in YT_CLIENT_FALLBACKS:
                     try:
                         logger.warning(f"YouTube pediu verificação, tentando cliente alternativo: {fallback}")
                         info_dict = await loop.run_in_executor(None, extract_info_sync, url, None, fallback)
@@ -474,7 +514,17 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
         if video_info is None and info_error is not None:
             if not _is_bot_check_error(info_error):
                 raise Exception(_friendly_yt_error(info_error))
-            for fallback in YT_CLIENT_FALLBACKS:
+            for local_browser in _local_browser_candidates(request.browser):
+                try:
+                    logger.warning(f"YouTube pediu verificação, usando a sessão do navegador: {local_browser}")
+                    video_info = await loop.run_in_executor(
+                        None, extract_info_sync, request.url, _with_browser(ydl_opts, local_browser)
+                    )
+                    info_error = None
+                    break
+                except Exception as browser_error:
+                    logger.warning(f"Sessão do {local_browser} não serviu: {browser_error}")
+            for fallback in (YT_CLIENT_FALLBACKS if info_error else []):
                 try:
                     logger.warning(f"YouTube pediu verificação, tentando cliente alternativo: {fallback}")
                     video_info = await loop.run_in_executor(
@@ -734,6 +784,9 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         no_subs['writeautomaticsub'] = False
         attempts.append(no_subs)
 
+        # No desktop, usa a sessão do YouTube dos navegadores instalados
+        for local_browser in _local_browser_candidates(request.browser):
+            attempts.append(_with_browser(no_subs, local_browser))
         # Quando o YouTube pede verificação, tenta clientes alternativos
         for fallback in YT_CLIENT_FALLBACKS:
             attempts.append(_with_client(no_subs, fallback))
