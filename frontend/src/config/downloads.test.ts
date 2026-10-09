@@ -16,8 +16,8 @@ describe('desktop download version', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
     const urls = await resolveDownloadUrls()
     expect(urls.version).toBe('2.0.4')
-    expect(urls.windows).toBe('https://github.com/vn-alves/autoclip.br/releases/download/v2.0.4/AutoClip.Desktop_2.0.4_x64-setup.exe')
-    expect(urls.macos).toBe('https://github.com/vn-alves/autoclip.br/releases/download/v2.0.4/AutoClip.Desktop_2.0.4_aarch64.dmg')
+    expect(urls.windows).toBe('https://github.com/vn-alves/autoclip.br/releases/download/v2.0.4/AutoClip.Desktop_x64-setup.exe')
+    expect(urls.macos).toBe('https://github.com/vn-alves/autoclip.br/releases/download/v2.0.4/AutoClip.Desktop_aarch64.dmg')
   })
 
   it('does not replace 2.0.4 downloads with an older release', async () => {
