@@ -127,12 +127,55 @@ def _apply_ffmpeg(ydl_opts: dict) -> None:
         ydl_opts['ffmpeg_location'] = ffmpeg_path
 
 
+def _find_js_runtimes() -> dict:
+    """Executores de JavaScript que o yt-dlp usa para resolver os desafios do YouTube.
+
+    Sem um deles, os clientes que aceitam a sessão logada (web/web_safari/tv) só
+    devolvem miniaturas e o yt-dlp falha com "Requested format is not available".
+    O app desktop traz o deno junto do ffmpeg (resources/ffmpeg/deno[.exe]).
+    """
+    exe = 'deno.exe' if sys.platform.startswith('win') else 'deno'
+    candidates = [os.getenv('AUTOCLIP_DENO_PATH', '').strip()]
+    for var in ('AUTOCLIP_FFMPEG_PATH', 'FFMPEG_PATH'):
+        ffmpeg_path = os.getenv(var, '').strip()
+        if ffmpeg_path:
+            candidates.append(os.path.join(os.path.dirname(ffmpeg_path), exe))
+    candidates.append(shutil.which('deno') or '')
+
+    runtimes: dict = {}
+    deno = next((c for c in candidates if c and os.path.isfile(c)), None)
+    if deno:
+        runtimes['deno'] = {'path': deno}
+    node = shutil.which('node')
+    if node:
+        runtimes['node'] = {'path': node}
+    return runtimes
+
+
+def _apply_js_runtime(ydl_opts: dict) -> None:
+    runtimes = _find_js_runtimes()
+    if runtimes:
+        ydl_opts['js_runtimes'] = runtimes
+    # Se o pacote yt-dlp-ejs faltar, permite baixar o solucionador oficial do GitHub.
+    ydl_opts['remote_components'] = {'ejs:github'}
+
+
+def _js_runtime_cli_args() -> list:
+    args = []
+    for name, config in _find_js_runtimes().items():
+        args.extend(['--js-runtimes', f"{name}:{config['path']}"])
+    args.extend(['--remote-components', 'ejs:github'])
+    return args
+
+
 def _apply_cookies(ydl_opts: dict, browser: Optional[str] = None) -> None:
     """Cookies do YouTube: arquivo cookies.txt tem prioridade sobre o navegador.
 
     Em servidor sem navegador logado, 'cookiesfrombrowser' nunca funciona;
     o cookies.txt enviado pelo usuário é o caminho confiável.
     """
+    # Todo fluxo do yt-dlp passa por aqui: garante também o executor de JavaScript.
+    _apply_js_runtime(ydl_opts)
     cookies_file = get_cookies_file()
     if cookies_file:
         ydl_opts['cookiefile'] = cookies_file
@@ -140,8 +183,15 @@ def _apply_cookies(ydl_opts: dict, browser: Optional[str] = None) -> None:
         ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
 
 
-# Clientes alternativos usados quando o YouTube pede verificação ("não sou um robô")
-YT_CLIENT_FALLBACKS = ['web_safari', 'tv', 'android_vr', 'ios', 'mweb']
+# Clientes alternativos usados quando o YouTube pede verificação ("não sou um robô").
+# web_embedded e android_vr funcionam sem sessão logada; ficam por último como saída.
+YT_CLIENT_FALLBACKS = ['web_safari', 'tv', 'web_embedded', 'android_vr', 'ios', 'mweb']
+
+
+def _is_format_unavailable_error(error: Exception) -> bool:
+    text = str(error).lower()
+    return 'requested format is not available' in text or 'only images are available' in text
+
 
 
 def _is_bot_check_error(error: Exception) -> bool:
