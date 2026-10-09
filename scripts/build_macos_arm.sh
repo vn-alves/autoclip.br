@@ -59,6 +59,7 @@ for name in ffmpeg ffprobe; do
     fi
 done
 echo "OK (ffmpeg $(ls -lh "$RESOURCES_DIR/ffmpeg/ffmpeg" | awk '{print $5}'), ffprobe $(ls -lh "$RESOURCES_DIR/ffmpeg/ffprobe" | awk '{print $5}'))"
+bundle_deno aarch64-apple-darwin deno
 
 build_frontend
 

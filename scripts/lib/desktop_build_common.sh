@@ -245,6 +245,25 @@ build_frontend() {
     echo "OK"
 }
 
+# bundle_deno <deno-triple> <exe-name>
+# yt-dlp needs a JavaScript runtime to solve YouTube's challenges; without it the
+# logged-in clients only return thumbnails ("Requested format is not available").
+# Deno ships next to ffmpeg so the backend finds it without extra Tauri config.
+DENO_VERSION="${DENO_VERSION:-v2.6.10}"
+bundle_deno() {
+    local triple="$1" exe="$2"
+    echo "==> Bundling deno $DENO_VERSION ($triple) for YouTube"
+    local zip="build/ffmpeg-cache/deno-$DENO_VERSION-$triple.zip"
+    download_with_mirrors "$zip" 20000000 \
+        "https://github.com/denoland/deno/releases/download/$DENO_VERSION/deno-$triple.zip" \
+        "https://github.com/denoland/deno/releases/latest/download/deno-$triple.zip"
+    mkdir -p "$RESOURCES_DIR/ffmpeg"
+    extract_from_zip "$zip" "$exe" "$RESOURCES_DIR/ffmpeg/$exe"
+    chmod 755 "$RESOURCES_DIR/ffmpeg/$exe"
+    "$RESOURCES_DIR/ffmpeg/$exe" --version | head -1
+    echo "OK"
+}
+
 # Reads the version from tauri.conf.json so artifact names never drift from the app version.
 app_version() {
     local v
