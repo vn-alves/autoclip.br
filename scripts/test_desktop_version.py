@@ -7,7 +7,7 @@ import tomllib
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "2.0.3"
+EXPECTED_VERSION = "2.0.5"
 
 
 def read_json(path):
