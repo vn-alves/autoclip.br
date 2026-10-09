@@ -13,10 +13,11 @@ import { compareVersions, fetchNewestRelease, findMacAsset, findWindowsAsset, re
 export const RELEASES_URL = 'https://github.com/vn-alves/autoclip.br/releases/latest'
 export const DOWNLOAD_VERSION = '2.0.4'
 
+// Os instaladores publicados não levam a versão no nome do arquivo, só na pasta da tag.
 export const WINDOWS_DOWNLOAD_URL =
-  `https://github.com/vn-alves/autoclip.br/releases/download/v${DOWNLOAD_VERSION}/AutoClip.Desktop_${DOWNLOAD_VERSION}_x64-setup.exe`
+  `https://github.com/vn-alves/autoclip.br/releases/download/v${DOWNLOAD_VERSION}/AutoClip.Desktop_x64-setup.exe`
 export const MACOS_DOWNLOAD_URL =
-  `https://github.com/vn-alves/autoclip.br/releases/download/v${DOWNLOAD_VERSION}/AutoClip.Desktop_${DOWNLOAD_VERSION}_aarch64.dmg`
+  `https://github.com/vn-alves/autoclip.br/releases/download/v${DOWNLOAD_VERSION}/AutoClip.Desktop_aarch64.dmg`
 
 
 export interface DownloadUrls {
