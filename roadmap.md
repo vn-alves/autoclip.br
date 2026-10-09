@@ -1,5 +1,6 @@
 # Current task
 
+- [ ] Prevent added and cloned videos from covering subtitles and verify stacking with regression tests and real media.
 - [x] Create layers at the playhead through “NEW LAYER +”.
 - [x] Add drag, edge resizing, snapping, and a snap guide to layer bars.
 - [x] Keep timeline edits synchronized with panel fields, history, save, export, and visibility.
