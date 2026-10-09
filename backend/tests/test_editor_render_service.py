@@ -210,3 +210,28 @@ class TestFfmpegScaleFilterPerFitMode:
         spec = svc.build_render_spec(db=None, project_id="p", clip_id="c", edit_config=edit_config, tmp_dir=tmp_path)
         assert spec.subtitle_ass_path is None
         assert called == []
+
+
+class TestSubtitleCompositionOrder:
+    def test_subtitles_are_composited_after_every_video_even_with_high_z_index(self, tmp_path):
+        layers = [
+            svc.RenderLayerSpec(
+                input_path=tmp_path / filename, x=0, y=0, width=1080, height=1920,
+                z_index=z_index, start_time=0, end_time=6, has_audio=has_audio,
+            )
+            for filename, z_index, has_audio in [
+                ("main.mp4", 0, True), ("clone.mp4", 3001, False), ("added.mp4", 999999, False),
+            ]
+        ]
+        spec = svc.RenderSpec(
+            canvas_width=1080, canvas_height=1920, fps=30, duration=6,
+            background_color="#000000", layers=layers, subtitle_ass_path=tmp_path / "captions.ass",
+        )
+        cmd = svc._build_ffmpeg_command(spec, tmp_path / "out.mp4")
+        filters = cmd[cmd.index("-filter_complex") + 1].split(";")
+        overlays = [f for f in filters if "overlay=" in f]
+        assert len(overlays) == 3
+        final_video_output = overlays[-1].rsplit("[", 1)[1].removesuffix("]")
+        caption_filter = next(f for f in filters if "ass=" in f)
+        assert caption_filter.startswith(f"[{final_video_output}]ass=")
+        assert filters.index(caption_filter) > max(filters.index(f) for f in overlays)

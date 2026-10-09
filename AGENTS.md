@@ -2,3 +2,4 @@ Keep center snapping in a browser-safe pure helper and share it between manual p
 Keep layer timeline movement, resizing, and snapping in a browser-safe pure helper so pointer interactions and regression tests share the same temporal rules.
 Apply wheel magnification to video content inside a clipped layer wrapper, never the preview frame or Moveable proxy, so selection geometry stays independent of content zoom.
 Keep desktop download links and the known release floor in the shared download configuration; reject older API results so landing and settings downloads cannot silently downgrade.
+Keep all preview video layers inside the clipping container's stacking context and subtitles above it; arbitrary video ordering must never cover captions, matching the subtitle-last export composition.
