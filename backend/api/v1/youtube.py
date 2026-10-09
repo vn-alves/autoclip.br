@@ -17,6 +17,7 @@ import asyncio
 from datetime import datetime
 from contextlib import contextmanager
 import os
+import shutil
 import yt_dlp
 
 logger = logging.getLogger(__name__)
@@ -127,12 +128,55 @@ def _apply_ffmpeg(ydl_opts: dict) -> None:
         ydl_opts['ffmpeg_location'] = ffmpeg_path
 
 
+def _find_js_runtimes() -> dict:
+    """Executores de JavaScript que o yt-dlp usa para resolver os desafios do YouTube.
+
+    Sem um deles, os clientes que aceitam a sessão logada (web/web_safari/tv) só
+    devolvem miniaturas e o yt-dlp falha com "Requested format is not available".
+    O app desktop traz o deno junto do ffmpeg (resources/ffmpeg/deno[.exe]).
+    """
+    exe = 'deno.exe' if sys.platform.startswith('win') else 'deno'
+    candidates = [os.getenv('AUTOCLIP_DENO_PATH', '').strip()]
+    for var in ('AUTOCLIP_FFMPEG_PATH', 'FFMPEG_PATH'):
+        ffmpeg_path = os.getenv(var, '').strip()
+        if ffmpeg_path:
+            candidates.append(os.path.join(os.path.dirname(ffmpeg_path), exe))
+    candidates.append(shutil.which('deno') or '')
+
+    runtimes: dict = {}
+    deno = next((c for c in candidates if c and os.path.isfile(c)), None)
+    if deno:
+        runtimes['deno'] = {'path': deno}
+    node = shutil.which('node')
+    if node:
+        runtimes['node'] = {'path': node}
+    return runtimes
+
+
+def _apply_js_runtime(ydl_opts: dict) -> None:
+    runtimes = _find_js_runtimes()
+    if runtimes:
+        ydl_opts['js_runtimes'] = runtimes
+    # Se o pacote yt-dlp-ejs faltar, permite baixar o solucionador oficial do GitHub.
+    ydl_opts['remote_components'] = {'ejs:github'}
+
+
+def _js_runtime_cli_args() -> list:
+    args = []
+    for name, config in _find_js_runtimes().items():
+        args.extend(['--js-runtimes', f"{name}:{config['path']}"])
+    args.extend(['--remote-components', 'ejs:github'])
+    return args
+
+
 def _apply_cookies(ydl_opts: dict, browser: Optional[str] = None) -> None:
     """Cookies do YouTube: arquivo cookies.txt tem prioridade sobre o navegador.
 
     Em servidor sem navegador logado, 'cookiesfrombrowser' nunca funciona;
     o cookies.txt enviado pelo usuário é o caminho confiável.
     """
+    # Todo fluxo do yt-dlp passa por aqui: garante também o executor de JavaScript.
+    _apply_js_runtime(ydl_opts)
     cookies_file = get_cookies_file()
     if cookies_file:
         ydl_opts['cookiefile'] = cookies_file
@@ -140,8 +184,15 @@ def _apply_cookies(ydl_opts: dict, browser: Optional[str] = None) -> None:
         ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
 
 
-# Clientes alternativos usados quando o YouTube pede verificação ("não sou um robô")
-YT_CLIENT_FALLBACKS = ['web_safari', 'tv', 'android_vr', 'ios', 'mweb']
+# Clientes alternativos usados quando o YouTube pede verificação ("não sou um robô").
+# web_embedded e android_vr funcionam sem sessão logada; ficam por último como saída.
+YT_CLIENT_FALLBACKS = ['web_safari', 'tv', 'web_embedded', 'android_vr', 'ios', 'mweb']
+
+
+def _is_format_unavailable_error(error: Exception) -> bool:
+    text = str(error).lower()
+    return 'requested format is not available' in text or 'only images are available' in text
+
 
 
 def _is_bot_check_error(error: Exception) -> bool:
@@ -174,6 +225,15 @@ def _friendly_yt_error(error: Exception) -> str:
         return (
             "O ffmpeg não foi encontrado, então o vídeo e o áudio não puderam ser juntados. "
             "Reinstale o AutoClip ou instale o ffmpeg e tente de novo."
+        )
+    if _is_format_unavailable_error(error):
+        # Não é bloqueio: o YouTube respondeu, mas só com miniaturas — falta o executor
+        # de JavaScript que libera as qualidades de vídeo.
+        return (
+            "O YouTube não liberou nenhuma qualidade de vídeo para o AutoClip. "
+            "Atualize o AutoClip para a versão mais recente e tente de novo; se continuar, "
+            "importe o arquivo de vídeo direto do seu computador."
+            f" (Detalhe: {_yt_error_reason(error)})"
         )
     if _is_bot_check_error(error):
         if get_cookies_file():
@@ -359,6 +419,7 @@ async def parse_youtube_video(
                 '--skip-download',  # 修正参数名
                 '--no-cache-dir'
             ]
+            cmd.extend(_js_runtime_cli_args())
 
             cookies_file = None if skip_cookies else get_cookies_file()
             if cookies_file:
@@ -447,6 +508,13 @@ async def parse_youtube_video(
                         break
                     except Exception as fallback_error:
                         last_error = fallback_error
+                if last_error and (browser or get_cookies_file() or _local_browser_candidates(browser)):
+                    # Última saída: cliente que dispensa sessão, sem cookies.
+                    try:
+                        info_dict = await loop.run_in_executor(None, extract_info_sync, url, None, 'android_vr', True)
+                        last_error = None
+                    except Exception as anon_error:
+                        logger.warning(f"Cliente sem sessão também falhou: {anon_error}")
                 if last_error:
                     raise Exception(_friendly_yt_error(last_error))
 
@@ -544,6 +612,15 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
                     break
                 except Exception as fallback_error:
                     info_error = fallback_error
+            if info_error:
+                anon = _with_client(ydl_opts, 'android_vr')
+                _drop_browser_cookies(anon)
+                anon.pop('cookiefile', None)
+                try:
+                    video_info = await loop.run_in_executor(None, extract_info_sync, request.url, anon)
+                    info_error = None
+                except Exception as anon_error:
+                    logger.warning(f"Cliente sem sessão também falhou: {anon_error}")
             if info_error:
                 raise Exception(_friendly_yt_error(info_error))
 
@@ -800,6 +877,10 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         # Quando o YouTube pede verificação, tenta clientes alternativos
         for fallback in YT_CLIENT_FALLBACKS:
             attempts.append(_with_client(no_subs, fallback))
+        anon = _with_client(no_subs, 'android_vr')
+        _drop_browser_cookies(anon)
+        anon.pop('cookiefile', None)
+        attempts.append(anon)
 
         last_error = None
         attempt_errors = []

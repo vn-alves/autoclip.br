@@ -12,24 +12,24 @@ const release = (version: string) => ({
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('desktop download version', () => {
-  it('uses 2.0.6 installers when GitHub is unavailable', async () => {
+  it('uses 2.0.7 installers when GitHub is unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
     const urls = await resolveDownloadUrls()
-    expect(urls.version).toBe('2.0.6')
-    expect(urls.windows).toBe('https://github.com/vn-alves/autoclip.br/releases/download/v2.0.6/AutoClip.Desktop_x64-setup.exe')
-    expect(urls.macos).toBe('https://github.com/vn-alves/autoclip.br/releases/download/v2.0.6/AutoClip.Desktop_aarch64.dmg')
+    expect(urls.version).toBe('2.0.7')
+    expect(urls.windows).toBe('https://github.com/vn-alves/autoclip.br/releases/download/v2.0.7/AutoClip.Desktop_x64-setup.exe')
+    expect(urls.macos).toBe('https://github.com/vn-alves/autoclip.br/releases/download/v2.0.7/AutoClip.Desktop_aarch64.dmg')
   })
 
-  it('does not replace 2.0.6 downloads with an older release', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [release('2.0.5')] }))
-    expect(await resolveDownloadUrls()).toEqual({ windows: WINDOWS_DOWNLOAD_URL, macos: MACOS_DOWNLOAD_URL, version: '2.0.6' })
+  it('does not replace 2.0.7 downloads with an older release', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [release('2.0.6')] }))
+    expect(await resolveDownloadUrls()).toEqual({ windows: WINDOWS_DOWNLOAD_URL, macos: MACOS_DOWNLOAD_URL, version: '2.0.7' })
   })
 
   it('continues resolving newer published installers automatically', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [release('2.0.7')] }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [release('2.0.8')] }))
     const urls = await resolveDownloadUrls()
-    expect(urls.version).toBe('2.0.7')
-    expect(urls.windows).toBe(release('2.0.7').assets[0].browser_download_url)
-    expect(urls.macos).toBe(release('2.0.7').assets[1].browser_download_url)
+    expect(urls.version).toBe('2.0.8')
+    expect(urls.windows).toBe(release('2.0.8').assets[0].browser_download_url)
+    expect(urls.macos).toBe(release('2.0.8').assets[1].browser_download_url)
   })
 })

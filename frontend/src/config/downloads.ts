@@ -11,7 +11,7 @@ import { compareVersions, fetchNewestRelease, findMacAsset, findWindowsAsset, re
  * e devem apontar para a última release conhecida.
  */
 export const RELEASES_URL = 'https://github.com/vn-alves/autoclip.br/releases/latest'
-export const DOWNLOAD_VERSION = '2.0.6'
+export const DOWNLOAD_VERSION = '2.0.7'
 
 // Os instaladores publicados não levam a versão no nome do arquivo, só na pasta da tag.
 export const WINDOWS_DOWNLOAD_URL =

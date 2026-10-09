@@ -11,3 +11,5 @@
 - [x] Confirm the exact GitHub release artifacts and publishing steps.
 - [x] Align internal desktop/frontend versions and lockfiles with v2.0.3.
 - [x] Verify macOS and Windows installer version configuration for v2.0.3 (3 regression tests pass; native installers must still be generated on GitHub).- [x] Desktop YouTube import: use local browser session on bot-check; bump internal version to 2.0.5 (awaiting tag v2.0.5 on GitHub).
+- [x] Desktop YouTube "Requested format is not available": bundle deno + yt-dlp-ejs, distinct error message, version 2.0.7.
+- [ ] Publish tag v2.0.7 on GitHub and test YouTube import in the installed app (waiting on the user).

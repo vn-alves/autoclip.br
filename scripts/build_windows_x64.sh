@@ -56,6 +56,7 @@ for name in ffmpeg ffprobe; do
 done
 "$RESOURCES_DIR/ffmpeg/ffmpeg.exe" -version | head -1
 echo "OK (ffmpeg $(ls -lh "$RESOURCES_DIR/ffmpeg/ffmpeg.exe" | awk '{print $5}'), ffprobe $(ls -lh "$RESOURCES_DIR/ffmpeg/ffprobe.exe" | awk '{print $5}'))"
+bundle_deno x86_64-pc-windows-msvc deno.exe
 
 # ---- smoke test the portable runtime before spending minutes in cargo ----
 echo "==> Smoke-testing portable runtime imports"
