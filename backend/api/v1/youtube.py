@@ -508,6 +508,13 @@ async def parse_youtube_video(
                         break
                     except Exception as fallback_error:
                         last_error = fallback_error
+                if last_error and (browser or get_cookies_file() or _local_browser_candidates(browser)):
+                    # Última saída: cliente que dispensa sessão, sem cookies.
+                    try:
+                        info_dict = await loop.run_in_executor(None, extract_info_sync, url, None, 'android_vr', True)
+                        last_error = None
+                    except Exception as anon_error:
+                        logger.warning(f"Cliente sem sessão também falhou: {anon_error}")
                 if last_error:
                     raise Exception(_friendly_yt_error(last_error))
 
@@ -605,6 +612,15 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
                     break
                 except Exception as fallback_error:
                     info_error = fallback_error
+            if info_error:
+                anon = _with_client(ydl_opts, 'android_vr')
+                _drop_browser_cookies(anon)
+                anon.pop('cookiefile', None)
+                try:
+                    video_info = await loop.run_in_executor(None, extract_info_sync, request.url, anon)
+                    info_error = None
+                except Exception as anon_error:
+                    logger.warning(f"Cliente sem sessão também falhou: {anon_error}")
             if info_error:
                 raise Exception(_friendly_yt_error(info_error))
 
@@ -861,6 +877,10 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         # Quando o YouTube pede verificação, tenta clientes alternativos
         for fallback in YT_CLIENT_FALLBACKS:
             attempts.append(_with_client(no_subs, fallback))
+        anon = _with_client(no_subs, 'android_vr')
+        _drop_browser_cookies(anon)
+        anon.pop('cookiefile', None)
+        attempts.append(anon)
 
         last_error = None
         attempt_errors = []
