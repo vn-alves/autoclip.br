@@ -160,6 +160,15 @@ def _is_missing_ffmpeg_error(error: Exception) -> bool:
     return 'ffmpeg' in text and 'not installed' in text
 
 
+def _yt_error_reason(error: Exception) -> str:
+    """Última linha 'ERROR:' do yt-dlp, curta, para o usuário poder relatar a causa real."""
+    lines = [line.strip() for line in str(error).splitlines() if line.strip()]
+    errors = [line for line in lines if 'ERROR' in line]
+    reason = (errors or lines or ['desconhecido'])[-1]
+    reason = reason.split('ERROR:', 1)[-1].strip()
+    return reason[:220]
+
+
 def _friendly_yt_error(error: Exception) -> str:
     if _is_missing_ffmpeg_error(error):
         return (
@@ -180,6 +189,7 @@ def _friendly_yt_error(error: Exception) -> str:
                 "no Chrome, Edge, Firefox ou Safari, feche o navegador e tente de novo — o AutoClip "
                 "usa essa sessão automaticamente. Se continuar, envie um cookies.txt na tela de "
                 "importação ou importe o arquivo de vídeo direto do seu computador."
+                f" (Detalhe: {_yt_error_reason(error)})"
             )
         return (
             "O YouTube está pedindo verificação para este vídeo a partir deste servidor. "
