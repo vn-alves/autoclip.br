@@ -173,6 +173,14 @@ def _friendly_yt_error(error: Exception) -> str:
                 "Eles podem ter expirado: exporte um cookies.txt novo (estando logado no YouTube) "
                 "e envie de novo, ou importe o arquivo de vídeo direto do seu computador."
             )
+        from ...core.path_utils import is_desktop_mode
+        if is_desktop_mode():
+            return (
+                "O YouTube pediu verificação para este vídeo. Entre na sua conta do YouTube "
+                "no Chrome, Edge, Firefox ou Safari, feche o navegador e tente de novo — o AutoClip "
+                "usa essa sessão automaticamente. Se continuar, envie um cookies.txt na tela de "
+                "importação ou importe o arquivo de vídeo direto do seu computador."
+            )
         return (
             "O YouTube está pedindo verificação para este vídeo a partir deste servidor. "
             "Envie um arquivo cookies.txt de uma conta logada do YouTube na tela de importação "
@@ -185,6 +193,29 @@ def _friendly_yt_error(error: Exception) -> str:
 def _with_client(ydl_opts: dict, client: str) -> dict:
     opts = dict(ydl_opts)
     opts['extractor_args'] = {'youtube': {'player_client': [client]}}
+    return opts
+
+
+def _local_browser_candidates(explicit_browser: Optional[str] = None) -> list:
+    """No aplicativo desktop o yt-dlp roda no computador do usuário, então pode usar
+    a sessão do YouTube já logada nos navegadores instalados — sem cookies.txt."""
+    from ...core.path_utils import is_desktop_mode
+    if not is_desktop_mode() or get_cookies_file():
+        return []
+    if sys.platform == 'darwin':
+        browsers = ['chrome', 'safari', 'firefox', 'brave', 'edge', 'chromium']
+    elif sys.platform.startswith('win'):
+        browsers = ['chrome', 'edge', 'firefox', 'brave', 'opera', 'chromium']
+    else:
+        browsers = ['chrome', 'firefox', 'chromium', 'brave', 'edge']
+    used = (explicit_browser or '').lower()
+    return [b for b in browsers if b != used]
+
+
+def _with_browser(ydl_opts: dict, browser: str) -> dict:
+    opts = dict(ydl_opts)
+    opts.pop('cookiefile', None)
+    opts['cookiesfrombrowser'] = (browser,)
     return opts
 
 
