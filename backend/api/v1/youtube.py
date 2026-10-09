@@ -17,6 +17,7 @@ import asyncio
 from datetime import datetime
 from contextlib import contextmanager
 import os
+import shutil
 import yt_dlp
 
 logger = logging.getLogger(__name__)
@@ -225,6 +226,15 @@ def _friendly_yt_error(error: Exception) -> str:
             "O ffmpeg não foi encontrado, então o vídeo e o áudio não puderam ser juntados. "
             "Reinstale o AutoClip ou instale o ffmpeg e tente de novo."
         )
+    if _is_format_unavailable_error(error):
+        # Não é bloqueio: o YouTube respondeu, mas só com miniaturas — falta o executor
+        # de JavaScript que libera as qualidades de vídeo.
+        return (
+            "O YouTube não liberou nenhuma qualidade de vídeo para o AutoClip. "
+            "Atualize o AutoClip para a versão mais recente e tente de novo; se continuar, "
+            "importe o arquivo de vídeo direto do seu computador."
+            f" (Detalhe: {_yt_error_reason(error)})"
+        )
     if _is_bot_check_error(error):
         if get_cookies_file():
             return (
@@ -409,6 +419,7 @@ async def parse_youtube_video(
                 '--skip-download',  # 修正参数名
                 '--no-cache-dir'
             ]
+            cmd.extend(_js_runtime_cli_args())
 
             cookies_file = None if skip_cookies else get_cookies_file()
             if cookies_file:
