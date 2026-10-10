@@ -297,6 +297,9 @@ class LLMManager:
         try:
             response = self.current_provider.call(prompt, input_data, **kwargs)
             content = response.content
+            from .usage_tracker import record_usage
+            record_usage(self.settings.get("llm_provider", "dashscope"),
+                         response.model or self.settings.get("model_name", ""), response.usage)
             if cache_path is not None:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 cache_path.write_text(content, encoding="utf-8")

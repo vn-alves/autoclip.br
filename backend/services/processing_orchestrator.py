@@ -177,6 +177,8 @@ class ProcessingOrchestrator:
     
     def __init__(self, project_id: str, task_id: str, db: Session):
         self.project_id = project_id
+        from ..core.usage_tracker import set_usage_project
+        set_usage_project(project_id)
         self.task_id = task_id
         self.db = db
         
