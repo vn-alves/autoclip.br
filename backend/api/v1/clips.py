@@ -306,10 +306,16 @@ async def get_editor_source_info(clip_id: str, db: Session = Depends(get_db)):
     clip = db.query(Clip).filter(Clip.id == clip_id).first()
     if not clip:
         raise HTTPException(status_code=404, detail="Corte não encontrado")
+    clip_duration = None
+    try:
+        main_path = editor_render_service.resolve_main_clip_video_path(db, str(clip.project_id), clip_id)
+        clip_duration = editor_render_service._probe(main_path).get("duration")
+    except editor_render_service.EditorRenderError:
+        pass
     src = editor_render_service.resolve_original_source(db, str(clip.project_id), clip_id)
     if not src:
-        return {"available": False}
-    return {"available": True, "offset": src["offset"], "duration": src["duration"]}
+        return {"available": False, "clip_duration": clip_duration}
+    return {"available": True, "offset": src["offset"], "duration": src["duration"], "clip_duration": clip_duration}
 
 
 @router.get("/{clip_id}/editor/source")

@@ -735,7 +735,7 @@ export const projectApi = {
   },
 
   /** Vídeo original do projeto e onde o corte começa nele — permite estender o corte no Editor. */
-  getEditorSourceInfo: (clipId: string): Promise<{ available: boolean; offset?: number; duration?: number }> => {
+  getEditorSourceInfo: (clipId: string): Promise<{ available: boolean; offset?: number; duration?: number; clip_duration?: number | null }> => {
     return api.get(`/clips/${clipId}/editor/source-info`)
   },
 
