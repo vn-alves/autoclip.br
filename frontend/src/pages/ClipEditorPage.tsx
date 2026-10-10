@@ -17,6 +17,7 @@ import {
   VideoLayer, contentDuration, layerEndTime,
 } from '../components/editor/types'
 import { SourceBounds, timelineTrackDuration } from '../components/editor/layerTimelineMath'
+import { splitVideoLayer } from '../components/editor/splitVideoLayer'
 import { getWebClip, getWebVideoUrl, getWebProjectBlob } from '../webstore/projects'
 import { getWebClipSubtitles, saveWebClipSubtitles, getWebEditorConfig, saveWebEditorConfig } from '../webstore/editor'
 import { exportWebClip } from '../webpipeline/ffmpegClient'
@@ -530,19 +531,32 @@ const ClipEditorPage: React.FC = () => {
     })
   }
 
+  const handleSplitLayer = (layerId: string) => {
+    if (isWebClip) return
+    const newId = `segment-${crypto.randomUUID()}`
+    const layer = editorState.layers.find((item) => item.id === layerId)
+    if (!layer) return
+    const result = splitVideoLayer(layer, currentTime, duration, newId)
+    if (!result) return
+    const file = pendingFilesRef.current[layerId]
+    if (file) pendingFilesRef.current[newId] = file
+    const ratio = videoRatiosRef.current[layerId]
+    if (ratio) videoRatiosRef.current[newId] = ratio
+    setEditorState((s) => ({ ...s, layers: s.layers.flatMap((item) => item.id === layerId ? result : [item]), selectedLayerId: newId }))
+    setSaveState('idle')
+  }
+
   const handleRemoveLayer = (layerId: string) => {
     setEditorState((s) => {
       const layer = s.layers.find((l) => l.id === layerId)
-      if (!layer || (layer.isMain && !layer.isDuplicate)) return s
-      URL.revokeObjectURL(layer.source)
+      if (!layer || (layer.isMain && !layer.isDuplicate && !s.layers.some((item) => item.id !== layerId && item.isMain))) return s
+      // Media URLs and file references are shared by splits and history snapshots.
       return {
         ...s,
         layers: s.layers.filter((l) => l.id !== layerId),
         selectedLayerId: s.selectedLayerId === layerId ? null : s.selectedLayerId,
       }
     })
-    delete videoRatiosRef.current[layerId]
-    delete pendingFilesRef.current[layerId]
   }
 
   const handleLayerTimeRangeChange = (layerId: string, startTime: number, endTime: number, sourceStart?: number) => {
@@ -1172,6 +1186,11 @@ const ClipEditorPage: React.FC = () => {
             onTimeRangeChange={handleLayerTimeRangeChange}
             onAddFiles={handleAddVideoFiles}
             allowAdd={!isWebClip}
+            onSeek={handleSeek}
+            onSplit={handleSplitLayer}
+            onDuplicate={handleDuplicateLayer}
+            onRemove={handleRemoveLayer}
+            mainSourceOffset={sourceInfo?.offset ?? 0}
           />
         </main>
 

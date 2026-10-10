@@ -1,6 +1,9 @@
 import React, { useRef, useState } from 'react'
 import { VideoLayer, layerEndTime } from './types'
 import { SourceBounds, moveTimelineRange, resizeLayerRange, timelineSnapPoints } from './layerTimelineMath'
+import { Btn, Icon } from '../../ui'
+import { canSplitVideoLayer } from './splitVideoLayer'
+import VideoFilmstrip from './VideoFilmstrip'
 
 interface LayersTimelineProps {
   layers: VideoLayer[]
@@ -20,6 +23,11 @@ interface LayersTimelineProps {
   lockMain?: boolean
   onAddFiles: (files: FileList) => void
   allowAdd: boolean
+  onSeek: (time: number) => void
+  onSplit: (id: string) => void
+  onDuplicate: (id: string) => void
+  onRemove: (id: string) => void
+  mainSourceOffset: number
 }
 
 const ACCEPTED_VIDEO_TYPES = 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov'
@@ -28,12 +36,35 @@ const ACCEPTED_VIDEO_TYPES = 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.m
 const LayersTimeline: React.FC<LayersTimelineProps> = ({
   layers, duration, contentDuration, clipDuration, currentTime, selectedLayerId, onSelect, onTimeRangeChange,
   getSourceBounds, lockMain = false, onAddFiles, allowAdd,
+  onSeek, onSplit, onDuplicate, onRemove, mainSourceOffset,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [snapTime, setSnapTime] = useState<number | null>(null)
   if (duration <= 0) return null
   const ordered = [...layers].sort((a, b) => b.zIndex - a.zIndex)
   const isLocked = (layer: VideoLayer) => lockMain && layer.isMain && !layer.isDuplicate
+  const selected = layers.find((layer) => layer.id === selectedLayerId)
+  const tracks = new Map<string, VideoLayer[]>()
+  for (const layer of ordered) {
+    const key = layer.trackId ?? layer.id
+    tracks.set(key, [...(tracks.get(key) ?? []), layer])
+  }
+  const seekTrack = (event: React.PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const seek = (x: number) => onSeek(Math.max(0, Math.min(contentDuration, (x - rect.left) / rect.width * duration)))
+    seek(event.clientX)
+    event.currentTarget.setPointerCapture(event.pointerId)
+    const target = event.currentTarget
+    const move = (e: PointerEvent) => seek(e.clientX)
+    const end = () => {
+      target.removeEventListener('pointermove', move)
+      target.removeEventListener('pointerup', end)
+      target.removeEventListener('pointercancel', end)
+    }
+    target.addEventListener('pointermove', move)
+    target.addEventListener('pointerup', end)
+    target.addEventListener('pointercancel', end)
+  }
 
   const startGesture = (event: React.PointerEvent, layer: VideoLayer, edge?: 'start' | 'end') => {
     if (isLocked(layer)) { onSelect(layer.id); return }
@@ -80,6 +111,10 @@ const LayersTimeline: React.FC<LayersTimelineProps> = ({
     <div className="ac-layers-timeline">
       <div className="ac-layers-timeline-header">
         <span>Camadas</span>
+        <div className="ac-layers-timeline-actions">
+          <Btn variant="text" size="sm" aria-label="Dividir trecho" title="Dividir trecho no marcador" disabled={!selected || isLocked(selected) || !canSplitVideoLayer(selected, currentTime, clipDuration)} onClick={() => { if (selected) onSplit(selected.id) }}><Icon.Cut size={15} /></Btn>
+          <Btn variant="text" size="sm" aria-label="Duplicar trecho" title="Duplicar trecho" disabled={!selected || !allowAdd} onClick={() => { if (selected) onDuplicate(selected.id) }}><Icon.Copy size={15} /></Btn>
+          <Btn variant="text" size="sm" aria-label="Remover trecho" title="Remover trecho" disabled={!selected || (selected.isMain && !selected.isDuplicate && !layers.some((layer) => layer.id !== selected.id && layer.isMain))} onClick={() => { if (selected) onRemove(selected.id) }}><Icon.Trash size={15} /></Btn>
         {allowAdd && (
           <>
             <input
@@ -93,32 +128,45 @@ const LayersTimeline: React.FC<LayersTimelineProps> = ({
                 event.target.value = ''
               }}
             />
-            <button type="button" className="ac-layers-timeline-add" onClick={() => fileInputRef.current?.click()}>
+            <Btn variant="text" size="sm" className="ac-layers-timeline-add" onClick={() => fileInputRef.current?.click()}>
               NEW LAYER +
-            </button>
+            </Btn>
           </>
         )}
+        </div>
       </div>
-      {ordered.map((layer) => {
+      <div className="ac-layers-timeline-row">
+        <span className="ac-layers-timeline-label">Tempo</span>
+        <div className="ac-layers-timeline-ruler" onPointerDown={seekTrack}>
+          {[0, 1, 2, 3, 4].map((tick) => <span key={tick} style={{ left: `${tick * 25}%` }}>{(duration * tick / 4).toFixed(1)}s</span>)}
+        </div>
+      </div>
+      {[...tracks.entries()].map(([trackId, segments]) => (
+        <div key={trackId} className="ac-layers-timeline-row">
+          <span className="ac-layers-timeline-label" title={segments[0]?.name}>{segments[0]?.name}</span>
+          <div className="ac-layers-timeline-track" onPointerDown={seekTrack}>
+            <span className="ac-layers-timeline-playhead" style={{ left: `${currentTime / duration * 100}%` }} />
+            {snapTime !== null && <span className="ac-layers-timeline-snap" style={{ left: `${snapTime / duration * 100}%` }} />}
+            {segments.map((layer) => {
         const start = Math.max(0, layer.startTime)
         const end = Math.min(layerEndTime(layer, clipDuration), duration)
         const leftPct = (start / duration) * 100
         const widthPct = Math.max(0.5, ((end - start) / duration) * 100)
         return (
-          <div key={layer.id} className="ac-layers-timeline-row">
-            <span className="ac-layers-timeline-label" title={layer.name}>{layer.name}</span>
-            <div className="ac-layers-timeline-track">
-              {snapTime !== null && (
-                <span className="ac-layers-timeline-snap" style={{ left: `${(snapTime / duration) * 100}%` }} />
-              )}
-              <button
-                type="button"
+              <Btn
+                key={layer.id}
+                variant="text"
+                aria-label={`Selecionar trecho ${layer.name}`}
+                aria-pressed={layer.id === selectedLayerId}
                 className={`ac-layers-timeline-bar${layer.id === selectedLayerId ? ' ac-layers-timeline-bar--selected' : ''}${!layer.visible ? ' ac-layers-timeline-bar--hidden' : ''}`}
                 style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
                 onPointerDown={(event) => startGesture(event, layer)}
                 onClick={() => onSelect(layer.id)}
                 title={`${layer.name}: ${start.toFixed(1)}s – ${end.toFixed(1)}s`}
               >
+                <VideoFilmstrip source={layer.source} sourceStart={(layer.isMain ? mainSourceOffset : 0) + (layer.sourceStart || 0)} duration={end - start} />
+                <span className="ac-layers-timeline-segment-name">{layer.name}</span>
+                <span className="ac-layers-timeline-segment-time">{(end - start).toFixed(1)}s {layer.muted ? '· Mudo' : ''}</span>
                 {!isLocked(layer) && (
                   <>
                     <span
@@ -133,11 +181,12 @@ const LayersTimeline: React.FC<LayersTimelineProps> = ({
                     />
                   </>
                 )}
-              </button>
-            </div>
-          </div>
+              </Btn>
         )
       })}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

@@ -142,7 +142,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
                 <button type="button" disabled={isBottom} onClick={() => onMoveDown(layer.id)} aria-label="Mover para baixo" title="Mover para baixo">
                   <Icon.Down size={12} />
                 </button>
-                {!(layer.isMain && !layer.isDuplicate) && (
+                {(!(layer.isMain && !layer.isDuplicate) || layers.some((item) => item.id !== layer.id && item.isMain)) && (
                   <button type="button" onClick={() => onRemove(layer.id)} aria-label="Remover camada" title="Remover camada">
                     <Icon.Close size={12} />
                   </button>
