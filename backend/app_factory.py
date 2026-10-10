@@ -80,6 +80,26 @@ def create_app(mode: str = "web") -> FastAPI:
         else:
             logger.warning("未找到 API 密钥配置")
         
+        # Importações/processamentos interrompidos (app fechado no meio) ficavam para sempre
+        # "importando X%" — o trabalho vivia só na memória. Ao abrir, marcamos como falha.
+        try:
+            from backend.core.database import SessionLocal
+            from backend.models.project import Project, ProjectStatus
+            _db = SessionLocal()
+            try:
+                for _p in _db.query(Project).filter(Project.status.in_([ProjectStatus.PENDING, ProjectStatus.PROCESSING])).all():
+                    cfg = dict(_p.processing_config or {})
+                    if _p.status == ProjectStatus.PROCESSING or cfg.get("download_status") == "downloading":
+                        _p.status = ProjectStatus.FAILED
+                        cfg["download_status"] = "failed" if cfg.get("download_status") == "downloading" else cfg.get("download_status")
+                        cfg["error_message"] = "Processo interrompido quando o AutoClip foi fechado. Tente novamente."
+                        _p.processing_config = cfg
+                _db.commit()
+            finally:
+                _db.close()
+        except Exception as _e:  # noqa: BLE001
+            logger.warning(f"Falha ao recuperar projetos interrompidos: {_e}")
+
         # 根据模式进行不同的初始化
         if mode == "desktop":
             logger.info("桌面模式：使用本地队列和 SQLite")

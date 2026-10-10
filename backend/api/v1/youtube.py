@@ -35,6 +35,13 @@ DEFAULT_SUBTITLE_LANGS = ['pt', 'pt-BR']
 
 
 
+def _task_download_dir(data_dir, task_id: str) -> Path:
+    """Pasta temporária isolada por importação (ver process_youtube_download_task)."""
+    d = Path(data_dir) / "temp" / f"yt_{task_id}"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def _final_videos(download_dir):
     """Só arquivos .mp4 finais (com áudio). Ignora fragmentos do yt-dlp tipo 'x.f137.mp4'
     (stream só de vídeo antes do merge) — pegá-los gerava cortes sem som."""
@@ -813,8 +820,11 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         from ...core.config import get_data_directory
         
         data_dir = get_data_directory()
-        download_dir = data_dir / "temp"
-        download_dir.mkdir(exist_ok=True)
+        # Pasta temporária EXCLUSIVA desta importação. Antes todas usavam "temp/" junto e
+        # o código pegava "o primeiro .mp4/.srt da pasta": sobras de uma importação que
+        # falhou (ou outra rodando ao mesmo tempo) viravam o vídeo do projeto seguinte —
+        # capa certa, cortes do vídeo anterior.
+        download_dir = _task_download_dir(data_dir, task_id)
         
         # 更新项目进度
         await update_project_download_progress(project_id, 30.0, "正在下载视频...")
@@ -837,6 +847,8 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             'subtitlesformat': 'srt',
             'outtmpl': str(download_dir / '%(title)s.%(ext)s'),
             'noplaylist': True,
+            'socket_timeout': 30,
+            'retries': 5,
             'quiet': True,
             'no_warnings': False,  # 显示警告信息以便调试
             'ignoreconfig': True,
@@ -1146,9 +1158,8 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             
         except Exception as e:
             logger.error(f"创建项目失败: {str(e)}")
-            # 即使处理启动失败，也要返回下载成功
-            # 用户可以通过重试按钮重新启动处理
-            
+            # Antes o erro era engolido aqui e o projeto ficava "importando" para sempre.
+            raise
         finally:
             db.close()
             
@@ -1170,6 +1181,14 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                 db_fail.close()
         except Exception as status_error:
             logger.error(f"Não foi possível marcar o projeto como falho: {status_error}")
+    finally:
+        # Remove a pasta temporária desta importação (sobras não podem vazar para outra)
+        try:
+            import shutil as _sh
+            from ...core.config import get_data_directory as _gdd
+            _sh.rmtree(Path(_gdd()) / "temp" / f"yt_{task_id}", ignore_errors=True)
+        except Exception:
+            pass
 
 
 

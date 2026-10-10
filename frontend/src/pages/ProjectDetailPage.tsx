@@ -40,6 +40,9 @@ const ProjectDetailPage: React.FC = () => {
 
   useEffect(() => {
     if (!id) return
+    // Limpa o projeto anterior: sem isso a página mostrava os cortes do vídeo aberto antes
+    // até (ou em vez de) carregar os do projeto atual.
+    setCurrentProject(null)
     loadProject()
     loadProcessingStatus()
   }, [id])
@@ -48,6 +51,7 @@ const ProjectDetailPage: React.FC = () => {
     if (!id) return
     try {
       const project = await projectApi.getProject(id)
+      if (project.id && String(project.id) !== String(id)) return
       if (project.status === 'completed') {
         try {
           const [clips, collections] = await Promise.all([

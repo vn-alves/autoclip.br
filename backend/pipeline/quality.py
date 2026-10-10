@@ -122,7 +122,7 @@ def profile_for(
         profile = DurationProfile(
             tier="medium", total_sec=total_sec,
             min_clip_sec=45, target_clip_sec=(60, 180), max_clip_sec=300,
-            topics_hint=(4, 10), min_keep=3, max_clips=10,
+            topics_hint=(4, 10), min_keep=4, max_clips=10,
         )
     else:
         # 长视频：保持原有播客口径，但上限收紧到 8 分钟
@@ -130,7 +130,7 @@ def profile_for(
         profile = DurationProfile(
             tier="long", total_sec=total_sec,
             min_clip_sec=90, target_clip_sec=(120, 360), max_clip_sec=480,
-            topics_hint=(max(6, int(6 * hours)), max(12, int(14 * hours))), min_keep=3, max_clips=max(12, int(16 * hours)),
+            topics_hint=(max(6, int(6 * hours)), max(12, int(14 * hours))), min_keep=max(6, int(6 * hours)), max_clips=max(12, int(16 * hours)),
         )
     return apply_overrides(profile, target_clip_seconds=target_clip_seconds, clip_count=clip_count)
 
