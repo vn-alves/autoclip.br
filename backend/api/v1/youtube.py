@@ -35,6 +35,13 @@ DEFAULT_SUBTITLE_LANGS = ['pt', 'pt-BR']
 
 
 
+def _task_download_dir(data_dir, task_id: str) -> Path:
+    """Pasta temporária isolada por importação (ver process_youtube_download_task)."""
+    d = Path(data_dir) / "temp" / f"yt_{task_id}"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def _final_videos(download_dir):
     """Só arquivos .mp4 finais (com áudio). Ignora fragmentos do yt-dlp tipo 'x.f137.mp4'
     (stream só de vídeo antes do merge) — pegá-los gerava cortes sem som."""
@@ -813,8 +820,11 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         from ...core.config import get_data_directory
         
         data_dir = get_data_directory()
-        download_dir = data_dir / "temp"
-        download_dir.mkdir(exist_ok=True)
+        # Pasta temporária EXCLUSIVA desta importação. Antes todas usavam "temp/" junto e
+        # o código pegava "o primeiro .mp4/.srt da pasta": sobras de uma importação que
+        # falhou (ou outra rodando ao mesmo tempo) viravam o vídeo do projeto seguinte —
+        # capa certa, cortes do vídeo anterior.
+        download_dir = _task_download_dir(data_dir, task_id)
         
         # 更新项目进度
         await update_project_download_progress(project_id, 30.0, "正在下载视频...")
