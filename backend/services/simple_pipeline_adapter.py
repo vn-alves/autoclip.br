@@ -164,6 +164,8 @@ class SimplePipelineAdapter:
             处理结果
         """
         logger.info(f"开始处理项目: {self.project_id}")
+        from backend.core.usage_tracker import set_usage_project
+        set_usage_project(self.project_id)
         
         try:
             # 清除之前的进度数据

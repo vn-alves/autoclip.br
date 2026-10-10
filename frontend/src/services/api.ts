@@ -257,6 +257,11 @@ export interface BilibiliDownloadTask {
 }
 
 // Definir API relacionada
+export const usageApi = {
+  getLlmUsage: (): Promise<{ records: any[]; projects: Record<string, { name: string; clips: number }> }> => api.get('/usage/llm'),
+  resetLlmUsage: (): Promise<any> => api.delete('/usage/llm'),
+}
+
 export const settingsApi = {
   // Obter configuração do sistema
   getSettings: (): Promise<any> => {
