@@ -734,6 +734,15 @@ export const projectApi = {
     return resolveApiUrl(`/api/v1/clips/${clipId}/editor/assets/${assetId}`)
   },
 
+  /** Vídeo original do projeto e onde o corte começa nele — permite estender o corte no Editor. */
+  getEditorSourceInfo: (clipId: string): Promise<{ available: boolean; offset?: number; duration?: number }> => {
+    return api.get(`/clips/${clipId}/editor/source-info`)
+  },
+
+  getEditorSourceUrl: (clipId: string): string => {
+    return resolveApiUrl(`/api/v1/clips/${clipId}/editor/source`)
+  },
+
   startClipEditorRender: (clipId: string): Promise<{ ok: boolean; job_id: string; status: string; reused?: boolean }> => {
     return api.post(`/clips/${clipId}/editor/render`)
   },
