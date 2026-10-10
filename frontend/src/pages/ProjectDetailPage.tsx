@@ -42,7 +42,7 @@ const ProjectDetailPage: React.FC = () => {
     if (!id) return
     // Limpa o projeto anterior: sem isso a página mostrava os cortes do vídeo aberto antes
     // até (ou em vez de) carregar os do projeto atual.
-    setCurrentProject(null as any)
+    setCurrentProject(null)
     loadProject()
     loadProcessingStatus()
   }, [id])
