@@ -847,6 +847,8 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             'subtitlesformat': 'srt',
             'outtmpl': str(download_dir / '%(title)s.%(ext)s'),
             'noplaylist': True,
+            'socket_timeout': 30,
+            'retries': 5,
             'quiet': True,
             'no_warnings': False,  # 显示警告信息以便调试
             'ignoreconfig': True,
