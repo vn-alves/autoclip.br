@@ -549,9 +549,19 @@ const ClipEditorPage: React.FC = () => {
     setEditorState((s) => ({
       ...s,
       layers: s.layers.map((l) => (l.id === layerId
-        ? { ...l, startTime, endTime: Math.max(endTime, startTime + 0.1), sourceStart: sourceStart ?? l.sourceStart }
+        ? clampLayerToSource({ ...l, startTime, endTime: Math.max(endTime, startTime + 0.1), sourceStart: sourceStart ?? l.sourceStart })
         : l)),
     }))
+  }
+
+  // Campos numéricos do painel podem pedir além do que a fonte tem — limita aqui (a timeline
+  // já respeita os mesmos limites via resizeLayerRange).
+  const clampLayerToSource = (l: VideoLayer): VideoLayer => {
+    const b = getSourceBounds(l)
+    const sourceStart = Math.max(b.min, l.sourceStart || 0)
+    const startTime = l.startTime + (sourceStart - (l.sourceStart || 0))
+    const maxEnd = startTime + (b.max - sourceStart)
+    return { ...l, sourceStart, startTime, endTime: Math.max(startTime + 0.1, Math.min(l.endTime, maxEnd)) }
   }
 
   // Até onde a fonte de cada layer vai (ver resizeLayerRange): principal/cópias usam o vídeo

@@ -683,6 +683,13 @@
 .ac-layer-row-actions button:hover:not(:disabled) { color: var(--ac-ink); border-color: var(--ac-accent); }
 .ac-layer-row-actions button:disabled { opacity: 0.35; cursor: default; }
 
+.ac-layer-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
 .ac-layer-time-range {
   display: flex;
   gap: 10px;
