@@ -1,7 +1,8 @@
 # Current task
 
-- [ ] Add filmstrip video tracks with splitting at the playhead and independent editing for every resulting segment.
-- [ ] Test split timing, source continuity, independent settings, persistence, and the editor flow with video media.
+- [x] Add filmstrip video tracks with splitting at the playhead and independent editing for every resulting segment.
+- [x] Test split timing, source continuity, independent settings, persistence, and the editor flow with video media (17 tests passed; browser save/reload, removal and undo verified with intercepted desktop API responses).
+- [ ] Verify native desktop save/export after installation (requires the generated desktop release; Python export tests unavailable in this sandbox because pytest is absent).
 
 - [x] Prevent added and cloned videos from covering subtitles; verified with decoded browser media, cloning, uploading, reordering, visibility toggle, and 30 regression tests (desktop installed app not tested).
 - [x] Create layers at the playhead through “NEW LAYER +”.
