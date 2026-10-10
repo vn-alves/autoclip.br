@@ -1,5 +1,6 @@
 Keep center snapping in a browser-safe pure helper and share it between manual pointer dragging and Moveable dragging; screen-pixel hysteresis must not change video size or constrain movement outside the frame.
 Keep layer timeline movement, resizing, and snapping in a browser-safe pure helper so pointer interactions and regression tests share the same temporal rules.
+Split video segments through the pure splitVideoLayer helper, persist trackId only for visual grouping, and target all edits by segment id; this preserves source continuity without linking sibling edits.
 Apply wheel magnification to video content inside a clipped layer wrapper, never the preview frame or Moveable proxy, so selection geometry stays independent of content zoom.
 Keep desktop download links and the known release floor in the shared download configuration; reject older API results so landing and settings downloads cannot silently downgrade.
 Keep all preview video layers inside the clipping container's stacking context and subtitles above it; arbitrary video ordering must never cover captions, matching the subtitle-last export composition.

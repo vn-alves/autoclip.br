@@ -136,6 +136,7 @@ const I: React.FC<{ d: string; size?: number }> = ({ d, size = 14 }) => (
   </svg>
 )
 export const Icon = {
+  Cut: (p?: { size?: number }) => <I size={p?.size} d="M9 9l11 11M9 15L20 4M4 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />,
   Back: (p?: { size?: number }) => <I size={p?.size} d="M15 18l-6-6 6-6" />,
   Play: (p?: { size?: number }) => <I size={p?.size} d="M7 5v14l11-7z" />,
   Pause: (p?: { size?: number }) => <I size={p?.size} d="M7 5h3v14H7zM14 5h3v14h-3z" />,
