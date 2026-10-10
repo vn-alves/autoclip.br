@@ -137,6 +137,8 @@ export interface WebExportParams {
   /** Transform normalizado (0..1) da layer principal — única layer suportada na "versão
    * básica" do Editor sem servidor (sem camadas secundárias, ver ClipEditorPage). */
   mainTransform: { x: number; y: number; width: number; height: number }
+  /** Volume do vídeo (1 = original, 0 = mudo). */
+  volume?: number
   subtitle?: {
     visible: boolean
     segments: WebExportSubtitleSegment[]
@@ -197,7 +199,8 @@ function buildDrawtextChain(
  * legenda queimada dessa vez.
  */
 export async function exportWebClip(params: WebExportParams): Promise<Blob> {
-  const { videoBlob, canvasWidth: W, canvasHeight: H, durationSec, mainTransform, subtitle, onProgress } = params
+  const { videoBlob, canvasWidth: W, canvasHeight: H, durationSec, mainTransform, subtitle, onProgress, volume = 1 } = params
+  const audioArgs = volume <= 0 ? ['-an'] : ['-map', '0:a?', ...(volume !== 1 ? ['-af', `volume=${volume.toFixed(3)}`] : [])]
   const ffmpeg = await getFFmpeg()
   const inputName = 'input' + guessExtension(videoBlob)
   const outputName = 'export.mp4'
@@ -221,7 +224,7 @@ export async function exportWebClip(params: WebExportParams): Promise<Blob> {
     await ffmpeg.exec([
       '-i', inputName,
       '-filter_complex', filterComplex,
-      '-map', `[${mapLabel}]`, '-map', '0:a?',
+      '-map', `[${mapLabel}]`, ...audioArgs,
       '-t', String(duration),
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
       '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart',
