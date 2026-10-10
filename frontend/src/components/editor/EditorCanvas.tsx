@@ -18,10 +18,6 @@ interface EditorCanvasProps {
   /** A layer principal também dirige o relógio global do Editor (currentTime/duration/play) —
    * ver ClipEditorPage: um único player "de verdade", os demais só seguem o tempo dele. */
   mainVideoRef: React.RefObject<HTMLVideoElement>
-  onMainTimeUpdate: () => void
-  onMainDurationChange: (d: number) => void
-  onMainEnded: () => void
-  onMainPlayStateChange: (playing: boolean) => void
   currentTime: number
   isPlaying: boolean
   /** Duração original do corte — fim da principal quando endTime=Infinity (configs antigas). */
@@ -52,7 +48,7 @@ interface EditorCanvasProps {
  */
 const EditorCanvas: React.FC<EditorCanvasProps> = ({
   format, background, layers, selectedLayerId, onSelectLayer, onLayerTransformChange, onLayerLoadedMetadata,
-  mainVideoRef, onMainTimeUpdate, onMainDurationChange, onMainEnded, onMainPlayStateChange,
+  mainVideoRef,
   currentTime, isPlaying, clipDuration, mainSourceOffset,
   subtitleSegments, subtitleStyle, subtitlePosition, subtitleTransition, wordHighlight, subtitleVisible, onSubtitlePositionChange,
 }) => {
