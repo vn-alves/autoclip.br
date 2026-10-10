@@ -1,5 +1,8 @@
 # Current task
 
+- [ ] Add filmstrip video tracks with splitting at the playhead and independent editing for every resulting segment.
+- [ ] Test split timing, source continuity, independent settings, persistence, and the editor flow with video media.
+
 - [x] Prevent added and cloned videos from covering subtitles; verified with decoded browser media, cloning, uploading, reordering, visibility toggle, and 30 regression tests (desktop installed app not tested).
 - [x] Create layers at the playhead through “NEW LAYER +”.
 - [x] Add drag, edge resizing, snapping, and a snap guide to layer bars.
