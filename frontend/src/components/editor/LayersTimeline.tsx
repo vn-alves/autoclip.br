@@ -1,14 +1,23 @@
 import React, { useRef, useState } from 'react'
-import { VideoLayer } from './types'
-import { moveTimelineRange, resizeTimelineRange, timelineSnapPoints } from './layerTimelineMath'
+import { VideoLayer, layerEndTime } from './types'
+import { SourceBounds, moveTimelineRange, resizeLayerRange, timelineSnapPoints } from './layerTimelineMath'
 
 interface LayersTimelineProps {
   layers: VideoLayer[]
+  /** Escala da faixa (duração do vídeo final + folga para esticar além dela). */
   duration: number
+  /** Duração do vídeo final — alvo dos encaixes de início/centro/fim. */
+  contentDuration: number
+  /** Duração original do corte (fim da principal em configs antigas, endTime=Infinity). */
+  clipDuration: number
   currentTime: number
   selectedLayerId: string | null
   onSelect: (id: string) => void
-  onTimeRangeChange: (id: string, startTime: number, endTime: number) => void
+  onTimeRangeChange: (id: string, startTime: number, endTime: number, sourceStart?: number) => void
+  /** Limites da fonte de cada layer (ver resizeLayerRange). */
+  getSourceBounds: (layer: VideoLayer) => SourceBounds
+  /** true = o vídeo principal fica fixo (versão Web). */
+  lockMain?: boolean
   onAddFiles: (files: FileList) => void
   allowAdd: boolean
 }
@@ -17,37 +26,44 @@ const ACCEPTED_VIDEO_TYPES = 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.m
 
 /** Uma faixa editável por layer, sincronizada com os campos numéricos do painel. */
 const LayersTimeline: React.FC<LayersTimelineProps> = ({
-  layers, duration, currentTime, selectedLayerId, onSelect, onTimeRangeChange, onAddFiles, allowAdd,
+  layers, duration, contentDuration, clipDuration, currentTime, selectedLayerId, onSelect, onTimeRangeChange,
+  getSourceBounds, lockMain = false, onAddFiles, allowAdd,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [snapTime, setSnapTime] = useState<number | null>(null)
   if (duration <= 0) return null
   const ordered = [...layers].sort((a, b) => b.zIndex - a.zIndex)
+  const isLocked = (layer: VideoLayer) => lockMain && layer.isMain && !layer.isDuplicate
 
   const startGesture = (event: React.PointerEvent, layer: VideoLayer, edge?: 'start' | 'end') => {
-    if (layer.isMain && !layer.isDuplicate) { onSelect(layer.id); return }
+    if (isLocked(layer)) { onSelect(layer.id); return }
     event.preventDefault()
     event.stopPropagation()
     onSelect(layer.id)
     const track = event.currentTarget.closest('.ac-layers-timeline-track') as HTMLElement | null
     if (!track) return
     const rect = track.getBoundingClientRect()
+    const scale = duration
     const startClientX = event.clientX
-    const initialStart = layer.startTime
-    const initialEnd = Math.min(layer.endTime, duration)
-    const points = timelineSnapPoints(duration, currentTime, layers.filter((item) => item.id !== layer.id).map((item) => ({
+    const initial = { startTime: layer.startTime, endTime: layerEndTime(layer, clipDuration), sourceStart: layer.sourceStart || 0 }
+    const bounds = getSourceBounds(layer)
+    const points = timelineSnapPoints(contentDuration, currentTime, layers.filter((item) => item.id !== layer.id).map((item) => ({
       startTime: item.startTime,
-      endTime: Number.isFinite(item.endTime) ? item.endTime : duration,
+      endTime: layerEndTime(item, clipDuration),
     })))
-    const threshold = rect.width > 0 ? duration * 8 / rect.width : 0
+    const threshold = rect.width > 0 ? scale * 8 / rect.width : 0
 
     const onMove = (pointerEvent: PointerEvent) => {
-      const deltaTime = rect.width > 0 ? (pointerEvent.clientX - startClientX) / rect.width * duration : 0
-      const result = edge
-        ? resizeTimelineRange(edge, edge === 'start' ? initialStart + deltaTime : initialEnd + deltaTime, initialStart, initialEnd, duration, points, threshold)
-        : moveTimelineRange(initialStart, initialEnd, deltaTime, duration, points, threshold)
-      setSnapTime(result.snapTime)
-      onTimeRangeChange(layer.id, result.startTime, result.endTime)
+      const deltaTime = rect.width > 0 ? (pointerEvent.clientX - startClientX) / rect.width * scale : 0
+      if (edge) {
+        const r = resizeLayerRange(edge, (edge === 'start' ? initial.startTime : initial.endTime) + deltaTime, initial, bounds, points, threshold)
+        setSnapTime(r.snapTime)
+        onTimeRangeChange(layer.id, r.startTime, r.endTime, r.sourceStart)
+      } else {
+        const r = moveTimelineRange(initial.startTime, initial.endTime, deltaTime, scale, points, threshold)
+        setSnapTime(r.snapTime)
+        onTimeRangeChange(layer.id, r.startTime, r.endTime, initial.sourceStart)
+      }
     }
     const onEnd = () => {
       setSnapTime(null)
@@ -85,7 +101,7 @@ const LayersTimeline: React.FC<LayersTimelineProps> = ({
       </div>
       {ordered.map((layer) => {
         const start = Math.max(0, layer.startTime)
-        const end = layer.endTime === Number.POSITIVE_INFINITY ? duration : Math.min(layer.endTime, duration)
+        const end = Math.min(layerEndTime(layer, clipDuration), duration)
         const leftPct = (start / duration) * 100
         const widthPct = Math.max(0.5, ((end - start) / duration) * 100)
         return (
@@ -103,7 +119,7 @@ const LayersTimeline: React.FC<LayersTimelineProps> = ({
                 onClick={() => onSelect(layer.id)}
                 title={`${layer.name}: ${start.toFixed(1)}s – ${end.toFixed(1)}s`}
               >
-                {!(layer.isMain && !layer.isDuplicate) && (
+                {!isLocked(layer) && (
                   <>
                     <span
                       className="ac-layers-timeline-handle ac-layers-timeline-handle--start"

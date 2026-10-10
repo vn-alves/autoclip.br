@@ -14,7 +14,9 @@ import {
   SubtitleTransition, WordHighlight,
   createDefaultEditorState, createVideoLayerFromFile, duplicateVideoLayer, fitTransform, resizeTransformForFormat, SUBTITLE_POSITION_PRESETS,
   groupWordsIntoSegments, splitPlainTextToWords, toEditConfig, applyEditConfig, hasUnuploadedLayers, isDegenerateTransform,
+  VideoLayer, contentDuration, layerEndTime,
 } from '../components/editor/types'
+import { SourceBounds, timelineTrackDuration } from '../components/editor/layerTimelineMath'
 import { getWebClip, getWebVideoUrl, getWebProjectBlob } from '../webstore/projects'
 import { getWebClipSubtitles, saveWebClipSubtitles, getWebEditorConfig, saveWebEditorConfig } from '../webstore/editor'
 import { exportWebClip } from '../webpipeline/ffmpegClient'
@@ -128,6 +130,11 @@ const ClipEditorPage: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
+  // Vídeo original do projeto (desktop): offset = onde o corte começa nele.
+  const [sourceInfo, setSourceInfo] = useState<{ offset: number; duration: number } | null>(null)
+  const currentTimeRef = useRef(0)
+  currentTimeRef.current = currentTime
+  const [seekToken, setSeekToken] = useState(0)
   // Erro visível do upload de vídeo secundário (item 5/6 da estabilização) — antes uma falha
   // aqui (arquivo inválido, createObjectURL indisponível etc.) não tinha nenhum retorno pro
   // usuário, parecendo que o botão simplesmente não fazia nada.
@@ -160,7 +167,20 @@ const ClipEditorPage: React.FC = () => {
     if (isWebClip) {
       getWebVideoUrl(clipId).then((url) => { if (alive && url) setMainVideoUrl(url) })
     } else {
-      setMainVideoUrl(projectApi.getClipVideoUrl(projectId, clipId))
+      // Com o vídeo original disponível, principal e cópias tocam direto dele (a partir do
+      // ponto onde o corte começa) — é isso que permite esticar o corte além dos 50s originais.
+      projectApi.getEditorSourceInfo(clipId)
+        .then((info) => {
+          if (!alive) return
+          if (info.clip_duration) setDuration(info.clip_duration)
+          if (info.available && typeof info.offset === 'number' && info.duration) {
+            setSourceInfo({ offset: info.offset, duration: info.duration })
+            setMainVideoUrl(projectApi.getEditorSourceUrl(clipId))
+          } else {
+            setMainVideoUrl(projectApi.getClipVideoUrl(projectId, clipId))
+          }
+        })
+        .catch(() => { if (alive) setMainVideoUrl(projectApi.getClipVideoUrl(projectId, clipId)) })
     }
     return () => { alive = false }
   }, [projectId, clipId, isWebClip])
@@ -198,7 +218,7 @@ const ClipEditorPage: React.FC = () => {
       return () => { alive = false }
     }
     projectApi.getClipDetail(clipId)
-      .then((c) => { if (alive) { setClip(c); setDuration(c.duration || 0) } })
+      .then((c) => { if (alive) { setClip(c); setDuration((d) => d || c.duration || 0) } })
       .catch((err: any) => {
         if (alive) setLoadError(err?.response?.data?.detail || err?.message || 'Não foi possível carregar o corte')
       })
@@ -317,6 +337,9 @@ const ClipEditorPage: React.FC = () => {
     if (flatSubtitleWords.length === 0) return subtitleSegments
     return groupWordsIntoSegments(flatSubtitleWords, editorState.subtitle.wordsPerCaption)
   }, [flatSubtitleWords, subtitleSegments, editorState.subtitle.wordsPerCaption])
+
+  const totalDuration = useMemo(() => contentDuration(editorState.layers, duration), [editorState.layers, duration])
+  const trackDuration = timelineTrackDuration(totalDuration)
 
   const handleWordsPerCaptionChange = (value: SubtitleWordsPerCaption) => {
     setEditorState((s) => ({ ...s, subtitle: { ...s.subtitle, wordsPerCaption: value } }))
@@ -497,7 +520,7 @@ const ClipEditorPage: React.FC = () => {
       if (!sourceLayer) return s
       const dup = duplicateVideoLayer(sourceLayer, s.layers)
       // Cópia ganha intervalo próprio e finito (o principal usa Infinity = o corte todo).
-      const newLayer = Number.isFinite(dup.endTime) || duration <= 0 ? dup : { ...dup, endTime: duration }
+      const newLayer = Number.isFinite(dup.endTime) || duration <= 0 ? dup : { ...dup, endTime: layerEndTime(dup, duration) }
       // Se for duplicata do vídeo principal (ou de uma já duplicada que usa o arquivo local), copia
       // a referência no pendingFilesRef (se for upload local). Mas a layer principal tem URL web.
       if (pendingFilesRef.current[sourceLayer.id]) {
@@ -522,11 +545,42 @@ const ClipEditorPage: React.FC = () => {
     delete pendingFilesRef.current[layerId]
   }
 
-  const handleLayerTimeRangeChange = (layerId: string, startTime: number, endTime: number) => {
+  const handleLayerTimeRangeChange = (layerId: string, startTime: number, endTime: number, sourceStart?: number) => {
     setEditorState((s) => ({
       ...s,
-      layers: s.layers.map((l) => (l.id === layerId ? { ...l, startTime, endTime: Math.max(endTime, startTime + 0.1) } : l)),
+      layers: s.layers.map((l) => (l.id === layerId
+        ? clampLayerToSource({ ...l, startTime, endTime: Math.max(endTime, startTime + 0.1), sourceStart: sourceStart ?? l.sourceStart })
+        : l)),
     }))
+  }
+
+  // Campos numéricos do painel podem pedir além do que a fonte tem — limita aqui (a timeline
+  // já respeita os mesmos limites via resizeLayerRange).
+  const clampLayerToSource = (l: VideoLayer): VideoLayer => {
+    const b = getSourceBounds(l)
+    const sourceStart = Math.max(b.min, l.sourceStart || 0)
+    const startTime = l.startTime + (sourceStart - (l.sourceStart || 0))
+    const maxEnd = startTime + (b.max - sourceStart)
+    return { ...l, sourceStart, startTime, endTime: Math.max(startTime + 0.1, Math.min(l.endTime, maxEnd)) }
+  }
+
+  // Até onde a fonte de cada layer vai (ver resizeLayerRange): principal/cópias usam o vídeo
+  // original quando disponível; senão ficam limitadas ao próprio corte.
+  const getSourceBounds = (layer: VideoLayer): SourceBounds => {
+    if (!layer.isMain) return { min: 0, max: Number.POSITIVE_INFINITY }
+    if (sourceInfo) return { min: -sourceInfo.offset, max: sourceInfo.duration - sourceInfo.offset }
+    return { min: 0, max: duration }
+  }
+
+  const handleLayerVolumeChange = (layerId: string, volume: number) => {
+    setEditorState((s) => ({
+      ...s,
+      layers: s.layers.map((l) => (l.id === layerId ? { ...l, volume, muted: volume === 0 ? l.muted : false } : l)),
+    }))
+  }
+
+  const handleToggleLayerMuted = (layerId: string) => {
+    setEditorState((s) => ({ ...s, layers: s.layers.map((l) => (l.id === layerId ? { ...l, muted: !l.muted } : l)) }))
   }
 
   // "+ Adicionar vídeo" (item 4) — upload puramente local (object URL), sem tocar o backend;
@@ -690,39 +744,38 @@ const ClipEditorPage: React.FC = () => {
   // sempre agem nela; as layers secundárias só seguem esse relógio (ver useEffect em
   // EditorCanvas que sincroniza currentTime/isPlaying com cada <video> secundário).
   const togglePlay = () => {
-    const v = mainVideoRef.current
-    if (!v) return
-    if (v.paused) void v.play()
-    else v.pause()
+    if (!isPlaying && currentTimeRef.current >= totalDuration - 0.05) {
+      setCurrentTime(0)
+      setSeekToken((n) => n + 1)
+    }
+    setIsPlaying((p) => !p)
   }
 
   const handleSeek = (t: number) => {
-    const v = mainVideoRef.current
-    setCurrentTime(t)
-    if (v) v.currentTime = Math.min(Math.max(0, t), v.duration || t)
+    setCurrentTime(Math.min(Math.max(0, t), totalDuration || t))
+    setSeekToken((n) => n + 1)
   }
 
-  const handleTimeUpdate = () => {
-    const v = mainVideoRef.current
-    if (v) setCurrentTime(v.currentTime)
-  }
-
-  // O evento nativo "timeupdate" do <video> dispara em intervalos grosseiros (~250ms,
-  // varia por navegador) — granularidade insuficiente pra o destaque de palavra do karaokê,
-  // que pode ficar visivelmente atrasado/adiantado em relação à fala mesmo com os
-  // timestamps do backend corretos. Enquanto o vídeo está tocando, faz o polling de
-  // currentTime a cada frame (rAF, ~60fps) em vez de depender só do timeupdate.
+  // Relógio próprio do Editor (rAF): todas as camadas — inclusive a principal — só seguem este
+  // tempo (ver EditorCanvas). Vai até o fim da camada que termina por último.
   useEffect(() => {
     if (!isPlaying) return
     let rafId: number
+    const startedAt = performance.now()
+    const base = currentTimeRef.current
     const tick = () => {
-      const v = mainVideoRef.current
-      if (v) setCurrentTime(v.currentTime)
+      const t = base + (performance.now() - startedAt) / 1000
+      if (t >= totalDuration) {
+        setCurrentTime(totalDuration)
+        setIsPlaying(false)
+        return
+      }
+      setCurrentTime(t)
       rafId = requestAnimationFrame(tick)
     }
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
-  }, [isPlaying])
+  }, [isPlaying, seekToken, totalDuration])
 
   // Salva a edição no backend (seção 7): faz upload de qualquer layer secundária ainda sem
   // assetId (item 8) antes de gravar o edit_config — nunca salva um assetId inexistente.
@@ -794,6 +847,7 @@ const ClipEditorPage: React.FC = () => {
           canvasHeight: dims.height,
           durationSec: duration,
           mainTransform: mainLayer.transform,
+          volume: mainLayer.muted ? 0 : mainLayer.volume,
           subtitle: editorState.subtitle.visible ? {
             visible: true,
             segments: displaySegments.map((s) => ({ startTime: s.startTime, endTime: s.endTime, text: s.text })),
@@ -1069,12 +1123,10 @@ const ClipEditorPage: React.FC = () => {
             onLayerTransformChange={handleLayerTransformChange}
             onLayerLoadedMetadata={handleLayerLoadedMetadata}
             mainVideoRef={mainVideoRef}
-            onMainTimeUpdate={handleTimeUpdate}
-            onMainDurationChange={setDuration}
-            onMainEnded={() => setIsPlaying(false)}
-            onMainPlayStateChange={setIsPlaying}
             currentTime={currentTime}
             isPlaying={isPlaying}
+            clipDuration={duration}
+            mainSourceOffset={sourceInfo?.offset ?? 0}
             subtitleSegments={displaySegments}
             subtitleStyle={editorState.subtitle.style}
             subtitlePosition={editorState.subtitle.position}
@@ -1088,12 +1140,12 @@ const ClipEditorPage: React.FC = () => {
             <button className="ac-editor-controls-play" onClick={togglePlay} aria-label={isPlaying ? 'Pausar' : 'Reproduzir'}>
               {isPlaying ? <Icon.Pause size={14} /> : <Icon.Play size={14} />}
             </button>
-            <span className="ac-editor-controls-time">{fmtTime(currentTime)} / {fmtTime(duration)}</span>
+            <span className="ac-editor-controls-time">{fmtTime(currentTime)} / {fmtTime(totalDuration)}</span>
           </div>
 
           <EditorTimeline
             currentTime={currentTime}
-            duration={duration}
+            duration={trackDuration}
             onSeek={handleSeek}
             // Segmentos ORIGINAIS do SRT (não os `displaySegments` regrupados por "palavras
             // por legenda") — são a unidade estável entre reloads (seg.index bate com a chave
@@ -1109,7 +1161,11 @@ const ClipEditorPage: React.FC = () => {
 
           <LayersTimeline
             layers={editorState.layers}
-            duration={duration}
+            duration={trackDuration}
+            contentDuration={totalDuration}
+            clipDuration={duration}
+            getSourceBounds={getSourceBounds}
+            lockMain={isWebClip}
             currentTime={currentTime}
             selectedLayerId={editorState.selectedLayerId}
             onSelect={handleSelectLayer}
@@ -1132,6 +1188,10 @@ const ClipEditorPage: React.FC = () => {
             onRemove={handleRemoveLayer}
             onDuplicate={handleDuplicateLayer}
             onTimeRangeChange={handleLayerTimeRangeChange}
+            onVolumeChange={handleLayerVolumeChange}
+            onToggleMuted={handleToggleLayerMuted}
+            clipDuration={duration}
+            lockMainTime={isWebClip}
             onAddFiles={handleAddVideoFiles}
             onSetFitMode={handleSetFitMode}
             uploadError={layerUploadError}

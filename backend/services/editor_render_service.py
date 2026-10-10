@@ -170,6 +170,77 @@ def resolve_main_clip_video_path(db: Session, project_id: str, clip_id: str) -> 
     raise EditorRenderError(f"Vídeo do corte não encontrado (clip_id={clip_id})")
 
 
+def _timecode_to_seconds(v: Any) -> Optional[float]:
+    if isinstance(v, (int, float)):
+        return float(v)
+    if not isinstance(v, str) or not v.strip():
+        return None
+    try:
+        parts = v.strip().replace(",", ".").split(":")
+        total = 0.0
+        for part in parts:
+            total = total * 60 + float(part)
+        return total
+    except ValueError:
+        return None
+
+
+def resolve_original_source(db: Session, project_id: str, clip_id: str) -> Optional[Dict[str, Any]]:
+    """Vídeo original do projeto (o que foi importado, antes do corte) e o instante em que o
+    corte começa nele — usado pelo Editor para estender o vídeo principal/cópias além dos
+    limites do corte. None quando o original não existe mais (o Editor continua limitado ao
+    arquivo do corte)."""
+    try:
+        from backend.core.path_utils import get_project_directory
+        from backend.models.clip import Clip
+        from backend.models.project import Project
+
+        clip = db.query(Clip).filter(Clip.id == clip_id).first()
+        if not clip:
+            return None
+        meta = clip.clip_metadata or {}
+        offset = _timecode_to_seconds(meta.get("start_time"))
+        if offset is None:
+            offset = float(clip.start_time or 0)
+        candidates = []
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if project and getattr(project, "video_path", None):
+            candidates.append(Path(project.video_path))
+        candidates.append(get_project_directory(project_id) / "raw" / "input.mp4")
+        for path in candidates:
+            if path.exists():
+                duration = float(_probe(path).get("duration") or 0.0)
+                if duration > 0:
+                    return {"path": path, "offset": max(0.0, offset), "duration": duration}
+        return None
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"Vídeo original indisponível para {clip_id}: {e}")
+        return None
+
+
+def _has_audio_stream(path: Path) -> bool:
+    try:
+        out = subprocess.run(
+            [get_ffprobe_path(), "-v", "error", "-select_streams", "a", "-show_entries", "stream=index",
+             "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=30,
+        )
+        return bool(out.stdout.strip())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _layer_volume(l: Dict[str, Any]) -> float:
+    if l.get("muted"):
+        return 0.0
+    v = l.get("volume")
+    try:
+        v = 1.0 if v is None else float(v)
+    except (TypeError, ValueError):
+        v = 1.0
+    return max(0.0, min(2.0, v))
+
+
 # --------------------------------------------------------------------------- RenderSpec ---
 
 @dataclass
@@ -188,6 +259,11 @@ class RenderLayerSpec:
     # (equivalente a object-fit:fill — correto aqui porque a caixa em modo Normal já É o
     # retângulo final com a proporção certa, ver EditorCanvas/fitTransform).
     fit_mode: str = "contain"
+    # Segundos dentro do arquivo de entrada onde esta layer começa (-ss) — permite cortar ou
+    # ESTENDER o corte original lendo do vídeo original do projeto (ver resolve_original_source).
+    source_offset: float = 0.0
+    # Ganho do áudio desta layer (1.0 = original, 0–2). Só usado quando has_audio=True.
+    volume: float = 1.0
 
 
 @dataclass
@@ -233,32 +309,39 @@ def build_render_spec(
     if duration <= 0:
         raise EditorRenderError("Não foi possível determinar a duração do vídeo principal")
 
+    original = None  # resolvido sob demanda — só quando alguma layer sai dos limites do corte
+
     layers: List[RenderLayerSpec] = []
     for l in sorted(edit_config["layers"], key=lambda x: x.get("zIndex", 0)):
         if not l.get("visible", True):
             continue
-        if l.get("isMain") and not l.get("isDuplicate"):
+        start_time = max(0.0, float(l.get("startTime") or 0.0))
+        source_start = float(l.get("sourceStart") or 0.0)
+        raw_end = l.get("endTime")
+        if l.get("isMain"):
+            # Principal e cópias: endTime null (configs antigas) = duração do corte.
+            end_time = float(raw_end) if isinstance(raw_end, (int, float)) else start_time + duration - max(0.0, source_start)
+            length = end_time - start_time
             input_path = main_path
-            start_time = 0.0
-            end_time = duration
-            has_audio = True
-        elif l.get("isMain"):
-            # Cópia do vídeo principal: mesmo arquivo, mas com intervalo próprio na timeline.
-            input_path = main_path
-            start_time = float(l.get("startTime") or 0.0)
-            raw_end = l.get("endTime")
-            end_time = min(float(raw_end), duration) if isinstance(raw_end, (int, float)) else duration
-            if end_time <= start_time:
-                continue
-            has_audio = False
+            source_offset = source_start
+            if source_start < -0.01 or source_start + length > duration + 0.05:
+                if original is None:
+                    original = resolve_original_source(db, project_id, clip_id) or {}
+                if original:
+                    input_path = original["path"]
+                    source_offset = max(0.0, original["offset"] + source_start)
+                    length = min(length, original["duration"] - source_offset)
+                else:
+                    source_offset = max(0.0, source_start)
+                    length = min(length, duration - source_offset)
+            end_time = start_time + length
         else:
             input_path = resolve_editor_asset_path(project_id, l["assetId"])
-            start_time = float(l.get("startTime") or 0.0)
-            raw_end = l.get("endTime")
-            end_time = min(float(raw_end), duration) if isinstance(raw_end, (int, float)) else duration
-            if end_time <= start_time:
-                continue
-            has_audio = False  # decisão de política de áudio — ver seção 16 no relatório.
+            source_offset = max(0.0, source_start)
+            end_time = float(raw_end) if isinstance(raw_end, (int, float)) else duration
+        if end_time - start_time < 0.05:
+            continue
+        volume = _layer_volume(l)
         t = l["transform"]
         layers.append(RenderLayerSpec(
             input_path=input_path,
@@ -266,8 +349,10 @@ def build_render_spec(
             width=_even_size(t["width"] * cw), height=_even_size(t["height"] * ch),
             z_index=int(l.get("zIndex", 0)),
             start_time=start_time, end_time=end_time,
-            has_audio=has_audio,
+            has_audio=volume > 0 and _has_audio_stream(input_path),
             fit_mode="cover" if l.get("fitMode") == "cover" else "contain",
+            source_offset=source_offset,
+            volume=volume,
         ))
 
     if not layers:
@@ -285,7 +370,10 @@ def build_render_spec(
 
     bg_color = ((canvas.get("background") or {}).get("color")) or "#000000"
     return RenderSpec(
-        canvas_width=cw, canvas_height=ch, fps=RENDER_FPS, duration=duration,
+        canvas_width=cw, canvas_height=ch, fps=RENDER_FPS,
+        # Vídeo final vai até o fim da layer que termina por último (o corte pode ter sido
+        # estendido ou encurtado no Editor).
+        duration=max(l.end_time for l in layers),
         background_color=bg_color, layers=layers, subtitle_ass_path=ass_path,
     )
 
@@ -685,13 +773,9 @@ def _build_ffmpeg_command(spec: RenderSpec, out_path: Path) -> List[str]:
     cmd += ["-f", "lavfi", "-t", f"{spec.duration:.3f}",
             "-i", f"color=c={spec.background_color}:s={spec.canvas_width}x{spec.canvas_height}:r={spec.fps}"]
 
-    input_offset = 1  # índice 0 é o color= de base
-    audio_input_idx: Optional[int] = None
     for layer in spec.layers:
-        cmd += ["-i", str(layer.input_path)]
-        if layer.has_audio and audio_input_idx is None:
-            audio_input_idx = input_offset
-        input_offset += 1
+        length = max(0.05, layer.end_time - layer.start_time)
+        cmd += ["-ss", f"{max(0.0, layer.source_offset):.3f}", "-t", f"{length:.3f}", "-i", str(layer.input_path)]
 
     filter_parts: List[str] = []
     last = "0:v"
@@ -727,9 +811,32 @@ def _build_ffmpeg_command(spec: RenderSpec, out_path: Path) -> List[str]:
         filter_parts.append(f"[{last}]ass='{_escape_filter_path(spec.subtitle_ass_path)}'[outv]")
         last = "outv"
 
+    # Áudio: cada layer com som entra no próprio instante, com o próprio volume, e tudo é
+    # mixado (antes só o principal tinha som).
+    audio_tags: List[str] = []
+    for i, layer in enumerate(spec.layers):
+        if not layer.has_audio:
+            continue
+        delay_ms = int(round(layer.start_time * 1000))
+        tag = f"a{i}"
+        filter_parts.append(
+            f"[{i + 1}:a]asetpts=PTS-STARTPTS,volume={layer.volume:.3f},adelay=delays={delay_ms}:all=1[{tag}]"
+        )
+        audio_tags.append(tag)
+    audio_map: Optional[str] = None
+    if len(audio_tags) == 1:
+        audio_map = f"[{audio_tags[0]}]"
+    elif audio_tags:
+        filter_parts.append(
+            "".join(f"[{t}]" for t in audio_tags)
+            + f"amix=inputs={len(audio_tags)}:duration=longest:normalize=0[aout]"
+        )
+        audio_map = "[aout]"
+
     cmd += ["-filter_complex", ";".join(filter_parts), "-map", f"[{last}]"]
-    if audio_input_idx is not None:
-        cmd += ["-map", f"{audio_input_idx}:a?"]
+    if audio_map:
+        cmd += ["-map", audio_map]
+    cmd += ["-t", f"{spec.duration:.3f}"]
 
     cmd += [
         "-r", str(spec.fps), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",

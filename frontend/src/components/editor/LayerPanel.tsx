@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react'
 import { Btn, Icon, Segmented } from '../../ui'
-import { VideoLayer } from './types'
+import { VideoLayer, layerEndTime } from './types'
 
 interface LayerPanelProps {
   layers: VideoLayer[]
@@ -13,7 +13,13 @@ interface LayerPanelProps {
   onMoveDown: (id: string) => void
   onRemove: (id: string) => void
   onDuplicate: (id: string) => void
-  onTimeRangeChange: (id: string, startTime: number, endTime: number) => void
+  onTimeRangeChange: (id: string, startTime: number, endTime: number, sourceStart?: number) => void
+  onVolumeChange: (id: string, volume: number) => void
+  onToggleMuted: (id: string) => void
+  /** Duração original do corte (fim da principal quando ainda é "o corte todo"). */
+  clipDuration: number
+  /** true = início/fim do vídeo principal não editáveis (versão Web). */
+  lockMainTime?: boolean
   onAddFiles: (files: FileList) => void
   onSetFitMode: (id: string, mode: 'contain' | 'cover') => void
   uploadError: string | null
@@ -39,10 +45,7 @@ const FIT_MODE_OPTIONS: { value: 'cover' | 'contain'; label: string }[] = [
 
 const ACCEPTED_VIDEO_TYPES = 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov'
 
-const clampSeconds = (v: number, duration: number): number => {
-  if (!isFinite(v) || v < 0) return 0
-  return duration > 0 ? Math.min(v, duration) : v
-}
+const clampSeconds = (v: number): number => (!isFinite(v) || v < 0 ? 0 : v)
 
 /**
  * Painel de Layers — Etapa 3. Lista as layers de vídeo (a principal sempre primeiro),
@@ -50,8 +53,9 @@ const clampSeconds = (v: number, duration: number): number => {
  * renomear, reordenar e a janela de tempo de cada layer secundária ficam todos aqui — item 3.
  */
 const LayerPanel: React.FC<LayerPanelProps> = ({
-  layers, selectedLayerId, duration,
+  layers, selectedLayerId,
   onSelect, onToggleVisible, onRename, onMoveUp, onMoveDown, onRemove, onDuplicate, onTimeRangeChange, onAddFiles,
+  onVolumeChange, onToggleMuted, clipDuration, lockMainTime = false,
   onSetFitMode, uploadError,
   subtitleAvailable, subtitleVisible, onToggleSubtitleVisible,
   allowSecondaryLayers = true,
@@ -160,7 +164,33 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
                   </p>
                 </div>
               )}
-              {isSelected && !(layer.isMain && !layer.isDuplicate) && (
+              {isSelected && (
+                <div className="ac-layer-volume" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="ac-layer-visibility"
+                    aria-label={layer.muted ? 'Ativar áudio' : 'Silenciar'}
+                    title={layer.muted ? 'Ativar áudio' : 'Silenciar'}
+                    onClick={() => onToggleMuted(layer.id)}
+                  >
+                    {layer.muted || layer.volume === 0 ? <Icon.Mute size={13} /> : <Icon.Volume size={13} />}
+                  </button>
+                  <input
+                    type="range"
+                    min={0}
+                    max={200}
+                    step={5}
+                    aria-label="Volume da camada"
+                    value={layer.muted ? 0 : Math.round((layer.volume ?? 1) * 100)}
+                    onChange={(e) => onVolumeChange(layer.id, Number(e.target.value) / 100)}
+                    style={{ flex: 1 }}
+                  />
+                  <span className="ac-editor-value-label">{layer.muted ? 'Mudo' : `${Math.round((layer.volume ?? 1) * 100)}%`}</span>
+                </div>
+              )}
+              {isSelected && !(lockMainTime && layer.isMain && !layer.isDuplicate) && (() => {
+                const end = layerEndTime(layer, clipDuration)
+                return (
                 <div className="ac-layer-time-range" onClick={(e) => e.stopPropagation()}>
                   <label>
                     <span>Início (s)</span>
@@ -168,8 +198,11 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
                       type="number"
                       min={0}
                       step={0.1}
-                      value={layer.startTime}
-                      onChange={(e) => onTimeRangeChange(layer.id, clampSeconds(Number(e.target.value), duration), layer.endTime)}
+                      value={Number(layer.startTime.toFixed(2))}
+                      onChange={(e) => {
+                        const start = Math.min(clampSeconds(Number(e.target.value)), end - 0.1)
+                        onTimeRangeChange(layer.id, start, end, (layer.sourceStart || 0) + (start - layer.startTime))
+                      }}
                     />
                   </label>
                   <label>
@@ -178,12 +211,13 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
                       type="number"
                       min={0}
                       step={0.1}
-                      value={layer.endTime}
-                      onChange={(e) => onTimeRangeChange(layer.id, layer.startTime, clampSeconds(Number(e.target.value), duration))}
+                      value={Number(end.toFixed(2))}
+                      onChange={(e) => onTimeRangeChange(layer.id, layer.startTime, clampSeconds(Number(e.target.value)))}
                     />
                   </label>
                 </div>
-              )}
+                )
+              })()}
             </div>
           )
         })}
