@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Moveable, { type OnDrag, type OnDragEnd, type OnResize, type OnResizeEnd, type OnResizeStart } from 'react-moveable'
-import { BackgroundConfig, CANVAS_DIMENSIONS, CanvasFormat, NormalizedTransform, SubtitlePosition, SubtitleSegment, SubtitleStyle, SubtitleTransition, WordHighlight, VideoLayer, findActiveLayers } from './types'
+import { BackgroundConfig, CANVAS_DIMENSIONS, CanvasFormat, NormalizedTransform, SubtitlePosition, SubtitleSegment, SubtitleStyle, SubtitleTransition, WordHighlight, VideoLayer, layerEndTime } from './types'
 import SubtitleLayer from './SubtitleLayer'
 import { snapToCenter } from './centerSnap'
 import { videoContentZoom } from './videoContentZoom'
@@ -24,6 +24,11 @@ interface EditorCanvasProps {
   onMainPlayStateChange: (playing: boolean) => void
   currentTime: number
   isPlaying: boolean
+  /** Duração original do corte — fim da principal quando endTime=Infinity (configs antigas). */
+  clipDuration: number
+  /** Segundos somados ao tempo do arquivo das layers principal/cópia — >0 quando a fonte é o
+   * vídeo original do projeto (o corte começa nesse ponto dele), 0 quando é o próprio corte. */
+  mainSourceOffset: number
   /** Etapa 2 — legenda. */
   subtitleSegments: SubtitleSegment[]
   subtitleStyle: SubtitleStyle
@@ -48,7 +53,7 @@ interface EditorCanvasProps {
 const EditorCanvas: React.FC<EditorCanvasProps> = ({
   format, background, layers, selectedLayerId, onSelectLayer, onLayerTransformChange, onLayerLoadedMetadata,
   mainVideoRef, onMainTimeUpdate, onMainDurationChange, onMainEnded, onMainPlayStateChange,
-  currentTime, isPlaying,
+  currentTime, isPlaying, clipDuration, mainSourceOffset,
   subtitleSegments, subtitleStyle, subtitlePosition, subtitleTransition, wordHighlight, subtitleVisible, onSubtitlePositionChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -172,7 +177,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
   const dims = CANVAS_DIMENSIONS[format]
   const canvasAspect = dims.width / dims.height
   const mainLayer = layers.find((l) => l.isMain && !l.isDuplicate) ?? layers[0]
-  const activeIds = new Set(findActiveLayers(layers, currentTime).map((l) => l.id))
+  const activeIds = new Set(layers.filter((l) => l.visible && currentTime >= l.startTime && currentTime < layerEndTime(l, clipDuration)).map((l) => l.id))
   const selectedLayer = layers.find((l) => l.id === selectedLayerId) ?? null
 
   // Espelha o box "cru" em pixels do proxy no <video> real da layer selecionada, convertido
@@ -303,25 +308,31 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
     }
   }, [background.type, mainVideoRef])
 
-  // Sincroniza as layers SECUNDÁRIAS com o relógio global do Editor (item 13/14/15): usa o
-  // mesmo currentTime/isPlaying que já dirige a layer principal — nenhum timer novo por vídeo.
-  // tempo relativo do arquivo = currentTime - layer.startTime (item 14).
+  // Todas as layers (inclusive a principal) seguem o relógio próprio do Editor (ver
+  // ClipEditorPage): tempo do arquivo = offset da fonte + sourceStart + (currentTime - startTime).
+  // Antes o <video> principal ERA o relógio, o que impedia mover/encurtar/estender o principal.
   useEffect(() => {
     for (const layer of layers) {
-      if (layer.isMain && !layer.isDuplicate) continue
       const el = videoEls[layer.id]
       if (!el) continue
-      const active = layer.visible && currentTime >= layer.startTime && currentTime <= layer.endTime
+      const end = layerEndTime(layer, clipDuration)
+      const active = layer.visible && currentTime >= layer.startTime && currentTime < end
+      const vol = layer.muted ? 0 : Math.max(0, Math.min(1, layer.volume ?? 1))
+      if (el.volume !== vol) el.volume = vol
+      const shouldMute = layer.muted || vol === 0
+      if (el.muted !== shouldMute) el.muted = shouldMute
       if (!active) {
         if (!el.paused) el.pause()
         continue
       }
-      const relativeTime = currentTime - layer.startTime
-      if (Math.abs(el.currentTime - relativeTime) > 0.3) el.currentTime = relativeTime
+      const offset = layer.isMain ? mainSourceOffset : 0
+      const fileTime = Math.max(0, offset + (layer.sourceStart || 0) + (currentTime - layer.startTime))
+      const tolerance = isPlaying ? 0.3 : 0.04
+      if (Math.abs(el.currentTime - fileTime) > tolerance) el.currentTime = fileTime
       if (isPlaying && el.paused) el.play().catch(() => {})
       if (!isPlaying && !el.paused) el.pause()
     }
-  }, [layers, videoEls, currentTime, isPlaying])
+  }, [layers, videoEls, currentTime, isPlaying, clipDuration, mainSourceOffset])
 
   const commitFromTarget = (layerId: string, target: HTMLElement | SVGElement) => {
     if (frameSize.width === 0 || frameSize.height === 0) return
@@ -457,7 +468,7 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
               className="ac-editor-video"
               draggable={false}
               playsInline
-              muted={!isTrueMain}
+              muted={layer.muted}
               // 'cover': o conteúdo NUNCA deforma não importa o formato da caixa (o usuário
               // pode redimensionar livremente pra escolher o crop) — quem garante isso é o
               // object-fit, não uma trava no resize. 'contain'/Normal continua 'fill' (a caixa
@@ -514,11 +525,6 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
                 // do frame atual. Sem custo perceptível (não altera o tempo de reprodução real).
                 if (e.currentTarget.currentTime === 0) e.currentTarget.currentTime = 0.01
               }}
-              onTimeUpdate={isTrueMain ? onMainTimeUpdate : undefined}
-              onDurationChange={isTrueMain ? (e) => onMainDurationChange(e.currentTarget.duration || 0) : undefined}
-              onEnded={isTrueMain ? onMainEnded : undefined}
-              onPlay={isTrueMain ? () => onMainPlayStateChange(true) : undefined}
-              onPause={isTrueMain ? () => onMainPlayStateChange(false) : undefined}
             />
             </div>
           )
