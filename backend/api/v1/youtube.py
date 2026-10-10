@@ -1156,9 +1156,8 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             
         except Exception as e:
             logger.error(f"创建项目失败: {str(e)}")
-            # 即使处理启动失败，也要返回下载成功
-            # 用户可以通过重试按钮重新启动处理
-            
+            # Antes o erro era engolido aqui e o projeto ficava "importando" para sempre.
+            raise
         finally:
             db.close()
             
@@ -1180,6 +1179,14 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                 db_fail.close()
         except Exception as status_error:
             logger.error(f"Não foi possível marcar o projeto como falho: {status_error}")
+    finally:
+        # Remove a pasta temporária desta importação (sobras não podem vazar para outra)
+        try:
+            import shutil as _sh
+            from ...core.config import get_data_directory as _gdd
+            _sh.rmtree(Path(_gdd()) / "temp" / f"yt_{task_id}", ignore_errors=True)
+        except Exception:
+            pass
 
 
 
