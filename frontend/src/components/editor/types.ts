@@ -74,6 +74,8 @@ export const DEFAULT_BACKGROUND: BackgroundConfig = { type: 'blur', color: '#000
  */
 export interface VideoLayer {
   id: string
+  /** Visual track only; split segments retain independent editable properties. */
+  trackId?: string
   type: 'video'
   name: string
   /** URL do vídeo (endpoint do clip para a layer principal; object URL de upload local para as demais). */
@@ -190,6 +192,7 @@ export function duplicateVideoLayer(sourceLayer: VideoLayer, existingLayers: Vid
     ...sourceLayer,
     id: `layer-dup-${Date.now()}-${secondaryLayerCounter}`,
     name: `${sourceLayer.name} (Cópia)`,
+    trackId: undefined,
     zIndex: maxZ + 1,
     isDuplicate: true,
     transform: { ...sourceLayer.transform, x: sourceLayer.transform.x + 0.05, y: sourceLayer.transform.y + 0.05 },
@@ -673,6 +676,7 @@ export const EDIT_CONFIG_VERSION = 1
 
 export interface EditConfigLayer {
   id: string
+  trackId?: string
   name: string
   visible: boolean
   transform: NormalizedTransform
@@ -718,6 +722,7 @@ export function toEditConfig(state: EditorState): EditConfig {
     layers: state.layers.map((l) => ({
       id: l.id,
       name: l.name,
+      trackId: l.trackId,
       visible: l.visible,
       transform: l.transform,
       zIndex: l.zIndex,
@@ -765,6 +770,7 @@ export function applyEditConfig(
     layers: config.layers.map((l) => ({
       id: l.id,
       type: 'video',
+      trackId: l.trackId,
       name: l.name,
       source: l.isMain ? mainVideoUrl : (l.assetId ? resolveAssetSource(l.assetId) : ''),
       visible: l.visible,

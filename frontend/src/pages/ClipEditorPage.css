@@ -728,7 +728,12 @@
 
 /* Timeline de layers */
 .ac-layers-timeline {
-  margin-top: 10px;
+  margin: 0;
+  padding: 12px 24px 20px;
+  border-top: 1px solid var(--ac-line);
+  max-height: 260px;
+  overflow-y: auto;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -775,7 +780,7 @@
 .ac-layers-timeline-track {
   position: relative;
   flex: 1 1 auto;
-  height: 14px;
+  height: 56px;
   background: var(--ac-line-2);
   border-radius: 4px;
   overflow: visible;
@@ -784,10 +789,12 @@
 .ac-layers-timeline-bar {
   position: absolute;
   top: 0;
-  height: 14px;
+  height: 56px;
+  min-width: 0;
+  box-sizing: border-box;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--ac-accent) 55%, var(--ac-line-2));
-  border: none;
+  background: var(--ac-card);
+  border: 1px solid var(--ac-line);
   cursor: grab;
   padding: 0;
   touch-action: none;
@@ -797,7 +804,7 @@
 .ac-layers-timeline-bar:active { cursor: grabbing; }
 
 .ac-layers-timeline-bar--selected {
-  background: var(--ac-accent);
+  background: var(--ac-card);
   box-shadow: 0 0 0 1px var(--ac-accent);
 }
 
@@ -828,3 +835,15 @@
   background: var(--ac-accent);
   pointer-events: none;
 }
+
+.ac-layers-timeline-actions { display: flex; align-items: center; gap: 4px; }
+.ac-layers-timeline-actions .ac-btn { padding: 4px 8px; }
+.ac-layers-timeline-ruler { position: relative; flex: 1; height: 24px; cursor: crosshair; touch-action: none; }
+.ac-layers-timeline-ruler span { position: absolute; font-size: 10px; font-family: var(--ac-font-mono, monospace); color: var(--ac-sub); }
+.ac-layers-timeline-ruler span:last-child { transform: translateX(-100%); }
+.ac-layers-filmstrip { position: absolute; inset: 0; display: flex; overflow: hidden; border-radius: inherit; opacity: 0.65; pointer-events: none; }
+.ac-layers-filmstrip img { width: 16.667%; height: 100%; object-fit: cover; flex: 1; min-width: 0; }
+.ac-layers-timeline-segment-name, .ac-layers-timeline-segment-time { position: absolute; left: 8px; right: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ac-ink); background: color-mix(in srgb, var(--ac-card) 90%, transparent); text-align: left; pointer-events: none; font-size: 10px; line-height: 16px; }
+.ac-layers-timeline-segment-name { top: 4px; }
+.ac-layers-timeline-segment-time { bottom: 4px; font-family: var(--ac-font-mono, monospace); }
+.ac-layers-timeline-playhead { position: absolute; top: -4px; bottom: -4px; width: 1px; background: var(--ac-ink); z-index: 5; pointer-events: none; }
