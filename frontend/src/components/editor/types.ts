@@ -200,7 +200,7 @@ export function duplicateVideoLayer(sourceLayer: VideoLayer, existingLayers: Vid
 /** Layers visíveis cujo intervalo [startTime, endTime] contém currentTime (item 13) — a
  * principal, com endTime=Infinity, está sempre incluída enquanto visível. */
 export function findActiveLayers(layers: VideoLayer[], currentTime: number): VideoLayer[] {
-  return layers.filter((l) => l.visible && currentTime >= l.startTime && currentTime < l.endTime)
+  return layers.filter((l) => l.visible && currentTime >= l.startTime && currentTime <= l.endTime)
 }
 
 /* ---------------------------------------------------------------- Legendas (Etapa 2) --- */
