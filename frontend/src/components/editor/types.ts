@@ -116,6 +116,25 @@ export interface VideoLayer {
   customized: boolean
   /** true se for uma cópia (ex. duplicação do vídeo principal). */
   isDuplicate?: boolean
+  /** Segundos da fonte exibidos no instante `startTime`. Principal/cópias: relativo ao INÍCIO
+   * DO CORTE (negativo = trecho antes do corte, vindo do vídeo original). Uploads: relativo ao
+   * próprio arquivo. Encolher/esticar a borda inicial na timeline move este valor junto. */
+  sourceStart: number
+  /** Volume desta camada (1 = original, 0–2). */
+  volume: number
+  muted: boolean
+}
+
+/** Fim efetivo da layer — a principal antiga usa Infinity = até o fim do corte. */
+export function layerEndTime(layer: Pick<VideoLayer, 'startTime' | 'endTime' | 'sourceStart'>, clipDuration: number): number {
+  if (Number.isFinite(layer.endTime)) return layer.endTime
+  return layer.startTime + Math.max(0, clipDuration - (layer.sourceStart || 0))
+}
+
+/** Duração do vídeo final = fim da camada que termina por último. */
+export function contentDuration(layers: VideoLayer[], clipDuration: number): number {
+  if (layers.length === 0) return clipDuration
+  return Math.max(0, ...layers.map((l) => layerEndTime(l, clipDuration)))
 }
 
 // fitMode 'contain' (Normal) por padrão na layer principal: 'cover' pode deixar o box real do
@@ -127,7 +146,7 @@ export const createMainVideoLayer = (source: string): VideoLayer => ({
   id: 'main', type: 'video', name: 'Vídeo principal', source, visible: true,
   transform: { x: 0, y: 0, width: 1, height: 1, rotation: 0 },
   zIndex: 0, startTime: 0, endTime: Number.POSITIVE_INFINITY, isMain: true, fitMode: 'contain',
-  customized: false,
+  customized: false, sourceStart: 0, volume: 1, muted: false,
 })
 
 let secondaryLayerCounter = 0
@@ -157,6 +176,9 @@ export function createVideoLayerFromFile(
     isMain: false,
     fitMode: 'cover',
     customized: false,
+    sourceStart: 0,
+    volume: 1,
+    muted: false,
   }
 }
 
@@ -178,7 +200,7 @@ export function duplicateVideoLayer(sourceLayer: VideoLayer, existingLayers: Vid
 /** Layers visíveis cujo intervalo [startTime, endTime] contém currentTime (item 13) — a
  * principal, com endTime=Infinity, está sempre incluída enquanto visível. */
 export function findActiveLayers(layers: VideoLayer[], currentTime: number): VideoLayer[] {
-  return layers.filter((l) => l.visible && currentTime >= l.startTime && currentTime <= l.endTime)
+  return layers.filter((l) => l.visible && currentTime >= l.startTime && currentTime < l.endTime)
 }
 
 /* ---------------------------------------------------------------- Legendas (Etapa 2) --- */
@@ -664,6 +686,9 @@ export interface EditConfigLayer {
   fitMode?: 'contain' | 'cover'
   customized?: boolean
   isDuplicate?: boolean
+  sourceStart?: number
+  volume?: number
+  muted?: boolean
 }
 
 export interface EditConfig {
@@ -703,6 +728,9 @@ export function toEditConfig(state: EditorState): EditConfig {
       fitMode: l.fitMode,
       customized: l.customized,
       isDuplicate: l.isDuplicate,
+      sourceStart: l.sourceStart,
+      volume: l.volume,
+      muted: l.muted,
     })),
     subtitle: {
       wordsPerCaption: state.subtitle.wordsPerCaption,
@@ -755,6 +783,9 @@ export function applyEditConfig(
       // no transform antigo, com borda preta).
       customized: l.customized ?? false,
       isDuplicate: l.isDuplicate,
+      sourceStart: l.sourceStart ?? 0,
+      volume: l.volume ?? 1,
+      muted: l.muted ?? false,
     })),
     subtitle: {
       style: { ...DEFAULT_SUBTITLE_STYLE, ...config.subtitle.style },

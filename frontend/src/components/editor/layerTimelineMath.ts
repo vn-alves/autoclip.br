@@ -85,3 +85,48 @@ export function resizeTimelineRange(
     snapTime: snap ? snapped : null,
   }
 }
+/** Até onde a fonte de uma layer vai, em segundos relativos ao mesmo referencial de
+ * `sourceStart` (principal/cópias: início do corte; uploads: o próprio arquivo). */
+export interface SourceBounds {
+  min: number
+  max: number
+}
+
+export interface LayerRangeResult extends TimelineRangeResult {
+  sourceStart: number
+}
+
+/**
+ * Estica/encolhe uma borda respeitando a fonte: puxar o fim para a direita mostra mais do
+ * vídeo (até `bounds.max`), puxar o início para a esquerda mostra o trecho anterior (até
+ * `bounds.min`) — `sourceStart` acompanha a borda inicial.
+ */
+export function resizeLayerRange(
+  edge: 'start' | 'end',
+  time: number,
+  layer: { startTime: number; endTime: number; sourceStart: number },
+  bounds: SourceBounds,
+  snapPoints: number[],
+  snapThreshold: number,
+): LayerRangeResult {
+  const { startTime, endTime, sourceStart } = layer
+  const lower = edge === 'start'
+    ? Math.max(0, startTime - (sourceStart - bounds.min))
+    : startTime + MIN_LAYER_DURATION
+  const upper = edge === 'start'
+    ? endTime - MIN_LAYER_DURATION
+    : startTime + (bounds.max - sourceStart)
+  const raw = clamp(time, lower, Math.max(lower, upper))
+  const snap = closestSnap([{ time: raw, kind: edge }], snapPoints, snapThreshold)
+  const snapped = snap ? clamp(snap.time, lower, Math.max(lower, upper)) : raw
+  if (edge === 'start') {
+    return { startTime: snapped, endTime, sourceStart: sourceStart + (snapped - startTime), snapTime: snap ? snapped : null }
+  }
+  return { startTime, endTime: snapped, sourceStart, snapTime: snap ? snapped : null }
+}
+
+/** Escala da timeline: a duração do vídeo final mais uma folga para poder esticar além dela. */
+export function timelineTrackDuration(content: number): number {
+  if (content <= 0) return 0
+  return content + Math.max(5, content * 0.2)
+}
