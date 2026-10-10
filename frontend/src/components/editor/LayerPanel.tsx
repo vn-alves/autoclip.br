@@ -53,7 +53,7 @@ const clampSeconds = (v: number): number => (!isFinite(v) || v < 0 ? 0 : v)
  * renomear, reordenar e a janela de tempo de cada layer secundária ficam todos aqui — item 3.
  */
 const LayerPanel: React.FC<LayerPanelProps> = ({
-  layers, selectedLayerId, duration,
+  layers, selectedLayerId,
   onSelect, onToggleVisible, onRename, onMoveUp, onMoveDown, onRemove, onDuplicate, onTimeRangeChange, onAddFiles,
   onVolumeChange, onToggleMuted, clipDuration, lockMainTime = false,
   onSetFitMode, uploadError,
