@@ -1,5 +1,6 @@
 import { loadBrowserSettings } from '../utils/browserSettings'
 import { profileFor } from './durationProfile'
+import { recordWebUsage } from '../utils/webUsage'
 
 /**
  * IA direto do navegador (Fase 2 do plano "Web sem servidor") — reaproveita a MESMA chave/
@@ -42,7 +43,7 @@ export interface TranscriptSegment {
  * /audio/transcriptions, pedindo timestamps por segmento direto da própria API do Whisper —
  * evita precisar de um passo de alinhamento separado (o backend faz isso com
  * subtitle_sync_service.py; aqui a API já devolve os tempos prontos). */
-export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptSegment[]> {
+export async function transcribeAudio(audioBlob: Blob, projectId?: string): Promise<TranscriptSegment[]> {
   const cfg = getOpenAICompatConfig()
   if (!cfg) {
     throw new WebPipelineError('Configure uma chave de API compatível com OpenAI em Configurações pra usar o corte por IA sem servidor.')
@@ -64,6 +65,8 @@ export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptSegmen
   }
   const data = await res.json()
   const segments = Array.isArray(data.segments) ? data.segments : []
+  const audioSeconds = Number(data.duration) || (segments.length ? Number(segments[segments.length - 1].end) || 0 : 0)
+  if (audioSeconds > 0) recordWebUsage({ project_id: projectId, provider: 'openai', model: 'whisper-1', audio_seconds: audioSeconds })
   return segments.map((s: any) => ({ start: Number(s.start) || 0, end: Number(s.end) || 0, text: String(s.text || '').trim() }))
 }
 
@@ -79,7 +82,7 @@ const fmtTs = (sec: number) => sec.toFixed(1)
  * backend/pipeline/step1_outline.py: um único prompt (o backend usa chunking + várias
  * passadas pra vídeos longos), mas a mesma ideia central (trechos autocontidos, direto ao
  * ponto, tempos batendo com o começo/fim real de uma fala da transcrição). */
-export async function extractHighlightClips(segments: TranscriptSegment[], totalDurationSec: number): Promise<HighlightClip[]> {
+export async function extractHighlightClips(segments: TranscriptSegment[], totalDurationSec: number, projectId?: string): Promise<HighlightClip[]> {
   const cfg = getOpenAICompatConfig()
   if (!cfg) {
     throw new WebPipelineError('Configure uma chave de API compatível com OpenAI em Configurações pra usar o corte por IA sem servidor.')
@@ -121,6 +124,13 @@ ${transcriptText}`
     throw new WebPipelineError(`Falha ao analisar o vídeo (${res.status}): ${detail.slice(0, 300)}`)
   }
   const data = await res.json()
+  if (data.usage) {
+    recordWebUsage({
+      project_id: projectId, provider: 'openai', model: data.model || cfg.model,
+      prompt_tokens: data.usage.prompt_tokens, completion_tokens: data.usage.completion_tokens,
+      cached_tokens: data.usage.prompt_tokens_details?.cached_tokens || 0,
+    })
+  }
   const content = data.choices?.[0]?.message?.content
   if (!content) throw new WebPipelineError('O modelo não devolveu nenhuma escolha de corte.')
 

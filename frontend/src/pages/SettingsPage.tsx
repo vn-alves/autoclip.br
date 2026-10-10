@@ -15,6 +15,7 @@ import { Btn, Icon, Row, Section, Segmented, StatusDot } from '../ui'
 import { loadBrowserSettings, saveBrowserSettings } from '../utils/browserSettings'
 import AccountSection from '../components/AccountSection'
 import UpdatesSection from '../components/UpdatesSection'
+import UsageSection from '../components/UsageSection'
 import { RELEASES_URL } from '../config/downloads'
 import { getCloudUser, onCloudAuthChange, loadCloudSettings, saveCloudSettings, type CloudUser } from '../utils/cloudSettings'
 
@@ -71,9 +72,10 @@ const CLOUD_DEFAULT_MODEL: Partial<Record<ProviderKey, string>> = {
   dashscope: 'qwen-plus', openai: 'gpt-4o-mini', gemini: 'gemini-2.5-flash', siliconflow: 'deepseek-ai/DeepSeek-V3',
 }
 
-type SectionKey = 'model' | 'account' | 'speech' | 'app' | 'updates' | 'feedback'
+type SectionKey = 'model' | 'usage' | 'account' | 'speech' | 'app' | 'updates' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
   { key: 'model', label: 'Modelo' },
+  { key: 'usage', label: 'Gastos' },
   { key: 'account', label: 'Conta' },
   { key: 'speech', label: 'Transcrever' },
   { key: 'app', label: 'Aplicativo' },
@@ -599,6 +601,8 @@ const SettingsPage: React.FC = () => {
           {active === 'app' && (
             <AppSection analyticsOn={analyticsOn} onAnalyticsChange={(on) => { setAnalyticsEnabled(on); setAnalyticsOn(on) }} />
           )}
+
+          {active === 'usage' && <UsageSection />}
 
           {active === 'updates' && <UpdatesSection />}
 

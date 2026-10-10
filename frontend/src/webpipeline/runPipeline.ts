@@ -73,11 +73,11 @@ export async function runWebPipeline(
     const audioBlob = await extractAudio(videoBlob, (p) => onStage?.({ step: 'audio', progress: p }))
 
     onStage?.({ step: 'transcribing' })
-    const segments = await transcribeAudio(audioBlob)
+    const segments = await transcribeAudio(audioBlob, projectId)
     const totalDurationSec = segments.length ? segments[segments.length - 1].end : 0
 
     onStage?.({ step: 'analyzing' })
-    const highlights = await extractHighlightClips(segments, totalDurationSec)
+    const highlights = await extractHighlightClips(segments, totalDurationSec, projectId)
     if (highlights.length === 0) {
       throw new WebPipelineError('A IA não encontrou nenhum trecho adequado pra cortar nesse vídeo.')
     }
