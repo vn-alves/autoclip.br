@@ -14,7 +14,9 @@ import {
   SubtitleTransition, WordHighlight,
   createDefaultEditorState, createVideoLayerFromFile, duplicateVideoLayer, fitTransform, resizeTransformForFormat, SUBTITLE_POSITION_PRESETS,
   groupWordsIntoSegments, splitPlainTextToWords, toEditConfig, applyEditConfig, hasUnuploadedLayers, isDegenerateTransform,
+  VideoLayer, contentDuration, layerEndTime,
 } from '../components/editor/types'
+import { SourceBounds, timelineTrackDuration } from '../components/editor/layerTimelineMath'
 import { getWebClip, getWebVideoUrl, getWebProjectBlob } from '../webstore/projects'
 import { getWebClipSubtitles, saveWebClipSubtitles, getWebEditorConfig, saveWebEditorConfig } from '../webstore/editor'
 import { exportWebClip } from '../webpipeline/ffmpegClient'
