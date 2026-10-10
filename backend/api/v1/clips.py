@@ -299,6 +299,32 @@ async def get_editor_asset(clip_id: str, asset_id: str, db: Session = Depends(ge
                          headers={"Accept-Ranges": "bytes"})
 
 
+@router.get("/{clip_id}/editor/source-info")
+async def get_editor_source_info(clip_id: str, db: Session = Depends(get_db)):
+    """Vídeo original do projeto + onde o corte começa nele — permite ao Editor estender o
+    corte para antes/depois dos limites originais (ver editor_render_service.resolve_original_source)."""
+    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Corte não encontrado")
+    src = editor_render_service.resolve_original_source(db, str(clip.project_id), clip_id)
+    if not src:
+        return {"available": False}
+    return {"available": True, "offset": src["offset"], "duration": src["duration"]}
+
+
+@router.get("/{clip_id}/editor/source")
+async def get_editor_source(clip_id: str, db: Session = Depends(get_db)):
+    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Corte não encontrado")
+    src = editor_render_service.resolve_original_source(db, str(clip.project_id), clip_id)
+    if not src:
+        raise HTTPException(status_code=404, detail="Vídeo original não encontrado")
+    path = src["path"]
+    return FileResponse(path=str(path), media_type="video/mp4", filename=path.name,
+                        headers={"Accept-Ranges": "bytes"})
+
+
 @router.post("/{clip_id}/editor/render")
 async def start_clip_editor_render(clip_id: str, db: Session = Depends(get_db)):
     clip = db.query(Clip).filter(Clip.id == clip_id).first()
