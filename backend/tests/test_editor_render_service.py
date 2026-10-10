@@ -235,3 +235,54 @@ class TestSubtitleCompositionOrder:
         caption_filter = next(f for f in filters if "ass=" in f)
         assert caption_filter.startswith(f"[{final_video_output}]ass=")
         assert filters.index(caption_filter) > max(filters.index(f) for f in overlays)
+
+
+class TestLayerTimingAndAudio:
+    def _cfg(self, layers):
+        return {"version": 1, "canvas": {"format": "9:16", "background": {"color": "#000000"}},
+                "layers": layers, "subtitle": {"visible": False}}
+
+    def _layer(self, **kw):
+        base = {"id": "main", "isMain": True, "visible": True, "zIndex": 0, "startTime": 0, "endTime": None,
+                "transform": {"x": 0, "y": 0, "width": 1, "height": 1, "rotation": 0}}
+        base.update(kw)
+        return base
+
+    def _patch(self, monkeypatch, original=None):
+        P = __import__("pathlib").Path
+        monkeypatch.setattr(svc, "resolve_main_clip_video_path", lambda db, pid, cid: P("main.mp4"))
+        monkeypatch.setattr(svc, "_probe", lambda path: {"duration": 50.0})
+        monkeypatch.setattr(svc, "_has_audio_stream", lambda path: True)
+        monkeypatch.setattr(svc, "resolve_original_source", lambda db, pid, cid: original)
+
+    def test_extending_main_from_50_to_60s_reads_from_original_video(self, monkeypatch, tmp_path):
+        P = __import__("pathlib").Path
+        self._patch(monkeypatch, {"path": P("input.mp4"), "offset": 100.0, "duration": 3600.0})
+        spec = svc.build_render_spec(None, "p", "c", self._cfg([self._layer(endTime=60.0)]), tmp_path)
+        layer = spec.layers[0]
+        assert layer.input_path == P("input.mp4")
+        assert layer.source_offset == 100.0
+        assert layer.end_time == 60.0
+        assert spec.duration == 60.0
+
+    def test_shortening_main_shortens_the_final_video(self, monkeypatch, tmp_path):
+        self._patch(monkeypatch)
+        spec = svc.build_render_spec(None, "p", "c", self._cfg([self._layer(endTime=30.0)]), tmp_path)
+        assert spec.duration == 30.0
+        assert str(spec.layers[0].input_path) == "main.mp4"
+
+    def test_duplicate_has_its_own_audio_and_volume_and_muted_layer_has_none(self, monkeypatch, tmp_path):
+        self._patch(monkeypatch)
+        cfg = self._cfg([
+            self._layer(volume=1.0),
+            self._layer(id="dup", isDuplicate=True, zIndex=1, startTime=5, endTime=15, volume=1.5),
+            self._layer(id="dup2", isDuplicate=True, zIndex=2, startTime=5, endTime=15, muted=True),
+        ])
+        spec = svc.build_render_spec(None, "p", "c", cfg, tmp_path)
+        by_z = {l.z_index: l for l in spec.layers}
+        assert by_z[1].has_audio and by_z[1].volume == 1.5
+        assert not by_z[2].has_audio
+        cmd = svc._build_ffmpeg_command(spec, tmp_path / "out.mp4")
+        fc = cmd[cmd.index("-filter_complex") + 1]
+        assert "amix=inputs=2" in fc
+        assert "volume=1.500" in fc and "adelay=delays=5000" in fc
