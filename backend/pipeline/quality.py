@@ -274,8 +274,9 @@ def _to_sentence_start(i: int, cues: List[_Cue], max_back: float = 20.0) -> int:
     j = i
     while j > 0 and not _ends_sentence(cues, j - 1) and cues[i].start - cues[j - 1].start <= max_back:
         j -= 1
-    if j == 0 or _ends_sentence(cues, j - 1):
+    if (j > 0 and _ends_sentence(cues, j - 1)) or (j == 0 and cues[i].start - cues[0].start <= 8.0):
         return j
+    j = max(j, 1)
     best = max(range(j, i + 1), key=lambda k: (_gap_after(cues, k - 1) if k > 0 else float("inf"), k))
     return best if best == 0 or _gap_after(cues, best - 1) >= 0.3 else i
 
@@ -287,7 +288,8 @@ def _to_sentence_end(i: int, cues: List[_Cue], max_fwd: float = 25.0, limit: Opt
     while (not _ends_sentence(cues, j) and j + 1 < len(cues) and cues[j + 1].end - cues[i].end <= max_fwd
            and (limit is None or cues[j + 1].end <= limit + 1e-6)):
         j += 1
-    if _ends_sentence(cues, j):
+    at_video_end = j == len(cues) - 1
+    if _ends_sentence(cues, j) and (not at_video_end or cues[j].end - cues[i].end <= 10.0):
         return j
     best = max(range(i, j + 1), key=lambda k: (_gap_after(cues, k) if k < len(cues) - 1 else 0.0, -k))
     return best if _gap_after(cues, best) >= 0.3 else i
