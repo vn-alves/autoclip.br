@@ -1,6 +1,6 @@
 {
   "name": "src-tauri",
-  "version": "2.0.11",
+  "version": "2.0.12",
   "description": "AutoClip Desktop Application",
   "scripts": {
     "tauri": "tauri",

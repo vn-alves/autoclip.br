@@ -101,3 +101,22 @@ def test_excerpt_between_truncates():
     cues = [_cue(0, 2, "一二三四五六七八九十" * 20), _cue(2, 4, "后段")]
     text = excerpt_between(cues, 0, 3, max_chars=20)
     assert len(text) == 20
+
+
+def test_end_never_stops_mid_sentence_without_punctuation():
+    from backend.pipeline.quality import _Cue, _to_sentence_end
+    # fala corrida sem pontuação; maior pausa (1.0s) depois do cue 2
+    cues = [_Cue(0, 2, "a"), _Cue(2.1, 4, "b"), _Cue(4.1, 6, "c"), _Cue(7.0, 9, "d"), _Cue(9.1, 40, "e")]
+    assert _to_sentence_end(0, cues, max_fwd=8.0) == 2
+
+
+def test_start_backs_up_to_sentence_beginning():
+    from backend.pipeline.quality import _Cue, _to_sentence_start
+    cues = [_Cue(0, 2, "Fim."), _Cue(2.1, 4, "começo da ideia"), _Cue(4.1, 6, "continua"), _Cue(6.1, 8, "mais")]
+    assert _to_sentence_start(3, cues) == 1
+
+
+def test_end_respects_next_clip_limit():
+    from backend.pipeline.quality import _Cue, _to_sentence_end
+    cues = [_Cue(0, 2, "a"), _Cue(2.1, 4, "b"), _Cue(4.1, 6, "c."), _Cue(6.1, 8, "d")]
+    assert cues[_to_sentence_end(0, cues, limit=4.0)].end <= 4.0

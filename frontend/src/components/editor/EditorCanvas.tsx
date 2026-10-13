@@ -323,10 +323,26 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
       }
       const offset = layer.isMain ? mainSourceOffset : 0
       const fileTime = Math.max(0, offset + (layer.sourceStart || 0) + (currentTime - layer.startTime))
-      const tolerance = isPlaying ? 0.3 : 0.04
-      if (Math.abs(el.currentTime - fileTime) > tolerance) el.currentTime = fileTime
-      if (isPlaying && el.paused) el.play().catch(() => {})
-      if (!isPlaying && !el.paused) el.pause()
+      if (!isPlaying) {
+        if (el.playbackRate !== 1) el.playbackRate = 1
+        if (!el.paused) el.pause()
+        if (Math.abs(el.currentTime - fileTime) > 0.04) el.currentTime = fileTime
+        continue
+      }
+      // Durante a reprodução, seeks repetidos travam o decodificador (muito visível no macOS).
+      // Pequenos desvios são corrigidos ajustando a velocidade; só busca em desvios grandes
+      // e nunca enquanto uma busca anterior ainda está em andamento.
+      const drift = el.currentTime - fileTime
+      if (!el.seeking && Math.abs(drift) > 0.75) {
+        el.currentTime = fileTime
+        if (el.playbackRate !== 1) el.playbackRate = 1
+      } else if (Math.abs(drift) > 0.08) {
+        const rate = drift > 0 ? 0.94 : 1.06
+        if (el.playbackRate !== rate) el.playbackRate = rate
+      } else if (el.playbackRate !== 1) {
+        el.playbackRate = 1
+      }
+      if (el.paused) el.play().catch(() => {})
     }
   }, [layers, videoEls, currentTime, isPlaying, clipDuration, mainSourceOffset])
 
