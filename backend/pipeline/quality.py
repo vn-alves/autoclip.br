@@ -79,6 +79,10 @@ class DurationProfile:
             f"- 每个片段目标时长 {_fmt_dur(lo)}–{_fmt_dur(hi)}，最短不少于 {_fmt_dur(self.min_clip_sec)}，最长不超过 {_fmt_dur(self.max_clip_sec)}\n"
             "- 上文中「至少 90 秒」「3–6 分钟」等具体数字一律以本节为准\n"
             "- 起止时间必须落在字幕行的边界上，直接引用字幕行的时间戳，不要自行推算\n"
+            "- 每个片段必须能独立看懂：从引出话题的那句话开始（问题、论点或故事开头），不要从“然后/所以/但是/对”等承接词开始\n"
+            "- 片段必须在观点讲完、结论或笑点落地的那句话之后结束，绝不能停在半句话或正在解释的中途\n"
+            "- 不要选择寒暄、口误、沉默、广告、过渡或缺少上下文就无法理解的段落\n"
+            "- 每个片段都要和视频语言一致（例如葡萄牙语视频用葡萄牙语写 outline）\n"
             + (f"- 用户指定每个片段平均时长约 {_fmt_dur(self.user_target_sec)}，这是硬性要求：较长的话题请拆成多个片段，绝不能超过 {_fmt_dur(self.max_clip_sec)}\n"
                if self.user_target_sec else "")
         )
@@ -260,20 +264,32 @@ def _ends_sentence(cues: List[_Cue], i: int) -> bool:
     return bool(_SENT_END.search(cues[i].text or "")) or (cues[i + 1].start - cues[i].end) >= 0.8
 
 
-def _to_sentence_start(i: int, cues: List[_Cue], max_back: float = 8.0) -> int:
-    """Recua até o começo da frase (cue anterior termina frase)."""
+def _gap_after(cues: List[_Cue], i: int) -> float:
+    return float("inf") if i >= len(cues) - 1 else cues[i + 1].start - cues[i].end
+
+
+def _to_sentence_start(i: int, cues: List[_Cue], max_back: float = 20.0) -> int:
+    """Recua até o começo da frase (cue anterior termina frase). Sem pontuação na janela,
+    começa depois da maior pausa encontrada — nunca no meio de uma fala corrida."""
     j = i
     while j > 0 and not _ends_sentence(cues, j - 1) and cues[i].start - cues[j - 1].start <= max_back:
         j -= 1
-    return j
+    if j == 0 or _ends_sentence(cues, j - 1):
+        return j
+    best = max(range(j, i + 1), key=lambda k: (_gap_after(cues, k - 1) if k > 0 else float("inf"), k))
+    return best
 
 
-def _to_sentence_end(i: int, cues: List[_Cue], max_fwd: float = 10.0) -> int:
-    """Avança até o fim da frase, nunca cortando no meio."""
+def _to_sentence_end(i: int, cues: List[_Cue], max_fwd: float = 25.0, limit: Optional[float] = None) -> int:
+    """Avança até o fim da frase, nunca cortando no meio. Sem pontuação na janela, termina
+    na maior pausa encontrada. `limit` impede invadir o próximo corte."""
     j = i
-    while not _ends_sentence(cues, j) and j + 1 < len(cues) and cues[j + 1].end - cues[i].end <= max_fwd:
+    while (not _ends_sentence(cues, j) and j + 1 < len(cues) and cues[j + 1].end - cues[i].end <= max_fwd
+           and (limit is None or cues[j + 1].end <= limit + 1e-6)):
         j += 1
-    return j
+    if _ends_sentence(cues, j):
+        return j
+    return max(range(i, j + 1), key=lambda k: (_gap_after(cues, k), -k))
 
 
 def _snap_start(sec: float, cues: List[_Cue], window: float) -> Tuple[float, int]:
