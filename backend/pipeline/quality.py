@@ -277,7 +277,7 @@ def _to_sentence_start(i: int, cues: List[_Cue], max_back: float = 20.0) -> int:
     if j == 0 or _ends_sentence(cues, j - 1):
         return j
     best = max(range(j, i + 1), key=lambda k: (_gap_after(cues, k - 1) if k > 0 else float("inf"), k))
-    return best
+    return best if best == 0 or _gap_after(cues, best - 1) >= 0.3 else i
 
 
 def _to_sentence_end(i: int, cues: List[_Cue], max_fwd: float = 25.0, limit: Optional[float] = None) -> int:
@@ -289,7 +289,8 @@ def _to_sentence_end(i: int, cues: List[_Cue], max_fwd: float = 25.0, limit: Opt
         j += 1
     if _ends_sentence(cues, j):
         return j
-    return max(range(i, j + 1), key=lambda k: (_gap_after(cues, k), -k))
+    best = max(range(i, j + 1), key=lambda k: (_gap_after(cues, k) if k < len(cues) - 1 else 0.0, -k))
+    return best if _gap_after(cues, best) >= 0.3 else i
 
 
 def _snap_start(sec: float, cues: List[_Cue], window: float) -> Tuple[float, int]:
