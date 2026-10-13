@@ -446,7 +446,9 @@ def refine_timeline(items: Sequence[Dict[str, Any]], srt_entries: Sequence[Dict[
             if dur < profile.min_clip_sec:
                 e, ei = _extend_to_min(it["_s"], it["_ei"], cues, profile.min_clip_sec, limit)
                 if e > it["_e"]:
-                    it["_e"], it["_ei"] = e, ei
+                    # termina a extensão num fim de frase, sem invadir o próximo corte
+                    ei = _to_sentence_end(ei, cues, limit=limit)
+                    it["_e"], it["_ei"] = cues[ei].end, ei
                     it["_ops"].append("extend")
                     report["extended"] += 1
             dur = it["_e"] - it["_s"]
