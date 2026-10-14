@@ -688,6 +688,16 @@
   align-items: center;
   gap: 8px;
   padding: 0 8px 8px;
+  min-width: 0;
+}
+
+.ac-layer-volume input[type='range'] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ac-layer-volume .ac-editor-value-label {
+  flex: 0 0 auto;
 }
 
 .ac-layer-time-range {
