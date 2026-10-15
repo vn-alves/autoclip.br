@@ -13,7 +13,7 @@ import re
 import unicodedata
 from typing import Any, Dict, List, Optional, Sequence
 
-from .quality import DurationProfile, profile_from_srt, to_seconds
+from .quality import DurationProfile, is_promo, profile_from_srt, to_seconds
 
 _END_PUNCT = re.compile(r"[.!?…。！？]['\")\]]*\s*$")
 _PAUSE_SEC = 0.8
@@ -138,6 +138,8 @@ def build_fallback_clips(
             j += 1
         dur = sents[j]["end"] - sents[i]["start"]
         if dur < min_len and total >= min_len:
+            continue
+        if is_promo(" ".join(s["text"] for s in sents[i:j + 1])):
             continue
         span = sig[i:j + 1]
         words = sum(len(s["text"].split()) for s in sents[i:j + 1])

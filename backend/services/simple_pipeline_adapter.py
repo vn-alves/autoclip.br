@@ -195,16 +195,28 @@ class SimplePipelineAdapter:
             
             # Step 1: 大纲提取
             logger.info("执行Step 1: 大纲提取")
-            if input_srt_path and Path(input_srt_path).exists():
-                logger.info(f"使用现有SRT文件: {input_srt_path}")
-                outlines = run_step1_outline(Path(input_srt_path), metadata_dir=metadata_dir, prompt_files=prompt_files, clip_overrides=clip_overrides)
+            # Legenda vazia (download interrompido) conta como ausente; senão o "tentar de novo"
+            # falhava sempre com "legendas vazias" em vez de gerar uma nova.
+            effective_srt = Path(input_srt_path) if input_srt_path and Path(input_srt_path).exists() and Path(input_srt_path).stat().st_size > 20 else None
+            if effective_srt:
+                logger.info(f"使用现有SRT文件: {effective_srt}")
+                try:
+                    outlines = run_step1_outline(effective_srt, metadata_dir=metadata_dir, prompt_files=prompt_files, clip_overrides=clip_overrides)
+                except Exception as step1_error:  # noqa: BLE001
+                    logger.warning(f"Step 1 falhou ({step1_error}); seguindo para os cortes pelas legendas")
+                    outlines = []
             else:
                 logger.warning("没有SRT文件，尝试自动生成字幕")
                 # 尝试自动生成字幕
                 srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
                 if srt_path and srt_path.exists():
                     logger.info(f"自动生成字幕成功: {srt_path}")
-                    outlines = run_step1_outline(srt_path, metadata_dir=metadata_dir, prompt_files=prompt_files, clip_overrides=clip_overrides)
+                    effective_srt = srt_path
+                    try:
+                        outlines = run_step1_outline(srt_path, metadata_dir=metadata_dir, prompt_files=prompt_files, clip_overrides=clip_overrides)
+                    except Exception as step1_error:  # noqa: BLE001
+                        logger.warning(f"Step 1 falhou ({step1_error}); seguindo para os cortes pelas legendas")
+                        outlines = []
                 else:
                     logger.warning("自动生成字幕失败，创建空大纲")
                     # 创建一个空的大纲文件
@@ -220,7 +232,15 @@ class SimplePipelineAdapter:
             
             # Step 2: 时间线提取
             logger.info("执行Step 2: 时间线提取")
-            if outlines:  # 只有当有大纲时才执行后续步骤
+            if outlines:
+                try:
+                    run_step2_timeline(metadata_dir / "step1_outline.json", metadata_dir=metadata_dir, prompt_files=prompt_files)
+                    run_step3_scoring(metadata_dir / "step2_timeline.json", metadata_dir=metadata_dir, prompt_files=prompt_files)
+                except Exception as analyze_error:  # noqa: BLE001
+                    # Erro da IA na linha do tempo/nota não pode derrubar o projeto inteiro.
+                    logger.warning(f"Step 2/3 falhou ({analyze_error}); usando cortes pelas legendas")
+                    outlines = []
+            if False:  # bloco antigo mantido desativado
                 timeline_data = run_step2_timeline(
                     metadata_dir / "step1_outline.json",
                     metadata_dir=metadata_dir,
@@ -236,7 +256,7 @@ class SimplePipelineAdapter:
                     prompt_files=prompt_files,
                 )
                 emit_progress(self.project_id, "ANALYZE", "内容分析完成", subpercent=100)
-            else:
+            if not outlines:
                 logger.warning("没有大纲数据，跳过时间线提取和内容评分")
                 # 创建空的时间线和评分文件
                 timeline_file = metadata_dir / "step2_timeline.json"
@@ -315,7 +335,7 @@ class SimplePipelineAdapter:
                 titles_file = metadata_dir / "step4_titles.json"
                 collections_file = metadata_dir / "step5_collections.json"
                 import json
-                subtitle_source = Path(input_srt_path) if input_srt_path else None
+                subtitle_source = effective_srt
                 srt_entries = TextProcessor.parse_srt(subtitle_source) if subtitle_source and subtitle_source.exists() else []
                 from backend.pipeline.quality import profile_from_srt
                 fallback_profile = profile_from_srt(
