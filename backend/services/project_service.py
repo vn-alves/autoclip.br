@@ -68,6 +68,20 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         
         return self.update(project_id, **orm_data)
     
+    def _failure_reason(self, project) -> Optional[str]:
+        """Motivo da última falha (tarefa mais recente com erro ou metadata do projeto)."""
+        status = getattr(getattr(project, 'status', None), 'value', getattr(project, 'status', None))
+        if str(status) not in ('failed', 'error'):
+            return None
+        from ..models.task import Task
+        from ..utils.friendly_errors import friendly_error
+        raw = (getattr(project, 'project_metadata', None) or {}).get('error_message')
+        if not raw:
+            task = (self.db.query(Task).filter(Task.project_id == str(project.id), Task.error_message.isnot(None))
+                    .order_by(Task.created_at.desc()).first())
+            raw = task.error_message if task else None
+        return friendly_error(raw) or "Falha no processamento sem detalhe registrado. Tente processar de novo."
+
     def get_project_with_stats(self, project_id: str) -> Optional[ProjectResponse]:
         """Get project with statistics."""
         project = self.get(project_id)
@@ -100,7 +114,8 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             completed_at=self._convert_utc_to_local(getattr(project, 'completed_at', None)),
             total_clips=total_clips,
             total_collections=total_collections,
-            total_tasks=total_tasks
+            total_tasks=total_tasks,
+            error_message=self._failure_reason(project),
         )
     
     def get_projects_paginated(
@@ -146,7 +161,8 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
                 completed_at=self._convert_utc_to_local(getattr(project, 'completed_at', None)),
                 total_clips=total_clips,
                 total_collections=total_collections,
-                total_tasks=total_tasks
+                total_tasks=total_tasks,
+                error_message=self._failure_reason(project),
             ))
         
         return ProjectListResponse(
