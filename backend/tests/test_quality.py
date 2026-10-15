@@ -89,12 +89,11 @@ def test_select_clips_keeps_top_k_when_all_below_threshold():
         {"id": "2", "final_score": 0.3, "outline": "b"},
         {"id": "3", "final_score": 0.2, "outline": "c"},
     ]
-    p = profile_for(300)  # min_keep=2
+    p = profile_for(300)  # min_keep=3
     chosen, info = select_clips(scored, 0.7, p)
-    assert len(chosen) == 2
-    assert info["fallback_selected"] == 2
+    assert len(chosen) == 3
+    assert info["fallback_selected"] == 3
     assert all(c["selected_by"] == "fallback" for c in chosen)
-    assert {c["id"] for c in chosen} == {"1", "2"}
 
 
 def test_excerpt_between_truncates():
@@ -120,3 +119,36 @@ def test_end_respects_next_clip_limit():
     from backend.pipeline.quality import _Cue, _to_sentence_end
     cues = [_Cue(0, 2, "a"), _Cue(2.1, 4, "b"), _Cue(4.1, 6, "c."), _Cue(6.1, 8, "d")]
     assert cues[_to_sentence_end(0, cues, limit=4.0)].end <= 4.0
+
+
+def test_five_minute_video_requires_at_least_three_clips():
+    assert profile_for(5 * 60).min_keep == 3
+
+
+def test_twenty_minute_video_requires_at_least_eight_clips():
+    assert profile_for(20 * 60).min_keep == 8
+
+
+def test_old_ten_point_threshold_does_not_discard_good_clips():
+    scored = [{"id": str(i), "final_score": 0.9, "outline": f"t{i}"} for i in range(1, 6)]
+    chosen, info = select_clips(scored, 7.0, profile_for(300))
+    assert len(chosen) == 5 and info["fallback_selected"] == 0
+
+
+def test_sponsor_segment_is_dropped():
+    scored = [
+        {"id": "1", "final_score": 0.95, "outline": "Patrocinio", "excerpt": "use o codigo AUTO no link na descricao e ganhe desconto com o cupom"},
+        {"id": "2", "final_score": 0.6, "outline": "historia", "excerpt": "e entao ele contou como perdeu tudo e recomecou do zero"},
+    ]
+    chosen, _ = select_clips(scored, 0.7, profile_for(120))
+    assert [c["id"] for c in chosen] == ["2"]
+
+
+def test_top_up_reaches_minimum_when_ai_returns_one_clip():
+    from backend.pipeline.quality import top_up_clips
+    cues = [_cue(i, i + 3, f"frase numero {i} sobre o assunto.") for i in range(0, 300, 3)]
+    one = [{"id": "1", "start_time": to_srt_time(0), "end_time": to_srt_time(60), "outline": "a", "final_score": 0.9}]
+    out, added = top_up_clips(one, cues, profile_for(300))
+    assert len(out) >= 3 and added >= 2
+    spans = sorted((to_seconds(c["start_time"]), to_seconds(c["end_time"])) for c in out)
+    assert all(spans[k][1] <= spans[k + 1][0] for k in range(len(spans) - 1))
