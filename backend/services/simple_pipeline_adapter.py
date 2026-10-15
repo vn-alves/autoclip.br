@@ -256,7 +256,7 @@ class SimplePipelineAdapter:
                     prompt_files=prompt_files,
                 )
                 emit_progress(self.project_id, "ANALYZE", "内容分析完成", subpercent=100)
-            else:
+            if not outlines:
                 logger.warning("没有大纲数据，跳过时间线提取和内容评分")
                 # 创建空的时间线和评分文件
                 timeline_file = metadata_dir / "step2_timeline.json"
