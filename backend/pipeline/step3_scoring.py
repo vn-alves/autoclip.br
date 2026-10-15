@@ -107,8 +107,7 @@ class ClipScorer:
                 } for clip in clips
             ]
 
-            response = self.llm_client.call_with_retry(self.recommendation_prompt, input_for_llm)
-            parsed_list = self.llm_client.parse_json_response(response)
+            parsed_list = self.llm_client.call_json(self.recommendation_prompt, input_for_llm)
             scored, stats = align_scores(clips, parsed_list)
             logger.info(f"  > 评分对齐: 命中 {stats['matched']}，兜底 {stats['fallback']}")
             return scored
