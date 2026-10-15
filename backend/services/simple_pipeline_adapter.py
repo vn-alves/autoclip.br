@@ -232,7 +232,15 @@ class SimplePipelineAdapter:
             
             # Step 2: 时间线提取
             logger.info("执行Step 2: 时间线提取")
-            if outlines:  # 只有当有大纲时才执行后续步骤
+            if outlines:
+                try:
+                    run_step2_timeline(metadata_dir / "step1_outline.json", metadata_dir=metadata_dir, prompt_files=prompt_files)
+                    run_step3_scoring(metadata_dir / "step2_timeline.json", metadata_dir=metadata_dir, prompt_files=prompt_files)
+                except Exception as analyze_error:  # noqa: BLE001
+                    # Erro da IA na linha do tempo/nota não pode derrubar o projeto inteiro.
+                    logger.warning(f"Step 2/3 falhou ({analyze_error}); usando cortes pelas legendas")
+                    outlines = []
+            if False:  # bloco antigo mantido desativado
                 timeline_data = run_step2_timeline(
                     metadata_dir / "step1_outline.json",
                     metadata_dir=metadata_dir,
