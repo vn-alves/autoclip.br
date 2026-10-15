@@ -123,6 +123,12 @@ def process_video_pipeline(
             # 简化的进度系统不需要复杂的回调函数
             # 新的进度系统会在流水线内部自动发送进度事件
             
+            # Checagem antecipada: sem chave da IA o processamento falharia lá no meio
+            # sem explicação — falha logo, com o motivo claro.
+            from backend.core.llm_manager import get_llm_manager
+            if not get_llm_manager().get_current_provider_info().get("available"):
+                raise ValueError("API key da IA não configurada ou inválida")
+
             # 使用简化的Pipeline适配器
             from backend.services.simple_pipeline_adapter import create_simple_pipeline_adapter
             pipeline_adapter = create_simple_pipeline_adapter(str(project_id), str(task.id))
@@ -143,6 +149,7 @@ def process_video_pipeline(
                 project = db.query(Project).filter(Project.id == project_id).first()
                 if project:
                     project.status = ProjectStatus.FAILED
+                    project.project_metadata = {**(project.project_metadata or {}), "error_message": error_msg}
                     project.updated_at = datetime.utcnow()
                     logger.info(f"项目状态已更新为失败: {project_id}")
                 
@@ -221,6 +228,7 @@ def process_video_pipeline(
                 project = db.query(Project).filter(Project.id == project_id).first()
                 if project:
                     project.status = ProjectStatus.FAILED
+                    project.project_metadata = {**(project.project_metadata or {}), "error_message": error_msg}
                     project.updated_at = datetime.utcnow()
                     logger.info(f"项目状态已更新为失败: {project_id}")
                 
