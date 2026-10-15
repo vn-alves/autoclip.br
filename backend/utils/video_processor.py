@@ -205,7 +205,7 @@ class VideoProcessor:
             # longos) + captura explícita de TimeoutExpired, matando o processo e reportando
             # falha em vez de travar o pipeline inteiro silenciosamente.
             result = subprocess.run(
-                cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=600,
+                cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=1800,
             )
 
             if result.returncode == 0:
@@ -293,7 +293,7 @@ class VideoProcessor:
             # 执行命令 — timeout: ver comentário em extract_clip (mesmo bug de travar sem erro).
             try:
                 result = subprocess.run(
-                    cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=600,
+                    cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=1800,
                 )
             except subprocess.TimeoutExpired:
                 concat_file.unlink(missing_ok=True)

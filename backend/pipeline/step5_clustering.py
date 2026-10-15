@@ -67,10 +67,7 @@ class ClusteringEngine:
         
         try:
             # 调用大模型进行聚类
-            response = self.llm_client.call_with_retry(full_prompt)
-            
-            # 解析JSON响应
-            collections_data = self.llm_client.parse_json_response(response)
+            collections_data = self.llm_client.call_json(full_prompt)
             
             # 验证和清理合集数据
             validated_collections = self._validate_collections(collections_data, clips_with_titles)

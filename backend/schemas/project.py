@@ -64,6 +64,7 @@ class ProjectResponse(BaseSchema):
     created_at: datetime = Field(description="Creation timestamp")
     updated_at: datetime = Field(description="Last update timestamp")
     completed_at: Optional[datetime] = Field(description="Completion timestamp")
+    error_message: Optional[str] = Field(default=None, description="Motivo da falha, em linguagem clara")
     
     class Config:
         json_encoders = {

@@ -76,6 +76,20 @@ class LLMClient:
             logger.error(f"LLM重试调用失败: {str(e)}")
             raise
     
+    def call_json(self, prompt: str, input_data: Any = None, max_attempts: int = 3) -> Any:
+        """Chama a IA e devolve o JSON já interpretado; se a resposta vier quebrada,
+        pede de novo (até max_attempts) em vez de derrubar o processamento inteiro."""
+        last_error: Exception = ValueError("resposta vazia")
+        for attempt in range(max_attempts):
+            response = self.call_with_retry(prompt, input_data)
+            if response:
+                try:
+                    return self.parse_json_response(response)
+                except Exception as e:  # noqa: BLE001
+                    last_error = e
+            logger.warning(f"Resposta da IA inválida (tentativa {attempt + 1}/{max_attempts})")
+        raise ValueError(f"A IA devolveu uma resposta inválida após {max_attempts} tentativas: {last_error}")
+
     def _preprocess_llm_response(self, response: str) -> str:
         """
         预处理LLM响应，移除常见的非JSON内容
