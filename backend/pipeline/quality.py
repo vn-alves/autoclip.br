@@ -103,6 +103,34 @@ def _fmt_dur(sec: float) -> str:
     return f"{sec // 60} 分 {sec % 60} 秒"
 
 
+def _short_min(total_sec: float) -> int:
+    """Vídeo curto: ~1 corte a cada 1:30 (5 min → 3), nunca menos que 1."""
+    return max(1, min(6, int(total_sec // 90)))
+
+
+# Trechos de anúncio / patrocínio / autopromoção (sem acento, minúsculo).
+_PROMO_TERMS = [
+    "patrocin", "oferecimento", "publi ", "publipost", "cupom", "codigo promocional", "use o codigo",
+    "link na descricao", "link na bio", "link aqui embaixo", "desconto", "frete gratis", "compre ",
+    "inscreva-se", "se inscreva", "ative o sininho", "deixa o like", "deixe seu like", "seja membro",
+    "sponsor", "promo code", "discount", "subscribe", "广告", "赞助", "优惠",
+]
+
+
+def promo_ratio(text: str) -> float:
+    """Quantos termos de anúncio aparecem a cada ~100 palavras."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode().lower() if not any(
+        "\u4e00" <= ch <= "\u9fff" for ch in str(text or "")) else str(text or "")
+    hits = sum(t.count(term) for term in _PROMO_TERMS)
+    words = max(1, len(t.split()))
+    return hits * 100.0 / words
+
+
+def is_promo(text: str) -> bool:
+    return promo_ratio(text) >= 2.0
+
+
 def profile_for(
     total_sec: float,
     *,
@@ -120,13 +148,13 @@ def profile_for(
         profile = DurationProfile(
             tier="short", total_sec=total_sec,
             min_clip_sec=20, target_clip_sec=(30, 90), max_clip_sec=150,
-            topics_hint=(3, 6), min_keep=2, max_clips=6,
+            topics_hint=(max(3, _short_min(total_sec)), 6), min_keep=_short_min(total_sec), max_clips=6,
         )
     elif total_sec < 30 * 60:
         profile = DurationProfile(
             tier="medium", total_sec=total_sec,
             min_clip_sec=45, target_clip_sec=(60, 180), max_clip_sec=300,
-            topics_hint=(4, 10), min_keep=4, max_clips=10,
+            topics_hint=(max(4, int(total_sec // 150)), max(10, int(total_sec // 100))), min_keep=max(4, int(total_sec // 150)), max_clips=max(10, int(total_sec // 100)),
         )
     else:
         # 长视频：保持原有播客口径，但上限收紧到 8 分钟
@@ -664,7 +692,12 @@ def select_clips(scored: Sequence[Dict[str, Any]], threshold: float,
     """
     min_keep = profile.min_keep if profile else 2
     max_clips = profile.max_clips if profile else 12
+    if threshold > 1:  # nota vem normalizada em 0–1; limiar antigo 7.0 descartava tudo
+        threshold = threshold / 10
     items = [dict(c) for c in scored]
+    promos = [c for c in items if is_promo(_clip_text(c))]
+    if len(promos) < len(items):
+        items = [c for c in items if c not in promos]
     ranked = sorted(items, key=lambda c: float(c.get("final_score") or 0), reverse=True)
 
     chosen = [c for c in ranked if float(c.get("final_score") or 0) >= threshold]
@@ -688,9 +721,16 @@ def select_clips(scored: Sequence[Dict[str, Any]], threshold: float,
     chosen.sort(key=lambda c: _id_key(c.get("id")))
     info = {
         "threshold": threshold, "candidates": len(items), "selected": len(chosen),
-        "fallback_selected": fallback, "truncated": truncated, "min_keep": min_keep, "max_clips": max_clips,
+        "fallback_selected": fallback, "truncated": truncated, "promo_dropped": len(promos) if len(promos) < len(scored) else 0, "min_keep": min_keep, "max_clips": max_clips,
     }
     return chosen, info
+
+
+def _clip_text(c: Dict[str, Any]) -> str:
+    content = c.get("content")
+    if isinstance(content, list):
+        content = " ".join(str(x) for x in content)
+    return f"{c.get('outline') or ''} {content or ''} {c.get('excerpt') or ''}"
 
 
 def _id_key(v: Any) -> Tuple[int, str]:
