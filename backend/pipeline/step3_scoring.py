@@ -148,7 +148,23 @@ def run_step3_scoring(timeline_path: Path, metadata_dir: Path = None, output_pat
     scored_clips = scorer.score_clips(timeline_data)
 
     profile = load_profile(metadata_dir)
+    from .quality import load_srt_chunks, excerpt_between, to_seconds
+    cues = load_srt_chunks(metadata_dir)
+    if cues:
+        for c in scored_clips:
+            try:
+                c["excerpt"] = excerpt_between(cues, to_seconds(c["start_time"]), to_seconds(c["end_time"]), max_chars=4000)
+            except Exception:  # noqa: BLE001
+                pass
     high_score_clips, select_info = select_clips(scored_clips, MIN_SCORE_THRESHOLD, profile)
+    # A IA às vezes devolve só 1–2 trechos num vídeo longo; completa até o mínimo da duração
+    # com trechos de frases completas que não se sobrepõem aos escolhidos.
+    if profile and cues and len(high_score_clips) < profile.min_keep:
+        from .quality import top_up_clips
+        high_score_clips, added = top_up_clips(high_score_clips, cues, profile)
+        select_info["topped_up"] = added
+    for c in high_score_clips:
+        c.pop("excerpt", None)
     save_report({"step3": select_info}, metadata_dir)
     logger.info(
         f"评分筛选: 候选 {select_info['candidates']} → 保留 {select_info['selected']}"

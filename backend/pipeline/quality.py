@@ -738,3 +738,27 @@ def _id_key(v: Any) -> Tuple[int, str]:
         return (int(v), "")
     except (TypeError, ValueError):
         return (1 << 30, str(v))
+
+
+def top_up_clips(chosen: Sequence[Dict[str, Any]], cues: Sequence[Dict[str, Any]],
+                 profile: DurationProfile) -> Tuple[List[Dict[str, Any]], int]:
+    """Completa até profile.min_keep com cortes de frases completas, sem sobrepor nem pegar anúncio."""
+    from .fallback_clips import build_fallback_clips
+    out = [dict(c) for c in chosen]
+    spans = [(to_seconds(c["start_time"]), to_seconds(c["end_time"])) for c in out]
+    extra = build_fallback_clips(list(cues), profile=replace(profile, topics_hint=(profile.max_clips, profile.max_clips)))
+    added = 0
+    next_id = max([_id_key(c.get("id"))[0] for c in out if _id_key(c.get("id"))[0] < (1 << 30)] or [0]) + 1
+    for c in sorted(extra, key=lambda x: float(x.get("final_score") or 0), reverse=True):
+        if len(out) >= profile.min_keep:
+            break
+        s, e = to_seconds(c["start_time"]), to_seconds(c["end_time"])
+        if any(not (e <= a or s >= b) for a, b in spans):
+            continue
+        c = dict(c, id=str(next_id), selected_by="top_up")
+        next_id += 1
+        out.append(c)
+        spans.append((s, e))
+        added += 1
+    out.sort(key=lambda c: to_seconds(c["start_time"]))
+    return out, added
