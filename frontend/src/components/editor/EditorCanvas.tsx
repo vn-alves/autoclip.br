@@ -317,11 +317,18 @@ const EditorCanvas: React.FC<EditorCanvasProps> = ({
       if (el.volume !== vol) el.volume = vol
       const shouldMute = layer.muted || vol === 0
       if (el.muted !== shouldMute) el.muted = shouldMute
+      const offset = layer.isMain ? mainSourceOffset : 0
       if (!active) {
         if (!el.paused) el.pause()
+        // Pré-carrega o próximo trecho: deixa o vídeo já parado no primeiro quadro dele antes
+        // de chegar a vez, para a troca entre trechos não travar esperando a busca.
+        const untilStart = layer.startTime - currentTime
+        if (layer.visible && untilStart > 0 && untilStart < 2) {
+          const startFileTime = Math.max(0, offset + (layer.sourceStart || 0))
+          if (!el.seeking && Math.abs(el.currentTime - startFileTime) > 0.04) el.currentTime = startFileTime
+        }
         continue
       }
-      const offset = layer.isMain ? mainSourceOffset : 0
       const fileTime = Math.max(0, offset + (layer.sourceStart || 0) + (currentTime - layer.startTime))
       if (!isPlaying) {
         if (el.playbackRate !== 1) el.playbackRate = 1
